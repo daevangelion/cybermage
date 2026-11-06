@@ -105,6 +105,18 @@ check decodes a supplied genuine save through the normal codec and runs the
 same original post-read fixup. The HALLT checkpoint yields one active item46;
 no new original-state input or serialized field was added.
 
+Attack preparation035A49/035A72 tests the **target-filtered** melee flag and
+can-move flag before selecting remembered fire action3/4. A melee-capable NPC
+cannot melee targets of kind5/6/17; using its raw MONSTER attack[2] here loses
+that distinction. `actor_prepare_attack` now receives the caller's filtered
+flags. Original South NPC73's fire completion writes short cooldown2 at0360C1;
+the old native action0 instead chose24+RND(6)=29 and delayed its idle transition.
+The RNG words can still match because either bound consumes one draw.
+`check-attack-prepare` compares64 unmodified retail UpdateObjects cases covering
+mobile/stationary actors, all three excluded target kinds, alternate fire,
+action0/3/4 and the following short/long cooldown. No BP-clock or counter seed
+change is used.
+
 Death state8 samples recoil PERSON+A4/B0 **before** MoveObject
 (036B98..036BB0). A call that finishes recoil still exits that actor update;
 SoulFire may be emitted only on the following update. The genuine Training

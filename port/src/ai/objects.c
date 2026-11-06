@@ -179,7 +179,8 @@ static int actor_attack(ai_state *a, sim_state *s, world *w, unsigned id,
 }
 
 static int actor_prepare_attack(ai_state *a, sim_state *s, world *w, unsigned id,
-                                 int tick, int moving, unsigned target)
+                                 int tick, int moving, unsigned target,
+                                 int melee, int can_move)
 {
     world_person *p = &w->persons[id];
     const ai_monster *m = &a->monsters[p->type];
@@ -210,7 +211,9 @@ static int actor_prepare_attack(ai_state *a, sim_state *s, world *w, unsigned id
             if (p->unk_0028 == 4 || (m->attack[5] && world_rnd(&w->rng, 2)))
                 p->unk_00BC = 19;
             else p->unk_00BC = 18;
-            if (!m->attack[2] && m->kind != 6 && m->kind != 14)
+            /* 035A49/035A72 uses target-filtered melee, not the definition's
+             * raw capability (targets of kind5/6/17 cannot be meleed). */
+            if (!melee && can_move)
                 p->unk_0028 = (int16_t)(p->unk_00BC == 19 ? 4 : 3);
             break;
         case 2:
@@ -335,7 +338,7 @@ static int actor_state(ai_state *a, sim_state *s, world *w, unsigned id,
     case 4:
         return actor_attack(a, s, w, id, tick, moving, fire_moving, target, target_distance, can_move);
     case 5:
-        return actor_prepare_attack(a, s, w, id, tick, moving, target);
+        return actor_prepare_attack(a, s, w, id, tick, moving, target, melee, can_move);
     case 6:
         if (airborne(a, s, w, id, target)) return -1;
         if (p->unk_001E == 2) {
