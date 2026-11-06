@@ -440,3 +440,23 @@ native3456 is `(64/2+4)*96`, from wrongly allowing mode7 to accelerate past48.
 vehicle acceleration cap and single-sampling of a non-default fire binding.
 The swing-pulse case supplies explicit input metadata and is consumer-only
 coverage; it does not establish selector/keyboard pulse-producer liveness.
+
+Pending vehicle changes are consumed by `events_frame_begin` at01C1CB,
+after missile/SoulFire updates and before keyboard processing. Sim binds its
+cached player object/PERSON only after this call. Applying the transition in
+late MoveWorld input incorrectly shakes/moves the old foot actor in the
+activation frame, then exposes an unmodified vehicle. On namedfa893d7 this
+first differed at Training tank-entry frame491, Y1900378/1900544, with matching
+RNG through555. The pending transition must not run again in late input.
+
+Vehicle keyboard013D67..013E1F always resets the movement angle to0 and
+writes yaw directly to-128 for Right or+128 for Left, with Right taking
+priority. It does not read/update foot KeyRotRate, does not strafe under
+Shift, and skips dedicated foot strafe/crouch/jump keys. The forward speed
+request still honors the side-toggle walk modifier. Tank pitch keys are
+skipped by01310B..01311B; other vehicle subtypes retain the pitch controls.
+`test_sim_phases vehicle` failed before this dispatch was restored and passes
+fixed-yaw, retained-foot-rate, simultaneous-direction, ignored-foot-key and
+tank-versus-other-vehicle pitch cases.
+F4's menuFlag paths0135C3/013D79 are separate keyboard producers and are not
+implemented by this vehicle-motion dispatch.

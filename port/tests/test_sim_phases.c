@@ -101,11 +101,53 @@ static void hit(const char *data)
     puts("sim player hit uses pre-motion heading and exact RNG order");
 }
 
+static void vehicle(const char *data)
+{
+    int32_t x, y;
+    arena(data);
+    s.pc_mode = 7; s.key_rot_rate = 64;
+    w.objects[1].heading = 0x8000;
+    x = w.objects[1].x; y = w.objects[1].y;
+    s.bios_shift = 2; s.kb_scan_status[0x2a] = 3;
+    s.kb_scan_status[0x4b] = 12;
+    assert(!sim_frame(&s, &w, &input, 2));
+    /* Vehicle keyboard013D67..013E1F ignores side-toggle for yaw and
+     * writes +128 directly; it never reads or advances KeyRotRate. */
+    assert(w.objects[1].heading == 0x8240 && s.key_rot_rate == 64);
+    assert(w.objects[1].x == x && w.objects[1].y == y);
+    arena(data);
+    s.pc_mode = 7; s.key_rot_rate = 64;
+    w.objects[1].heading = 0x8000;
+    s.kb_scan_status[0x4b] = s.kb_scan_status[0x4d] = 12;
+    assert(!sim_frame(&s, &w, &input, 2));
+    assert(w.objects[1].heading == 0x7dc0 && s.key_rot_rate == 64);
+    arena(data);
+    s.pc_mode = 7; s.key_rot_rate = 64;
+    x = w.objects[1].x; y = w.objects[1].y;
+    s.kb_scan_status[0x2c] = s.kb_scan_status[0x2e] = 3;
+    s.kb_scan_status[0x47] = s.kb_scan_status[0x4f] = 3;
+    s.kb_scan_status[0x1d] = s.kb_scan_status[0x52] = 3;
+    assert(!sim_frame(&s, &w, &input, 2));
+    assert(w.objects[1].x == x && w.objects[1].y == y && s.key_rot_rate == 64);
+    assert(!s.unk_144b1c && !s.unk_144b34);
+    arena(data);
+    s.pc_mode = 7; s.kb_scan_status[s.kb_look_down] = 3;
+    assert(!sim_frame(&s, &w, &input, 2));
+    assert(!w.camera.pitch);
+    arena(data);
+    s.pc_mode = 7; s.vehicle_type = 1;
+    s.kb_scan_status[s.kb_look_down] = 3;
+    assert(!sim_frame(&s, &w, &input, 2));
+    assert(w.camera.pitch == 32);
+    puts("sim vehicle fixed yaw, ignored foot keys and pitch context matched");
+}
+
 int main(int argc, char **argv)
 {
     assert(argc == 3);
     if (!strcmp(argv[2], "cap")) cap(argv[1]);
     else if (!strcmp(argv[2], "hit")) hit(argv[1]);
+    else if (!strcmp(argv[2], "vehicle")) vehicle(argv[1]);
     else return 2;
     return 0;
 }

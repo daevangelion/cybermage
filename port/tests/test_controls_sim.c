@@ -123,6 +123,7 @@ int main(int argc, char **argv)
     assert((uint16_t)w.persons[0].unk_0038==40);
     arena();
     memset(&e, 0, sizeof e);
+    e.actors = &a;
     memset(&in, 0, sizeof in);
     s.events = &e;
     s.pc_mode = 1;

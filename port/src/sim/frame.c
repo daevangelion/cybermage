@@ -21,6 +21,7 @@ static int down(const sim_state *s, unsigned scan, unsigned bit)
 static int keyboard(sim_state *s, world *w)
 {
     int side, forward, back, right, left, jump;
+    int vehicle = s->pc_mode == 7;
     uint8_t *keys = s->kb_scan_status;
     unsigned shift = (keys[0x2a] & 2) | (s->bios_shift & 2);
     unsigned rshift = (keys[0x36] & 2) | (s->bios_shift & 1);
@@ -36,13 +37,16 @@ static int keyboard(sim_state *s, world *w)
         if(jump) keys[s->kb_jump]&=(uint8_t)~(s->kb_jump_bit*2);
         return jump;
     }
-    if (down(s, s->kb_look_down, s->kb_look_down_bit) && w->camera.pitch < PITCH_LIMIT)
-        w->camera.pitch += PITCH_STEP;
-    if (down(s, s->kb_look_up, s->kb_look_up_bit) && w->camera.pitch > -PITCH_LIMIT)
-        w->camera.pitch -= PITCH_STEP;
-    if (down(s, s->kb_look_center, s->kb_look_center_bit * 2)) {
-        keys[s->kb_look_center] = 0;
-        w->camera.pitch = 0;
+    /* Keyboard01310B: the tank, unlike other vehicles, skips pitch keys. */
+    if (!vehicle || s->vehicle_type) {
+        if (down(s, s->kb_look_down, s->kb_look_down_bit) && w->camera.pitch < PITCH_LIMIT)
+            w->camera.pitch += PITCH_STEP;
+        if (down(s, s->kb_look_up, s->kb_look_up_bit) && w->camera.pitch > -PITCH_LIMIT)
+            w->camera.pitch -= PITCH_STEP;
+        if (down(s, s->kb_look_center, s->kb_look_center_bit * 2)) {
+            keys[s->kb_look_center] = 0;
+            w->camera.pitch = 0;
+        }
     }
     s->movement_request = s->yaw_request = 0;
     side = down(s, s->kb_side_toggle, s->kb_side_toggle_bit);
@@ -50,9 +54,16 @@ static int keyboard(sim_state *s, world *w)
     back = down(s, 0x50, 5);
     right = down(s, 0x4d, 5);
     left = down(s, 0x4b, 5);
+    if (vehicle) s->movement_angle = 0;
     if (forward) { s->movement_angle = 0; s->movement_request = side ? MOVE_WALK : MOVE_FAST; }
     else if (down(s, 0x4c, 1)) { s->movement_angle = 0; s->movement_request = MOVE_WALK; }
     else if (back) { s->movement_angle = 0; s->movement_request = -MOVE_WALK; }
+    /* Vehicle branch013D67..013E1F bypasses foot strafe/ramping/crouch/jump.
+     * Its fixed yaw does not touch the saved foot KeyRotRate. */
+    if (vehicle) {
+        s->yaw_request = right ? -SIM_YAW_MAX : left ? SIM_YAW_MAX : 0;
+        return 0;
+    }
     if (right) {
         if (side) {
             s->movement_angle = forward ? 0xe000 : (back ? 0x2000 : 0xc000);
@@ -272,8 +283,6 @@ int sim_frame(sim_state *s, world *w, const cm_input *input, uint32_t timer_tick
     int jump, can_jump, running;
     if (w->player_object >= w->object_count || w->player_person >= w->person_count)
         return cm_fail("simulation", w->player_object, "invalid player indices");
-    o = &w->objects[w->player_object];
-    p = &w->persons[w->player_person];
     sim_input(s, input);
     sim_clock(s, timer_ticks);
     if (s->replay_delta >= 0) s->frame_ticks = s->replay_delta;
@@ -284,6 +293,14 @@ int sim_frame(sim_state *s, world *w, const cm_input *input, uint32_t timer_tick
         if (ai_update_missile(s->ai, s, w)) return -1;
         ai_update_soul_fire(s->ai, s, w);
     }
+    /* HandleNextFrame 01C1CB: pending vehicle context changes precede
+     * keyboard/body/hit processing. Rebind the physical actor afterward. */
+    if (s->ai && s->events &&
+        events_frame_begin(s->events, s, s->ai, w)) return -1;
+    if (w->player_object >= w->object_count || w->player_person >= w->person_count)
+        return cm_fail("simulation", w->player_object, "invalid player indices");
+    o = &w->objects[w->player_object];
+    p = &w->persons[w->player_person];
     /* HandleNextFrame 01C244..01C258 clears frame actions, not inertia.
      * In particular, zero momentum must not reuse last frame's speed. */
     s->unk_144aec = s->unk_144af0 = s->unk_144af4 = 0;
