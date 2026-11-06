@@ -65,6 +65,19 @@ int main(void)
     assert(!platform_poll(&physical, 4));
     controls_frame(&c, CONTROLS_FOOT, &physical, &out);
     assert(physical.focus_lost && !out.move_speed);
+    e.window.event = SDL_WINDOWEVENT_FOCUS_GAINED;
+    assert(SDL_PushEvent(&e) == 1);
+    send_key(SDL_KEYDOWN, SDL_SCANCODE_W); /* A stale repeat cannot revive movement. */
+    assert(!platform_poll(&physical, 5));
+    controls_frame(&c, CONTROLS_FOOT, &physical, &out);
+    assert(!out.move_speed);
+    send_key(SDL_KEYUP, SDL_SCANCODE_W);
+    assert(!platform_poll(&physical, 6));
+    controls_frame(&c, CONTROLS_FOOT, &physical, &out);
+    send_key(SDL_KEYDOWN, SDL_SCANCODE_W);
+    assert(!platform_poll(&physical, 7));
+    controls_frame(&c, CONTROLS_FOOT, &physical, &out);
+    assert(out.move_speed);
     platform_shutdown();
     puts("controls SDL smoke: synthetic keyboard/mouse/pad move/look/jump/fire, disconnect and focus PASS");
     return 0;

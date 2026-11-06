@@ -51,6 +51,8 @@ cannot click the menu. A new game/menu binding cannot consume a key held in
 another context. Multiple devices combine actions without one releasing the
 other's input. Focus loss releases inputs and relative capture; controller
 removal releases only controller input, leaving keyboard/mouse available.
+Inputs held at focus loss are suppressed until their release/neutral event;
+stale key repeats on focus regain cannot resume walking or turn into clicks.
 
 ## Rebinding
 

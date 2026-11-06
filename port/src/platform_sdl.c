@@ -39,6 +39,8 @@ static SDL_JoystickID controller_id = -1;
 static int modern_controls, gameplay_controls, input_focus = 1;
 static int touch_visible;
 static double touch_look_fraction_x, touch_look_fraction_y;
+static uint8_t focus_keys[CM_KEY_COUNT], focus_axes[6];
+static uint32_t focus_mouse, focus_pad;
 
 #define TOUCH_FINGERS_MAX 10
 typedef struct {
@@ -224,6 +226,9 @@ void platform_shutdown(void)
     input_focus = 1;
     memset(fingers, 0, sizeof fingers);
     touch_look_fraction_x = touch_look_fraction_y = 0;
+    memset(focus_keys, 0, sizeof focus_keys);
+    memset(focus_axes, 0, sizeof focus_axes);
+    focus_mouse = focus_pad = 0;
     if (device) SDL_CloseAudioDevice(device);
     if (surface) SDL_FreeSurface(surface);
     if (converted) SDL_FreeSurface(converted);
@@ -619,7 +624,10 @@ int platform_poll(cm_input *input, unsigned frame)
         case SDL_QUIT: input->quit = 1; break;
         case SDL_KEYDOWN: case SDL_KEYUP: {
             unsigned code = dos_scan(e.key.keysym.scancode);
-            if (modern_controls && !input_focus && e.type == SDL_KEYDOWN) break;
+            if (modern_controls && code) {
+                if (e.type == SDL_KEYUP) focus_keys[code] = 0;
+                else if (!input_focus || focus_keys[code]) break;
+            }
             if (code && extended_key(e.key.keysym.scancode)) code |= 0xe000;
             if (e.type == SDL_KEYDOWN && e.key.repeat &&
                 input->raw_count + (code > 255 ? 2u : 1u) > CM_RAW_SCANS_MAX - 2)
@@ -637,7 +645,11 @@ int platform_poll(cm_input *input, unsigned frame)
         case SDL_MOUSEBUTTONDOWN: case SDL_MOUSEBUTTONUP: {
             int inside = !window || pointer_point(e.button.x, e.button.y,
                                                   &input->mouse_x, &input->mouse_y);
-            if (modern_controls && !input_focus && e.type == SDL_MOUSEBUTTONDOWN) break;
+            if (modern_controls && e.button.button && e.button.button <= 32) {
+                uint32_t bit = 1u << (e.button.button - 1);
+                if (e.type == SDL_MOUSEBUTTONUP) focus_mouse &= ~bit;
+                else if (!input_focus || (focus_mouse & bit)) break;
+            }
             if (e.button.button && e.button.button <= 32 &&
                 (inside || e.type == SDL_MOUSEBUTTONUP))
                 mouse_button(input, 1u << (e.button.button - 1),
@@ -661,20 +673,32 @@ int platform_poll(cm_input *input, unsigned frame)
                 input->pad_buttons = 0;
                 input->pad_pressed = 0;
                 memset(input->pad_axes, 0, sizeof input->pad_axes);
+                memset(focus_axes, 0, sizeof focus_axes);
+                focus_pad = 0;
             }
             break;
         case SDL_CONTROLLERAXISMOTION:
-            if (modern_controls && input_focus && e.caxis.which == controller_id &&
-                e.caxis.axis < 6) input->pad_axes[e.caxis.axis] = e.caxis.value;
+            if (modern_controls && e.caxis.which == controller_id && e.caxis.axis < 6) {
+                unsigned axis = e.caxis.axis;
+                int value = e.caxis.value;
+                if (focus_axes[axis]) {
+                    if (axis < 4 ? value >= -5898 && value <= 5898 : value <= 8192)
+                        focus_axes[axis] = 0;
+                    else break;
+                }
+                if (input_focus) input->pad_axes[axis] = e.caxis.value;
+            }
             break;
         case SDL_CONTROLLERBUTTONDOWN: case SDL_CONTROLLERBUTTONUP:
-            if (modern_controls && input_focus && e.cbutton.which == controller_id &&
+            if (modern_controls && e.cbutton.which == controller_id &&
                 e.cbutton.button < 21) {
                 uint32_t bit = 1u << e.cbutton.button;
                 if (e.type == SDL_CONTROLLERBUTTONDOWN) {
+                    if (!input_focus || (focus_pad & bit)) break;
                     if (!(input->pad_buttons & bit)) input->pad_pressed |= bit;
                     input->pad_buttons |= bit;
                 } else {
+                    focus_pad &= ~bit;
                     if (input->pad_buttons & bit) input->pad_released |= bit;
                     input->pad_buttons &= ~bit;
                 }
@@ -686,6 +710,16 @@ int platform_poll(cm_input *input, unsigned frame)
         case SDL_WINDOWEVENT:
             if (e.window.event == SDL_WINDOWEVENT_FOCUS_LOST) {
                 unsigned i;
+                if (modern_controls) {
+                    for (i = 0; i < CM_KEY_COUNT; ++i) focus_keys[i] |= input->held[i];
+                    focus_mouse |= input->mouse_buttons;
+                    focus_pad |= input->pad_buttons;
+                    for (i = 0; i < 6; ++i) {
+                        int value = input->pad_axes[i];
+                        if (i < 4 ? value < -5898 || value > 5898 : value > 8192)
+                            focus_axes[i] = 1;
+                    }
+                }
                 for (i = 1; i < CM_KEY_COUNT; ++i)
                     if (input->held[i] &&
                         emit_key(input, i | (extended_held[i] ? 0xe000 : 0), 0))
