@@ -167,8 +167,8 @@ int ui_draw_xscale_aim(uint8_t *dst, const ui_hand *h, const uint8_t *glow)
                     uint8_t c = h->pixels.data[at + u / HAND_SCALE_ONE-logical];
                     if (glow && c > 252) {
                         c = glow[255-c];
-                        if (c) dst[dy * CM_WIDTH + dx] = c;
-                    } else dst[dy * CM_WIDTH + dx] = c;
+                        if (c) gfx_store(dst+dy * CM_WIDTH + dx,c);
+                    } else gfx_store(dst+dy * CM_WIDTH + dx,c);
                 }
                 ++x;
                 u += ustep;
@@ -195,9 +195,9 @@ int ui_pc_death(uint8_t *dst, const uint8_t *background,
         int y;
         if (at >= CM_HEIGHT) continue;
         for (y = CM_HEIGHT-1; y > (int)at; --y)
-            dst[y * CM_WIDTH + x] = dst[(y-8) * CM_WIDTH + x];
+            gfx_store(dst+y * CM_WIDTH + x,dst[(y-8) * CM_WIDTH + x]);
         for (y = (int)at; y >= 0 && y > (int)at-8; --y)
-            dst[y * CM_WIDTH + x] = background[y * CM_WIDTH + x];
+            gfx_store(dst+y * CM_WIDTH + x,background[y * CM_WIDTH + x]);
         columns[x] += 8;
     }
     return 0;

@@ -16,7 +16,7 @@
 
 typedef enum {
     UI_GAME, UI_TITLE, UI_OPTIONS, UI_PAUSE, UI_SAVE, UI_LOAD, UI_HELP,
-    UI_RECORDER
+    UI_RECORDER, UI_DEATH
 } ui_screen;
 typedef enum {
     UI_NONE, UI_NEW_GAME, UI_TRAINING, UI_RESUME, UI_SAVE_GAME,
@@ -98,6 +98,8 @@ int ui_draw_scon_bitmap(const cm_ui *ui, uint8_t *dst, int x, int y,
                         unsigned icon, unsigned shade);
 int ui_draw_prop_icon(world *w, uint8_t *dst, int x, int y,
                        unsigned resource);
+int ui_draw_shop_object(world *w, uint8_t *dst, int x, int y,
+                         unsigned resource);
 struct events_state;
 int ui_shop_step(cm_ui *ui, struct events_state *events, world *w,
                    const cm_input *input, uint32_t ticks);

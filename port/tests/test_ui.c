@@ -9,6 +9,7 @@ static cm_ui ui;
 static world w;
 static ui_save_state save;
 static events_state events;
+static cm_overlay overlay;
 static uint8_t encoded[UI_SAVE_MAX], screen[CM_WIDTH * CM_HEIGHT], palette[768];
 
 static void background_view(const uint8_t *background, const cm_file *rendered,
@@ -47,6 +48,27 @@ int main(int argc, char **argv)
     assert(ui_load_hand_tables(&ui, "orig/retail") == 0);
     assert(rsc_entry(&hipak, 31, &pal, &size) == 0);
     assert(gfx_palette(palette, pal, size, hipak.path) == 0);
+    {
+        uint8_t monitor[3] = {0,255,1};
+        uint8_t packed[16] = {8,0,0,0,12,0,0,0,2,0,0,255,2,0,1,2};
+        ui_bitmap bitmap = {monitor,3,1};
+        ui_hand hand = {0};
+        memset(screen,9,sizeof screen);
+        assert(gfx_overlay_begin(&overlay,screen) == 0);
+        ui_draw_monitor(screen,0,0,&bitmap);
+        assert(overlay.coverage[0] == 0 && screen[0] == 9);
+        assert(overlay.coverage[1] == 1 && screen[1] == 255);
+        hand.pixels.data = packed; hand.pixels.size = sizeof packed;
+        hand.half_width = hand.half_height = 1;
+        hand.view_width = CM_WIDTH; hand.view_height = CM_HEIGHT;
+        hand.aim_y = 240;
+        assert(ui_draw_xscale_aim(screen,&hand,NULL) == 0);
+        assert(overlay.coverage[476*CM_WIDTH+320] == 1);
+        assert(screen[476*CM_WIDTH+320] == 0);
+        packed[0] = 15;
+        assert(ui_draw_xscale_aim(screen,&hand,NULL) == -1);
+        assert(gfx_overlay_end() == 0);
+    }
     assert(ui_draw(&ui, screen) == 0);
     assert(platform_dump(argv[1], 0, screen, palette) == 0);
     assert(press(77) == UI_NONE && ui.selected == 1);
@@ -59,6 +81,12 @@ int main(int argc, char **argv)
     ui_open(&ui, UI_GAME);
     assert(press(1) == UI_NONE && ui.screen == UI_PAUSE);
     assert(press(28) == UI_RESUME && ui.screen == UI_GAME);
+    ui_open(&ui,UI_DEATH);
+    assert(ui.selected == 3);
+    assert(press(1) == UI_NONE && ui.screen == UI_DEATH);
+    assert(press(72) == UI_NONE && ui.selected == 3);
+    assert(press(28) == UI_LOAD_GAME);
+    ui_open(&ui,UI_GAME);
     assert(press(63) == UI_NONE && ui.screen == UI_SAVE);
     assert(press(80) == UI_NONE && ui.selected == 1);
     assert(press(28) == UI_NONE && ui.naming);
@@ -105,7 +133,16 @@ int main(int argc, char **argv)
         assert(platform_dump(argv[1],5,screen,palette) == 0);
         ui.shop_selected = 0;
         cash = events.cash;
-        input.pressed[28] = 1;
+        events.cash = 0;
+        input.pressed[57] = 1;
+        assert(ui_shop_step(&ui,&events,&w,&input,1) == 1 && events.cash == 0);
+        events.cash = cash;
+        {
+            int cost = events.definitions[5].unk_0018;
+            events.definitions[5].unk_0018 = -1;
+            assert(ui_shop_step(&ui,&events,&w,&input,1) == -1 && events.cash == cash);
+            events.definitions[5].unk_0018 = cost;
+        }
         assert(ui_shop_step(&ui,&events,&w,&input,1) == 1);
         assert(events.cash == cash-events.definitions[5].unk_0018);
         for (i=0;i<EVENTS_ITEM_MAX;++i)
@@ -116,16 +153,25 @@ int main(int argc, char **argv)
         cash = events.cash;
         assert(ui_shop_step(&ui,&events,&w,&input,2) == 1);
         assert(events.cash == cash); /* Duplicate equipment is refused, no debit. */
-        memset(&input,0,sizeof input); input.pressed[31] = 1;
+        memset(&input,0,sizeof input); input.pressed[15] = 1;
         assert(ui_shop_step(&ui,&events,&w,&input,3) == 1 && ui.shop_selling);
         for (i=0;i<ui.shop_count;++i)
             if (ui.shop_slots[i] == slot) ui.shop_selected = i;
-        memset(&input,0,sizeof input); input.pressed[28] = 1;
+        memset(&input,0,sizeof input); input.pressed[15] = 1;
         assert(ui_shop_step(&ui,&events,&w,&input,4) == 1);
         assert(events.cash == cash+events.definitions[5].unk_0018/2);
         assert(events.items[slot].type == 0);
         memset(&input,0,sizeof input); input.pressed[1] = 1;
         assert(ui_shop_step(&ui,&events,&w,&input,5) == 1 && !ui.shop_kind);
+        memset(&input,0,sizeof input);
+        events.shop_requested.kind = 1;
+        ui.shop_stock[0][0] = 0;
+        assert(ui_shop_step(&ui,&events,&w,&input,6) == -1);
+        ui.shop_kind = 0;
+        ui.shop_stock[0][0] = 256;
+        assert(ui_shop_step(&ui,&events,&w,&input,6) == -1);
+        ui.shop_kind = 0; events.shop_requested.kind = 0;
+        ui.shop_stock[0][0] = 5;
     }
     {
         const uint8_t *background;

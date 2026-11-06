@@ -22,17 +22,24 @@ int ui_draw_scon_bitmap(const cm_ui *ui, uint8_t *dst, int x, int y,
         uint8_t *line = dst + (y+(int)row*2)*CM_WIDTH+x;
         for (col = 0; col < SCON_WIDTH; ++col) {
             uint8_t c = ui->scon[icon].pixels[row*SCON_WIDTH+col];
-            line[col*2] = c ? c : ui->shades[shade*256+line[col*2]];
-            line[col*2+1] = c ? c : ui->shades[shade*256+line[col*2+1]];
+            if (c) {
+                gfx_store(line+col*2,c);
+                gfx_store(line+col*2+1,c);
+            } else {
+                gfx_map_pixel(line+col*2,ui->shades+shade*256);
+                gfx_map_pixel(line+col*2+1,ui->shades+shade*256);
+            }
         }
         memcpy(line+CM_WIDTH,line,SCON_WIDTH*SCON_SCALE);
+        gfx_cover(line+CM_WIDTH,SCON_WIDTH*SCON_SCALE);
     }
     return 0;
 }
 
 /* DrawSCONObject0x56B3C: fit56x38, centre, mirrored column sampling.
  * Decoder consumes the same signed run representation as the software view. */
-int ui_draw_prop_icon(world *w, uint8_t *dst, int x, int y, unsigned resource)
+static int prop_image(world *w, uint8_t *dst, int x, int y,
+                        unsigned resource, int shop)
 {
     const world_texture *t;
     unsigned sw, sh, dw, dh, col, row;
@@ -40,12 +47,14 @@ int ui_draw_prop_icon(world *w, uint8_t *dst, int x, int y, unsigned resource)
     if (t->height <= 0 || t->height > 1024 || t->width <= 0 || t->width > 1024)
         return cm_fail("SCON object",resource,"invalid prop dimensions");
     sw = (unsigned)t->height*2; sh = (unsigned)t->width*2;
-    dw = sw; dh = sh;
-    if (dw > SCON_WIDTH) { dh = dh*SCON_WIDTH/dw; dw = SCON_WIDTH; }
-    if (dh > SCON_HEIGHT) { dw = dw*SCON_HEIGHT/dh; dh = SCON_HEIGHT; }
+    dw = shop ? sw/2 : sw; dh = shop ? sh/2 : sh;
+    if (!shop) {
+        if (dw > SCON_WIDTH) { dh = dh*SCON_WIDTH/dw; dw = SCON_WIDTH; }
+        if (dh > SCON_HEIGHT) { dw = dw*SCON_HEIGHT/dh; dh = SCON_HEIGHT; }
+    }
     if (!dw || !dh) return cm_fail("SCON object",resource,"prop collapses at selector scale");
-    x += (int)SCON_WIDTH-(int)dw;
-    y += (int)SCON_HEIGHT-(int)dh;
+    x += (shop ? 0 : (int)SCON_WIDTH)-(int)dw;
+    y += (shop ? 0 : (int)SCON_HEIGHT)-(int)dh;
     for (col = 0; col < dw*2; ++col) {
         unsigned sx = sw-1-col*sw/(dw*2);
         uint32_t at = 0, logical = 0;
@@ -81,22 +90,33 @@ int ui_draw_prop_icon(world *w, uint8_t *dst, int x, int y, unsigned resource)
                 if (!c) continue;
             }
             if (dx >= 0 && dx < CM_WIDTH && dy >= 0 && dy < CM_HEIGHT)
-                dst[dy*CM_WIDTH+dx] = c;
+                gfx_store(dst+dy*CM_WIDTH+dx,c);
         }
     }
     return 0;
+}
+
+int ui_draw_prop_icon(world *w, uint8_t *dst, int x, int y, unsigned resource)
+{
+    return prop_image(w,dst,x,y,resource,0);
+}
+
+/* DrawShopObject2A734: original size, centred, mirrored columns. */
+int ui_draw_shop_object(world *w, uint8_t *dst, int x, int y, unsigned resource)
+{
+    return prop_image(w,dst,x,y,resource,1);
 }
 
 static void outline(uint8_t *dst, int x, int y)
 {
     int i;
     for (i = 0; i <= 113; ++i) {
-        dst[y*CM_WIDTH+x+i] = 117;
-        dst[(y+77)*CM_WIDTH+x+i] = 117;
+        gfx_store(dst+y*CM_WIDTH+x+i,117);
+        gfx_store(dst+(y+77)*CM_WIDTH+x+i,117);
     }
     for (i = 0; i <= 77; ++i) {
-        dst[(y+i)*CM_WIDTH+x] = 117;
-        dst[(y+i)*CM_WIDTH+x+113] = 117;
+        gfx_store(dst+(y+i)*CM_WIDTH+x,117);
+        gfx_store(dst+(y+i)*CM_WIDTH+x+113,117);
     }
 }
 

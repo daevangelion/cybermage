@@ -110,7 +110,7 @@ int ui_init(cm_ui *ui, rsc *hipak, const cm_file *strings)
 void ui_open(cm_ui *ui, ui_screen screen)
 {
     ui->screen = screen;
-    ui->selected = screen == UI_PAUSE ? 1u : 0u;
+    ui->selected = screen == UI_PAUSE ? 1u : screen == UI_DEATH ? 3u : 0u;
     ui->naming = 0;
     ui->blink = 1;
     ui->blink_timer = ui->ticks + 10;
@@ -188,6 +188,7 @@ ui_action ui_input(cm_ui *ui, const cm_input *in, uint32_t ticks)
     }
     if (in->pressed[1]) {
         if (ui->screen == UI_TITLE) return UI_QUIT;
+        if (ui->screen == UI_DEATH) return UI_NONE;
         if (ui->screen == UI_OPTIONS) ui_open(ui, ui->return_screen);
         else if (ui->screen == UI_SAVE || ui->screen == UI_LOAD)
             ui_open(ui, ui->return_screen);
@@ -196,7 +197,7 @@ ui_action ui_input(cm_ui *ui, const cm_input *in, uint32_t ticks)
     }
     switch (ui->screen) {
     case UI_TITLE: count = 6; columns = 3; break;
-    case UI_PAUSE: count = 6; columns = 2; break;
+    case UI_PAUSE: case UI_DEATH: count = 6; columns = 2; break;
     case UI_OPTIONS: case UI_SAVE: case UI_LOAD: count = 10; break;
     case UI_RECORDER: count = ui->recorder_count; columns = 2; break;
     case UI_HELP:
@@ -204,7 +205,8 @@ ui_action ui_input(cm_ui *ui, const cm_input *in, uint32_t ticks)
         return UI_NONE;
     case UI_GAME: return UI_NONE;
     }
-    if (in->pressed[72] && ui->selected >= columns) ui->selected -= columns;
+    if (in->pressed[72] && ui->selected >= columns +
+        (ui->screen == UI_DEATH ? 2u : 0u)) ui->selected -= columns;
     if (in->pressed[80] && ui->selected + columns < count) ui->selected += columns;
     if (ui->screen == UI_RECORDER) {
         if (in->pressed[73] && ui->selected >= 30) ui->selected -= 30;
@@ -236,7 +238,8 @@ ui_action ui_input(cm_ui *ui, const cm_input *in, uint32_t ticks)
             if (ui->screen == UI_TITLE) {
                 x0 = 32 + (int)(i % 3) * 198; x1 = x0 + 178;
                 y0 = 366 + (int)(i / 3) * 46; y1 = y0 + 32;
-            } else if (ui->screen == UI_PAUSE) {
+            } else if (ui->screen == UI_PAUSE || ui->screen == UI_DEATH) {
+                if (ui->screen == UI_DEATH && i < 2) continue;
                 x0 = i % 2 ? 342 : 100; x1 = x0 + 198;
                 y0 = 168 + (int)(i / 2) * 86; y1 = y0 + 60;
             } else if (ui->screen == UI_RECORDER) {
@@ -264,14 +267,14 @@ ui_action ui_input(cm_ui *ui, const cm_input *in, uint32_t ticks)
         }
         return actions[ui->selected];
     }
-    if (ui->screen == UI_PAUSE) {
+    if (ui->screen == UI_PAUSE || ui->screen == UI_DEATH) {
         switch (ui->selected) {
         case 0: ui->return_screen = UI_PAUSE; ui_open(ui, UI_SAVE); break;
         case 1: ui_open(ui, UI_GAME); return UI_RESUME;
-        case 2: ui->return_screen = UI_PAUSE; ui_open(ui, UI_LOAD); break;
+        case 2: ui->return_screen = ui->screen; ui_open(ui, UI_LOAD); break;
         case 3: return UI_LOAD_GAME;
         case 4: return UI_QUIT;
-        case 5: ui->return_screen = UI_PAUSE; ui_open(ui, UI_OPTIONS); break;
+        case 5: ui->return_screen = ui->screen; ui_open(ui, UI_OPTIONS); break;
         }
     } else if (ui->screen == UI_SAVE || ui->screen == UI_LOAD) {
         ui->slot = ui->selected;
@@ -303,7 +306,7 @@ int ui_text_mode(uint8_t *dst, const cm_font *f, int x, int y,
                 if (c == 255) { if (!mode) continue; c = outline; }
                 else if (c == 254) c = shadow;
                 else if (!color) c = fg;
-                dst[dy * CM_WIDTH + dx] = c;
+                gfx_store(dst+dy * CM_WIDTH + dx,c);
             }
         x += (int)width + f->spacing;
     }
@@ -324,11 +327,13 @@ int ui_draw(cm_ui *ui, uint8_t dst[CM_WIDTH * CM_HEIGHT])
     if (ui->screen == UI_GAME) return 0;
     if (ui->screen == UI_HELP) {
         memcpy(dst, ui->help_screen, UI_SCREEN_BYTES);
+        gfx_cover(dst,UI_SCREEN_BYTES);
         return 0;
     }
     if (ui->screen == UI_RECORDER) {
         unsigned first = ui->selected / 30 * 30;
         memcpy(dst, ui->recorder_screen, UI_SCREEN_BYTES);
+        gfx_cover(dst,UI_SCREEN_BYTES);
         for (i = first; i < first + 30 && i < ui->recorder_count; ++i) {
             unsigned row = (i-first)/2, col = (i-first)%2;
             int selected = i == ui->selected && ui->blink;
@@ -345,14 +350,15 @@ int ui_draw(cm_ui *ui, uint8_t dst[CM_WIDTH * CM_HEIGHT])
     if (ui->screen == UI_TITLE) {
         static const int title_op_x[3] = {122,320,518};
         memcpy(dst, ui->title, UI_SCREEN_BYTES);
+        gfx_cover(dst,UI_SCREEN_BYTES);
         for (i = 0; i < 6; ++i) {
             int x = 32 + (int)(i % 3) * 198, y = 366 + (int)(i / 3) * 46;
             gfx_shade(dst, x, y, x + 178, y + 32,
                 i == ui->selected ? ui->bright + 2 * 256 : ui->shades + 22 * 256);
             if (centered(ui, dst, 1, title_op_x[i % 3], y + 4, ui->strings[140+i])) return -1;
         }
-    } else if (ui->screen == UI_PAUSE) {
-        for (i = 0; i < 6; ++i) {
+    } else if (ui->screen == UI_PAUSE || ui->screen == UI_DEATH) {
+        for (i = ui->screen == UI_DEATH ? 2u : 0u; i < 6; ++i) {
             int x = i % 2 ? 342 : 100, y = 168 + (int)(i / 2) * 86;
             gfx_shade(dst, x, y, x + 198, y + 60,
                 i == ui->selected ? ui->bright + 2 * 256 : ui->shades + 22 * 256);
@@ -374,6 +380,7 @@ int ui_draw(cm_ui *ui, uint8_t dst[CM_WIDTH * CM_HEIGHT])
         }
     } else if (ui->screen == UI_OPTIONS) {
         memcpy(dst, ui->options_screen, UI_SCREEN_BYTES);
+        gfx_cover(dst,UI_SCREEN_BYTES);
         for (i = 0; i < 10; ++i) {
             int y = option_y(i), selected = i == ui->selected && ui->blink;
             char number[16];
@@ -396,8 +403,10 @@ int ui_draw(cm_ui *ui, uint8_t dst[CM_WIDTH * CM_HEIGHT])
                     408 + ui->options[i] / (i == 9 ? 49 : 5) * 6;
                 int row;
                 for (row = 0; row < 14; ++row)
-                    if (x >= 0 && x + 4 <= CM_WIDTH && y + row < CM_HEIGHT)
+                    if (x >= 0 && x + 4 <= CM_WIDTH && y + row < CM_HEIGHT) {
                         memset(dst + (y + row) * CM_WIDTH + x, 117, 4);
+                        gfx_cover(dst + (y + row) * CM_WIDTH + x,4);
+                    }
                 /* OptSlider0x533AF: literal0x91C8C is "%3d". */
                 if (snprintf(number, sizeof number, "%3d", ui->options[i]) < 0) return -1;
                 if (ui_text_mode(dst, &ui->fonts[3], 588, y, number, 175, 0, 10, 0)) return -1;

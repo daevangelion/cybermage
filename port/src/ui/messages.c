@@ -10,7 +10,7 @@ static void hline(uint8_t *dst, int x0, int x1, int y)
     if (y < 0 || y >= CM_HEIGHT) return;
     if (x0 < 0) x0 = 0;
     if (x1 >= CM_WIDTH) x1 = CM_WIDTH-1;
-    for (x = x0; x <= x1; ++x) dst[y * CM_WIDTH + x] = TEXT_COLOR;
+    for (x = x0; x <= x1; ++x) gfx_store(dst+y * CM_WIDTH + x,TEXT_COLOR);
 }
 
 static void vline(uint8_t *dst, int x, int y0, int y1)
@@ -19,7 +19,7 @@ static void vline(uint8_t *dst, int x, int y0, int y1)
     if (x < 0 || x >= CM_WIDTH) return;
     if (y0 < 0) y0 = 0;
     if (y1 >= CM_HEIGHT) y1 = CM_HEIGHT-1;
-    for (y = y0; y <= y1; ++y) dst[y * CM_WIDTH + x] = TEXT_COLOR;
+    for (y = y0; y <= y1; ++y) gfx_store(dst+y * CM_WIDTH + x,TEXT_COLOR);
 }
 
 /* TextMessage0x17F88–0x1893B displays whole pages, not one character/tick.

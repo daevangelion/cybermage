@@ -110,7 +110,9 @@ static int inside(const cm_input *in, int x, int y, int width, int height)
 int ui_shop_step(cm_ui *ui, events_state *e, world *w,
                    const cm_input *in, uint32_t ticks)
 {
-    int trade = in->pressed[28] || in->pressed[57];
+    int buy = in->pressed[48] || in->pressed[57];
+    int sell = in->pressed[15] || in->pressed[31];
+    int trade = in->pressed[28];
     ui->ticks = ticks;
     if (e->shop_requested.kind) {
         if (ui->shop_kind)
@@ -129,14 +131,6 @@ int ui_shop_step(cm_ui *ui, events_state *e, world *w,
     }
     if (!ui->shop_kind) return 0;
     if (in->pressed[1]) { ui->shop_kind = 0; return 1; }
-    if (in->pressed[31]) {
-        ui->shop_selling = 1; ui->shop_selected = 1; ui->shop_first = 0;
-        if (shop_items(ui,e)) return -1;
-    }
-    if (in->pressed[48]) {
-        ui->shop_selling = 0; ui->shop_selected = 1; ui->shop_first = 0;
-        if (shop_items(ui,e)) return -1;
-    }
     if (ui->shop_count) {
         if (in->pressed[75]) ui->shop_selected =
             (ui->shop_selected+ui->shop_count-1)%ui->shop_count;
@@ -144,15 +138,8 @@ int ui_shop_step(cm_ui *ui, events_state *e, world *w,
     }
     if (in->mouse_pressed & 1u) {
         if (inside(in,188,158,40,30)) { ui->shop_kind = 0; return 1; }
-        if (inside(in,72,158,50,30)) {
-            ui->shop_selling = 1; ui->shop_first = 0;
-            if (shop_items(ui,e)) return -1;
-        } else if (inside(in,136,158,40,30)) {
-            if (ui->shop_selling) {
-                ui->shop_selling = 0; ui->shop_first = 0;
-                if (shop_items(ui,e)) return -1;
-            } else trade = 1;
-        }
+        if (inside(in,72,158,50,30)) sell = 1;
+        else if (inside(in,136,158,40,30)) buy = 1;
         if (ui->shop_count) {
             if (inside(in,6,145,24,26)) ui->shop_first =
                 (ui->shop_first+ui->shop_count-1)%ui->shop_count;
@@ -165,6 +152,16 @@ int ui_shop_step(cm_ui *ui, events_state *e, world *w,
                 (ui->shop_first+2)%ui->shop_count;
         }
     }
+    /* ShopInputEvents49838..49889: action6 TAB/S, action7 SPACE/B.
+     * The first press changes the mode; repeating it performs that trade. */
+    if (buy || sell) {
+        int selling = sell != 0;
+        if (ui->shop_selling != selling) {
+            ui->shop_selling = selling;
+            ui->shop_first = 0; ui->shop_selected = 1;
+            if (shop_items(ui,e)) return -1;
+        } else trade = 1;
+    }
     if (trade && shop_trade(ui,e,w)) return -1;
     return 1;
 }
@@ -176,9 +173,31 @@ static void shop_bitmap(uint8_t *dst, int x, int y, const ui_bitmap *b)
         uint8_t color = b->pixels[yy*b->width+xx];
         int dx=(x+(int)xx)*2,dy=(y+(int)yy)*2;
         if (dx < 0 || dy < 0 || dx+1 >= CM_WIDTH || dy+1 >= CM_HEIGHT) continue;
-        dst[dy*CM_WIDTH+dx]=dst[dy*CM_WIDTH+dx+1]=color;
-        dst[(dy+1)*CM_WIDTH+dx]=dst[(dy+1)*CM_WIDTH+dx+1]=color;
+        gfx_store(dst+dy*CM_WIDTH+dx,color);
+        gfx_store(dst+dy*CM_WIDTH+dx+1,color);
+        gfx_store(dst+(dy+1)*CM_WIDTH+dx,color);
+        gfx_store(dst+(dy+1)*CM_WIDTH+dx+1,color);
     }
+}
+
+static int shop_label(const cm_ui *ui, unsigned string, int32_t value,
+                        char *dst, size_t capacity)
+{
+    const char *format = ui->strings[string], *mark = strchr(format,'%');
+    char number[12];
+    size_t prefix, suffix;
+    int n;
+    if (!mark || mark[1] != 'd' || strchr(mark+2,'%'))
+        return cm_fail("STRINGS.MSG",string,"shop label requires one decimal field");
+    n = snprintf(number,sizeof number,"%d",value);
+    prefix = (size_t)(mark-format); suffix = strlen(mark+2);
+    if (n < 0 || (size_t)n >= sizeof number || prefix >= capacity ||
+        (size_t)n >= capacity-prefix || suffix >= capacity-prefix-(size_t)n)
+        return cm_fail("STRINGS.MSG",string,"shop label exceeds display buffer");
+    memcpy(dst,format,prefix);
+    memcpy(dst+prefix,number,(size_t)n);
+    memcpy(dst+prefix+(size_t)n,mark+2,suffix+1);
+    return 0;
 }
 
 int ui_shop_draw(cm_ui *ui, const events_state *e, world *w, uint8_t *dst)
@@ -188,11 +207,11 @@ int ui_shop_draw(cm_ui *ui, const events_state *e, world *w, uint8_t *dst)
     int width;
     if (!ui->shop_kind) return 0;
     for (y=0;y<CM_HEIGHT;++y) for (x=0;x<CM_WIDTH;++x)
-        dst[y*CM_WIDTH+x]=ui->shop_background[0][y/2*320+x/2];
+        gfx_store(dst+y*CM_WIDTH+x,ui->shop_background[0][y/2*320+x/2]);
     for (i=0;i<3 && i<ui->shop_count;++i) {
         unsigned at=(ui->shop_first+i)%ui->shop_count;
         const events_definition *d=&e->definitions[ui->shop_items[at]];
-        if (ui_draw_prop_icon(w,dst,48+(int)i*214,164,d->icon)) return -1;
+        if (ui_draw_shop_object(w,dst,104+(int)i*214,202,d->icon)) return -1;
         if (at == ui->shop_selected && ui->shop_gfx_count[0])
             shop_bitmap(dst,76+(int)i*107,60,&ui->shop_gfx[0][0]);
     }
@@ -204,11 +223,11 @@ int ui_shop_draw(cm_ui *ui, const events_state *e, world *w, uint8_t *dst)
         if (gfx_text_width(&ui->fonts[3],name,&width) ||
             ui_text_mode(dst,&ui->fonts[3],320-width/2,52,name,117,0,0,0) ||
             shop_price(ui,e,ui->shop_selected,&price)) return -1;
-        if (snprintf(label,sizeof label,"%s %d",ui->shop_selling?"SELL":"BUY",price)<0 ||
+        if (shop_label(ui,ui->shop_selling?187:186,price,label,sizeof label) ||
             gfx_text_width(&ui->fonts[3],label,&width) ||
             ui_text_mode(dst,&ui->fonts[3],608-width,76,label,232,0,0,0)) return -1;
     }
-    if (snprintf(label,sizeof label,"%d",e->cash)<0 ||
+    if (shop_label(ui,189,e->cash,label,sizeof label) ||
         gfx_text_width(&ui->fonts[3],label,&width) ||
         ui_text_mode(dst,&ui->fonts[3],538-width,448,label,232,0,0,0)) return -1;
     return 0;

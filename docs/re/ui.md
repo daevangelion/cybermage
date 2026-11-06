@@ -136,6 +136,11 @@ Merchant kinds1/5/6 now grant through Events and deduct only after success;
 selling uses the original eligible inventory kinds and partial-charge pricing.
 The focused retail-asset test buys stock item5, verifies cash/inventory, refuses
 a duplicate without debit, sells it for half-price, and closes the modal.
+SPACE/B and TAB/S first select buy/sell mode, then perform the trade when
+repeated (49838..49889,49D0D,4A034). Negative stock IDs/cost and insufficient
+cash are exercised without a debit. PRICE/OFFER/CASH use supplied localized
+labels through a checked single-decimal substitution, never an asset-controlled
+printf format string. Merchant props use DrawShopObject's unscaled dimensions.
 Arena/coder/slot requests still fail explicitly rather than becoming merchants;
 their rules and frontend remain unimplemented at this checkpoint.
 
@@ -167,6 +172,18 @@ power hand_type1, weapon_aim_step4, aim(-56,65) after startup. The old static
 probe's pose0 was not the original's settled pose. Tests now use pose4.
 
 ## Exercised verification and open acceptance
+
+`UI_DEATH` implements PCDeath155B3's restricted menu: only LOAD/RELOAD/QUIT/
+OPTIONS, initial RELOAD, no Escape resume. Integrator owns the60-tick world-only
+wait and melt lifecycle. On-foot backscreen is HIPAK1 (InitPC10882); death exits
+vehicles before melting, and SetTankMode128EB restores that same backscreen.
+PCDeath1554C waits on CheckSONG, not a PCM sample slot.
+
+UI raster writes now use gfx_store/map_pixel/cover for explicit GPU overlay
+coverage, preserving opaque index0/255. Focused tests exercise a transparent
+monitor texel, opaque255, packed opaque0 and malformed packed-row offsets.
+SCON's duplicated second scanline needs Render's framebuffer-copy operation
+rather than treating a translated source row as a new world-row lookup.
 
 Commands run through `tools/run_capped.sh`; output directory `build/UI` is isolated.
 

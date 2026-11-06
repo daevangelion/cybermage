@@ -43,7 +43,7 @@ void ui_draw_monitor(uint8_t *dst, int x, int y, const ui_bitmap *b)
             int dx = x + (int)col;
             uint8_t color = b->pixels[row * b->width + col];
             if (dx >= 0 && dx < CM_WIDTH && color)
-                dst[dy * CM_WIDTH + dx] = color;
+                gfx_store(dst+dy * CM_WIDTH + dx,color);
         }
     }
 }
@@ -71,8 +71,8 @@ static int number(const cm_ui *ui, uint8_t *dst, int x, int y,
                 uint8_t c = g[2 + row * width + col];
                 int dx = x + (int)col, dy = y + (int)row;
                 if (dx < 0 || dx >= CM_WIDTH || dy < 0 || dy >= CM_HEIGHT || c == 255) continue;
-                dst[dy * CM_WIDTH + dx] = c == 254 ? 0 :
-                    cm_u16(f->data + 4) ? c : color;
+                gfx_store(dst+dy * CM_WIDTH + dx,c == 254 ? 0 :
+                    cm_u16(f->data + 4) ? c : color);
             }
         x += (int)width + f->spacing;
     }
@@ -96,9 +96,11 @@ static int bar(const cm_ui *ui, uint8_t *dst, unsigned bitmap,
     if (count <= 0) return 0;
     if (b->height != 2 || skip + count > b->width)
         return cm_fail("HIPAK.RSC", bitmap, "invalid monitor waveform dimensions");
-    for (row = 0; row < 2; ++row)
+    for (row = 0; row < 2; ++row) {
         memcpy(dst + (y + (int)row) * CM_WIDTH + 52 + offset,
                b->pixels + row * b->width + skip, (size_t)count);
+        gfx_cover(dst + (y + (int)row) * CM_WIDTH + 52 + offset,(unsigned)count);
+    }
     return 0;
 }
 
@@ -144,7 +146,7 @@ int ui_render_bells_and_whistles(cm_ui *ui, uint8_t *dst,
             for (col = 0; col < b->width; ++col) {
                 uint8_t c = b->pixels[row * b->width + col];
                 if (c >= 128 && c < 134) c = colors[c-128];
-                dst[(440 + row) * CM_WIDTH + 518 + col] = c;
+                gfx_store(dst+(440 + row) * CM_WIDTH + 518 + col,c);
             }
     }
     if (hud->weapon) {
