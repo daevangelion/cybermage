@@ -9,10 +9,8 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.provider.DocumentsContract;
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * The APK contains no game assets. The game reads app-specific external storage,
@@ -22,8 +20,16 @@ import java.io.OutputStream;
 public final class DataActivity extends Activity {
     private static final int PICK_FOLDER = 1;
     private static final String[] WITNESSES = {"CM_HI.EXE", "HIPAK.RSC", "STRINGS.MSG"};
+    private static final AtomicBoolean IMPORTING = new AtomicBoolean();
 
     private File data;
+    private AlertDialog busy;
+
+    @Override
+    protected void onDestroy() {
+        if (busy != null) busy.dismiss();
+        super.onDestroy();
+    }
 
     @Override
     protected void onCreate(Bundle state) {
@@ -47,12 +53,22 @@ public final class DataActivity extends Activity {
     }
 
     private void openData() {
+        if (IMPORTING.get()) {
+            fail("Import in progress", "Reopen CyberMage after the current copy finishes.");
+            return;
+        }
         File external = getExternalFilesDir(null);
         if (external == null) {
             fail("Storage unavailable", "External app storage is unavailable. Mount storage and reopen CyberMage.");
             return;
         }
         data = new File(external, "data");
+        try {
+            DataImport.recover(data);
+        } catch (IOException e) {
+            fail("Cannot recover data folder", e.getMessage());
+            return;
+        }
         if (!data.isDirectory() && !data.mkdirs()) {
             fail("Cannot create data folder", data.getAbsolutePath());
             return;
@@ -91,7 +107,8 @@ public final class DataActivity extends Activity {
             return;
         }
         Uri tree = intent.getData();
-        AlertDialog busy = new AlertDialog.Builder(this)
+        if (!IMPORTING.compareAndSet(false, true)) return;
+        busy = new AlertDialog.Builder(this)
             .setTitle("Importing")
             .setMessage("Copying game files…")
             .setCancelable(false).show();
@@ -102,11 +119,15 @@ public final class DataActivity extends Activity {
                 copied = copyTree(tree);
             } catch (IOException | RuntimeException e) {
                 error = e.getMessage() != null ? e.getMessage() : e.toString();
+            } finally {
+                IMPORTING.set(false);
             }
             final String failure = error;
             final int count = copied;
             runOnUiThread(() -> {
+                if (isFinishing() || isDestroyed()) return;
                 busy.dismiss();
+                busy = null;
                 if (failure != null) {
                     fail("Import failed", failure);
                 } else if (!ready()) {
@@ -129,23 +150,18 @@ public final class DataActivity extends Activity {
             DocumentsContract.Document.COLUMN_MIME_TYPE,
         };
         int copied = 0;
-        byte[] buffer = new byte[1 << 16];
-        try (Cursor c = resolver.query(children, columns, null, null, null)) {
+        try (DataImport copy = new DataImport(data);
+             Cursor c = resolver.query(children, columns, null, null, null)) {
             if (c == null) throw new IOException("cannot list chosen folder");
             while (c.moveToNext()) {
                 String name = c.getString(1);
                 if (DocumentsContract.Document.MIME_TYPE_DIR.equals(c.getString(2))) continue;
                 if (name == null || name.isEmpty() || name.contains("/") || name.startsWith(".")) continue;
                 Uri doc = DocumentsContract.buildDocumentUriUsingTree(tree, c.getString(0));
-                File part = new File(data, name + ".part");
-                try (InputStream in = resolver.openInputStream(doc);
-                     OutputStream out = new FileOutputStream(part)) {
-                    if (in == null) throw new IOException("cannot open " + name);
-                    for (int n; (n = in.read(buffer)) > 0; ) out.write(buffer, 0, n);
-                }
-                if (!part.renameTo(new File(data, name))) throw new IOException("cannot store " + name);
+                copy.copy(name, resolver.openInputStream(doc));
                 copied++;
             }
+            copy.finish(WITNESSES);
         }
         return copied;
     }

@@ -50,6 +50,13 @@ needed. Two ways:
   system folder picker; its top-level files are copied into the app folder
   (names keep their case, `.part` then rename). Verified on `box-api36`: 46 files
   imported SHA-256-identical, game launched to the title and scene 1.
+  Imports now stage an entire folder separately: each temporary file is synced
+  and renamed, and the installed folder is replaced only after the three witness
+  files exist. A read/write failure removes the staged files and preserves the
+  old import. A prior-folder backup recovers interruption between directory
+  renames. Activity recreation cannot operate the old dialog; only one worker
+  runs at a time. `TestDataImport` covers failed reads, missing witnesses,
+  complete replacement and interrupted-promotion recovery without Android APIs.
 - **adb** for the standard emulator/device user0:
 
 ```

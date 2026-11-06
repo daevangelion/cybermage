@@ -1,4 +1,6 @@
 CC ?= cc
+JAVA ?= /usr/lib/jvm/java-21-openjdk/bin/java
+JAVAC ?= /usr/lib/jvm/java-21-openjdk/bin/javac
 B ?= build
 CPPFLAGS += -Iinclude $(shell pkg-config --cflags sdl2)
 CFLAGS ?= -O2 -g
@@ -43,6 +45,7 @@ check: $(B)/test_core $(B)/test_platform $(B)/test_platform_lifecycle $(B)/test_
 	$(abspath ../.venv/bin/python) ../tools/test_rsc.py
 	$(MAKE) -f tests/audio.mk B=$(B)/audio check
 	$(MAKE) -f tests/world.mk B=$(B)/world check
+	$(JAVA) -cp $(B)/java com.jshield.cybermage.TestDataImport
 
 $(B)/test_core: tests/test_core.c $(CORE_SOURCES)
 	@mkdir -p $(@D)
@@ -118,5 +121,11 @@ $(B)/test_controls_sim: tests/test_controls_sim.c $(filter-out $(B)/main.o,$(OBJ
 
 include tests/pcfire.mk
 check: pc-fire-check
+
+check: $(B)/java/com/jshield/cybermage/TestDataImport.class
+
+$(B)/java/com/jshield/cybermage/TestDataImport.class: tests/TestDataImport.java android/app/src/main/java/com/jshield/cybermage/DataImport.java
+	@mkdir -p $(B)/java
+	$(JAVAC) -d $(B)/java $^
 
 -include $(OBJECTS:.o=.d)
