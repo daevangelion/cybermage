@@ -224,7 +224,7 @@ def main():
             Path(manifest['baseline_receipt']).resolve())}}
     for recipe in manifest['routes']:
         name = recipe['route']
-        old = args.root / 'captures' / name
+        old = Path(recipe.get('capture', str(args.root / 'captures' / name)))
         metadata = json.loads((old / 'run.json').read_text())
         text = metadata['scenario']
         if not any(line.strip().startswith('ips ') for line in text.splitlines()):

@@ -437,6 +437,8 @@ Use repeated `--only ROUTE` arguments for a narrow retry in a **new** cohort
 directory. The complete manifest is still validated; the selected subset is
 recorded explicitly and is not a claim that every manifest route was recaptured.
 Existing capture directories and receipts are never overwritten.
+A recipe may name an explicit `capture` directory when the recorded original
+already lives in an immutable observer cohort rather than `captures/ROUTE`.
 
 ### Draw clocks and menu actions
 
