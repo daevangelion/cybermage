@@ -26,9 +26,7 @@ check: $(B)/test_core $(B)/test_platform $(B)/test_touch $(B)/test_sim $(B)/test
 	$(B)/test_sim
 	$(B)/test_exe
 	$(B)/test_sim_loop $(B)/loop-user
-	$(B)/test_sim_fire 0 0
-	$(B)/test_sim_fire 8192 1
-	$(B)/test_sim_fire 16384 2
+	$(abspath ../.venv/bin/python) ../tools/sim_fire_original.py $(B)/test_sim_fire
 	$(abspath ../.venv/bin/python) ../tools/test_rsc.py
 	$(MAKE) -f tests/audio.mk B=$(B)/audio check
 	$(MAKE) -f tests/world.mk B=$(B)/world check

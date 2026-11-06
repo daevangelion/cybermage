@@ -224,7 +224,8 @@ int main(int argc, char **argv)
     const char *state_directory = NULL, *user = NULL;
     const uint8_t *pal_data;
     uint32_t pal_size;
-    cm_input input = {0};
+    /* MenuOptions 04E830: initial aim (63,133), in desktop coordinates. */
+    cm_input input = {.mouse_x = 446, .mouse_y = 134};
     cm_replay_frame recorded;
     unsigned frames = 0, frame = 0, bios_seed = 0;
     uint32_t audio_ticks = 0;
@@ -333,6 +334,7 @@ int main(int argc, char **argv)
         if (!trace && playing && ui.screen == UI_GAME) {
             shop_modal = ui_shop_step(&ui, &events, &game, &input, ticks);
             if (shop_modal < 0) goto out;
+            if (shop_modal) sim_input(&simulation, &input);
         }
         action = trace || shop_modal ? UI_NONE : ui_input(&ui, &input, ticks);
         if (action == UI_QUIT) break;
@@ -414,9 +416,9 @@ audio_output:
         if (!snd_movie_active() && ui_draw(&ui, pixels)) goto out;
         if (!snd_movie_active() && playing && ui.screen != UI_GAME) {
             int aim_x = (input.mouse_x - 320) / 2;
-            int aim_y = 201 - input.mouse_y / 2;
+            int aim_y = 200 - input.mouse_y / 2;
             if (ui_draw_menu_cursor(&ui, &game, pixels, aim_x, aim_y,
-                                    input.mouse_buttons ? 13 : 4)) goto out;
+                                    ui_cursor_pose(aim_x, aim_y, input.mouse_buttons != 0))) goto out;
         }
         if (platform_present(pixels, palette) ||
             (dump && platform_dump(dump, frame, pixels, palette)) ||
