@@ -8,6 +8,7 @@ int sim_swim_step(sim_state *s, world *w)
     world_object *o;
     int touching = 0, moving = 0;
     if (!s->swim_check) return 0;
+    if (!s->ai) return cm_fail("Swim", 0, "missing actor state");
     if (w->player_object >= w->object_count || w->player_person >= w->person_count)
         return cm_fail("Swim", w->player_object, "invalid player object/person");
     o = &w->objects[w->player_object];
@@ -25,7 +26,7 @@ int sim_swim_step(sim_state *s, world *w)
         if (!s->unk_144afc) s->unk_144afc = 1;
         if ((speed > 4 || speed < -4) &&
             (s->pc_mode == 1 || s->pc_mode == 5 ||
-             (s->pc_mode == 2 && (!s->ai || s->ai->pc.auto_s_flag || !s->ai->pc.fire))))
+             (s->pc_mode == 2 && (s->ai->pc.auto_s_flag || !s->ai->pc.fire))))
             moving = 1;
         s->unk_144b3c = 0;
         s->unk_144b34 = w->unk_5E7A8 ? -0x3000 : -0x4800;
@@ -33,7 +34,6 @@ int sim_swim_step(sim_state *s, world *w)
         if (s->swim_damage && sim_wrap32(s->timer_ticks) > sim_wrap32(s->swim_damage_time)) {
             if (s->swim_damage > 0) {
                 int32_t damage;
-                if (!s->ai) return cm_fail("SwimDamage", 0, "missing actor state");
                 if (s->ai->pc_flash < 2) s->ai->pc_flash = 2;
                 damage = sim_wrap32((uint32_t)s->swim_damage * (uint32_t)(1 + world_rnd(&w->rng, 6)));
                 if (ai_damage_person(s->ai, w, w->player_person, damage, 100, 125)) return -1;
@@ -57,8 +57,9 @@ int sim_swim_step(sim_state *s, world *w)
     if (moving) {
         if (s->swim_loop == -1) s->swim_loop = snd_loop(4, 16384, 32768);
     } else if (s->swim_loop != -1) {
-        if (snd_done(s->swim_exit_sound, 3))
-            s->swim_exit_sound = snd_play(3, 16384 - world_rnd(&w->rng, 8192), 32768);
+        /* 01CD2D/01CD5E share Xox+144A3C with DamagePerson's pain sound. */
+        if (snd_done(s->ai->pc_sound, 3))
+            s->ai->pc_sound = snd_play(3, 16384 - world_rnd(&w->rng, 8192), 32768);
         snd_abort(s->swim_loop, 4);
         s->swim_loop = -1;
     }

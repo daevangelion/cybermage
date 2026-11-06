@@ -273,6 +273,9 @@ PERSON0 by RND10, clipped to maximum, with sample27. Both reset the deadline
 to ticks+40+RND60. Exit clears swim and requests standing. Moving eligible
 hands maintain loop4; stopping checks sample3, draws its random volume and
 aborts loop4. These are executable rules, not capture-derived constants.
+The sample3 handle is AI's `pc_sound` (Xox+144A3C), shared with player pain;
+the swim loop alone owns144B54. The sound-enabled shared-slot regression failed
+with the private splash slot and passed after its removal.
 
 The reducer is implemented in `sim/swim.c`, called before the fire block;
 scene setup feeds the same four Swim* values to AI. `test_sim` first rejected

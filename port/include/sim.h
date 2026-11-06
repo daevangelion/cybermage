@@ -26,7 +26,7 @@ typedef struct {
     int32_t flight_action, key_hand_y, fly_throttle, fly_curr_throttle;
     int32_t fire_check, fire_damage, fire_tile_panel, fire_tile_art;
     int32_t swim_check, swim_damage, swim_panel, swim_art;
-    int32_t swim_loop, swim_exit_sound;
+    int32_t swim_loop;
     uint32_t swim_damage_time;
     uint8_t kb_scan_status[SIM_SCAN_COUNT];
     uint8_t kb_latch;

@@ -1,6 +1,7 @@
 #include "ai.h"
 #include "audio.h"
 #include "events.h"
+#include "../src/sim/sim_internal.h"
 #include <assert.h>
 #include <string.h>
 
@@ -70,6 +71,16 @@ int main(int argc, char **argv)
     assert(!sim_frame(&s, &w, &in, 100));
     assert(!sim_frame(&s, &w, &in, s.swim_damage_time + 1));
     assert((uint16_t)w.persons[0].unk_0038 < 40);
+    scene(1);
+    assert(!snd_sample_load(3) && !snd_sample_load(4));
+    a.pc_sound = -1;
+    s.unk_144aec = 8;
+    assert(!sim_swim_step(&s, &w));
+    assert(s.swim_loop >= 0);
+    s.unk_144aec = 0;
+    assert(!sim_swim_step(&s, &w));
+    assert(s.swim_loop == -1 && a.pc_sound >= 0);
+    assert(!snd_done(a.pc_sound, 3));
     snd_close(); platform_shutdown();
     return 0;
 }
