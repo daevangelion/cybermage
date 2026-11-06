@@ -96,7 +96,7 @@ known gaps are deliberate; implementation is not full-game parity.
 | target | Original combat order MATCH, conditional input scope below | `tools/compare_targets.py`:1298 completed checkpoints, all13 original nonempty, zero mismatches | Broader scenes/combat routes ([AI](docs/re/ai.md)) |
 | render_sw | Implemented; scoped complete newgame frame exact | Render gate and `tools/compare_frames.py`:completed newgame frame115 differs0/307200; renderer-only views exact outside hand footprints | Moving props, other scenes, painter ties/extreme pitch ([render](docs/re/render.md)) |
 | render_gl | Opt-in enhanced backend integrated | `tests/render_gl.mk check check-gl check-gl-es scene scene-es`; real640/1920 app replays MATCH; title/HUD exact against SW | Not DOS-raster-exact; broader scene/device acceptance ([render](docs/re/render.md)) |
-| classic input/Sim | Named150-scenario gate:150 actor/RNG MATCH,150 player MATCH | Both106-row movement traces,1299 combat,2033 water/127 wet, original mouse154 and real death/restart/load routes MATCH | No remaining observed divergence in this cohort; legacy joystick and broader flight/multi-scene routes unverified ([Sim](docs/re/sim.md)) |
+| classic input/Sim | Named153-scenario gate:153 actor/RNG MATCH,153 player MATCH | Both106-row movement traces,1299 combat,2033 water/127 wet, original mouse154 and real death/restart/load routes MATCH | No remaining observed divergence in this cohort; legacy joystick and broader flight/multi-scene routes unverified ([Sim](docs/re/sim.md)) |
 | modern controls | Desktop opt-in; Android default action/touch/controller layer | `make -C port -f tests/controls.mk B=build/Controls controls-check`; Android virtual-stick walking verified | Physical-controller/long-play usability ([controls](docs/re/controls.md)) |
 | save/load | Codec, live bridges and genuine saved-start replay integrated | Retail SAVE010246045 bytes/GAMENAME288 round-trip; `--replay-load-slot 0`:earned Training94 and water94 player records MATCH | Full original-save playthrough and demo format ([UI](docs/re/ui.md),[Sim](docs/re/sim.md)) |
 | Events/inventory/vehicles | All90 dispatches; genuine tank entry/exit reducer MATCH | `tests/events.mk`; saved-start `events_trace`:Training639 frames/22,009,716 event bytes/116 vehicle rows MATCH; water94/3,237,736 bytes | Reducer consumes measured Sim phase inputs; full vehicle/multi-scene gameplay not established ([Events](docs/re/events.md)) |
@@ -112,10 +112,9 @@ isolated `git archive` snapshot, strict build and complete `make -C port check`
 and separate five-group phase/six-target controls gates exit0. Receipt
 [gate-ae2792a.json](docs/re/gate-ae2792a.json) pins binary SHA256
 `e05c88457b1dfda7acdbbf5f0242232c8b1c14b80fe70e1f1289dd2a366e3543`
-and the full148-scenario gate plus the758-record original Scene2 groundstreet
-and369-record raw Scene9 control2 continuation:
-150/150 full actor/RNG MATCH,150/150 player MATCH,40,434 original state
-records and6,100,862 actor checkpoints. The included save-before-death69 and
+and the full148-scenario gate plus five original continuations:
+153/153 full actor/RNG MATCH,153/153 player MATCH,41,090 original state
+records and6,221,014 actor checkpoints. The included save-before-death69 and
 failed-hop17 regressions add no continuous-survival or decoder-acquisition
 claim. The archive includes Review2 through87e5f55, Events2's deferred
 ordinary-pickup correction, and the headless rehearsal cadence option.
@@ -142,6 +141,10 @@ ancestry; actual package configuration and slot numbers are preserved without
 SAVE renaming or undefined-state adapters. Raw Scene9 control2's actual
 original and native saved switch2 byte both change0→1; this is not an
 all-save-byte parity claim or scene-exit claim.
+Three additional Scene2 slot2 branches match311/114/231 records. The first
+returns outdoors after failed stairs, the second faces a door jamb after
+switch28, and only the third genuinely crosses the westdoor atHP77; none
+establishes a cashfloor/basement objective or scene exit.
 No campaign exit or full-game completion is claimed, and future concurrent
 HEAD changes are not certified. The earlier
 [147-route](docs/re/gate-8df96e0.json),
