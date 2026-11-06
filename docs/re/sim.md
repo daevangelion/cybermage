@@ -182,3 +182,24 @@ the command exits zero.
 The newly linked executable then completed all 106 movement trace records with
 `player_state=MATCH`, writing computed combat/player state beneath
 `captures/movement/Integrator-state`. No recorded position/RNG/HP was installed.
+
+The keyed headless smoke completed 2400 frames (60 seconds at40Hz), starting
+at the title, selecting new game and walking/turning/firing in scene1, with
+exit0 and no crash. It dumped all2400 indexed/palette/RGB frames and2399
+game-state records (frame0 is the title). Computed state contains237 distinct
+XY positions,30 headings and42 frames with active missiles; energy decreased
+from40 to20. The final state is frame2399/tick2399. Inspected RGB checkpoints
+show the real rendered scene and HUD, not empty frames.
+
+Evidence: `captures/Integrator-smoke/run.json`, selected
+`frame000000.png`, `frame000001.png`, `frame000120.png`, `frame002399.png`,
+and all computed `state/*.state`. The tested binary SHA-256 is
+`ebfdb62296e9c1ef8469e390f7b3d854b1a53e29c6fb51b0c8f12f2fefdb3bb6`.
+After verification,7200 job-owned raw `.ppm/.idx/.pal` files
+(2,950,999,200 bytes) were removed to respect the disk limit; the selected PNGs
+and state/evidence remain. Builds reused the isolated `port/build/Integrator`
+objects and existing SDL/Python/original-asset inputs without downloads.
+
+Interactive desktop smoke was unavailable: both DISPLAY and WAYLAND_DISPLAY
+are unset. The headless SDL input/control tests are not described as an
+interactive desktop run.
