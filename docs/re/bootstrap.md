@@ -110,6 +110,10 @@ Both images were opened and inspected, not merely checked for file existence.
 image shows the room turned to its corner/wall consoles rather than the initial
 door-facing view; `_CMTimerTicks=664`, 1,141,005,662 instructions. The repeated
 16-second checkpoint comes from an independent boot, not a restored state.
+Its PNG is byte-identical to the newgame PNG (SHA-256
+`72d22ccbf42f09be70a62fd120458b102a529ab79a0b16b856ad7f0be42bc3bd`).
+This demonstrates repeatability for that checkpoint, not cycle-exactness or
+determinism of every scenario/platform.
 
 ## Timer and RNG evidence
 
