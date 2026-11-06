@@ -1,5 +1,4 @@
 #include "ai.h"
-#include "render.h"
 
 /* All addresses in docs/re/ai.md refer to CM_HI.EXE. */
 int ai_person_kind(const ai_state *a, const world *w, unsigned person)
@@ -9,21 +8,6 @@ int ai_person_kind(const ai_state *a, const world *w, unsigned person)
     type = w->persons[person].type;
     if (type < 0 || (unsigned)type >= a->monster_count) return -1;
     return a->monsters[type].kind;
-}
-
-int target_query(ai_target_list *out, const world *w, const world_camera *camera)
-{
-    render_visibility_list visible;
-    unsigned i;
-    out->count = 0;
-    if (render_visibility(w, camera, &visible)) return -1;
-    for (i = 0; i < visible.count; ++i) {
-        const render_visible_prop *p = &visible.props[i];
-        if (p->targetable == 1 && p->left <= AI_TARGET_COLUMN &&
-            p->right >= AI_TARGET_COLUMN)
-            out->objects[out->count++] = p->object;
-    }
-    return 0;
 }
 
 /* Xox::SetAutoTarget, 0x2F150: reverse draw-candidate order, not nearest. */

@@ -44,7 +44,7 @@ int main(int argc,char **argv)
     printf("render_scene camera=%" PRId32 ",%" PRId32 ",%" PRId32 ",%u,%" PRId32
            " view=120,90,400,300 cells=%u objects=%u textures=%u\n",
            camera.u,camera.v,camera.z,(unsigned)camera.angle,camera.pitch,
-           render_get_state()->cell_count,render_get_state()->generated_count,map.texture_count);
+           render_get_state()->scene.cell_count,render_get_state()->scene.generated_count,map.texture_count);
     status=0;
 out:
     render_unload();world_close(&map);rsc_close(&hipak);platform_shutdown();

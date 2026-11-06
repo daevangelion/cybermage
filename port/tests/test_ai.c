@@ -14,7 +14,7 @@ static events_state player;
 static void target_without_pixels(void)
 {
     unsigned i;
-    target_view view = {120, 90, 400, 300};
+    vis_view view = {120, 90, 400, 300};
     memset(&w, 0, sizeof w);
     world_trig_init(&w.trig);
     w.camera.u = w.camera.v = 5 * 65536 + 32768;
@@ -34,8 +34,25 @@ static void target_without_pixels(void)
     /* Extents suffice. No framebuffer, packed pixels or renderer load. */
     assert(target_query(&a.targets, &w, &w.camera, &view) == 0);
     assert(a.targets.count == 1 && a.targets.objects[0] == 1);
+    w.objects[2] = w.objects[1];
+    w.objects[2].x += 8192;
+    w.omap.nodes[5 * 32 + 5].next = 1024;
+    w.omap.nodes[1024].object = 2;
+    assert(target_query(&a.targets, &w, &w.camera, &view) == 0);
+    assert(a.targets.count == 2 && a.targets.objects[0] == 2 &&
+           a.targets.objects[1] == 1);
+    w.objects[2].targetable = 0;
     w.objects[1].flags &= ~UINT32_C(0x00080000);
     assert(target_query(&a.targets, &w, &w.camera, &view) == 0 && a.targets.count == 0);
+    w.objects[1].flags |= UINT32_C(0x00080000);
+    w.objects[1].floor_z = 0x70000; /* Vertically outside the view/cell. */
+    assert(target_query(&a.targets, &w, &w.camera, &view) == 0 && a.targets.count == 0);
+    w.objects[1].floor_z = 0;
+    view.width = 641;
+    assert(target_query(&a.targets, &w, &w.camera, &view) == -1 && a.targets.count == 0);
+    view.width = 400;
+    w.objects[1].texture = 3;
+    assert(target_query(&a.targets, &w, &w.camera, &view) == -1 && a.targets.count == 0);
 }
 
 int main(int argc, char **argv)
@@ -198,12 +215,18 @@ int main(int argc, char **argv)
     save.unk_13610C[6] = 0;
     for (i = 6; i <= 15; ++i) {
         uint32_t old = save.unk_6D4[i];
-        if (i == 11) continue; /* EventsAction72 arbitrary signed payload. */
+        if (i == 11 || i == 13 || i == 14) continue; /* Full signed32 fields. */
         save.unk_6D4[i] = INT32_MAX;
         assert(ai_save_import(&a, &w, &save) == -1);
         assert(cm_last_error()->offset == 0x6D4 + i * 4);
         save.unk_6D4[i] = old;
     }
+    save.unk_6D4[11] = UINT32_C(0x80000000);
+    save.unk_6D4[13] = INT32_MAX;
+    save.unk_6D4[14] = UINT32_C(0x80000000);
+    assert(ai_save_import(&a, &w, &save) == 0);
+    assert(a.pc.underwater == INT32_MIN && a.pc_aim.aim_x == INT32_MAX &&
+           a.pc_aim.aim_y == INT32_MIN);
     a.gem_count_down = 0;
     ai_save_export(&a, &save);
     assert(save.gemCountDownTimer == 0);

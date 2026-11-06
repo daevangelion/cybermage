@@ -68,6 +68,32 @@ Fire/cooldown/latch and link counters are bounded on restore; underwater remains
 an arbitrary signed EventsAction72 payload, not a boolean. Aim X/Y retain their
 signed32 range (the original's consumers wrap arithmetic); tank aim is0..63.
 
+### Target-list checkpoint evidence
+
+`tools/compare_targets.py` compares the original `Image1+4B00C` count and
+`+4B010` u16 candidates, in order, against native `--state-dump` target lines.
+Capture with `--frame-trace --trace-range x:4b00c:324`; original pre-frameN+1
+corresponds to native post-frameN. It rejects missing/truncated spans, malformed
+counts, missing checkpoints and reordered targets. Seven synthetic controls
+exercise those rules; synthetic matches are not retail parity.
+
+Measured with separately supplied retail assets and BIOS seed44:
+
+| Capture | Completed frames compared | Original nonempty | Target-list mismatches |
+|---|---:|---:|---:|
+| `captures/AimFix-target-newgame` | 116 | 0 | 0 |
+| `captures/AimFix-target-combat` (combat-fight inputs) | 1298 | 13 | 50 |
+
+The combat replay contains1299 trace rows; the terminal native frame has no next
+original checkpoint and is excluded. First player-position divergence is native
+frame795 (x928767 versus933647). First target-list divergence is native892 /
+original893: original empty, native[1069]. All13 original nonempty checkpoints
+currently differ; native produces37 nonempty lists on its diverged route. This
+proves collection is live, **not** a successful combat-parity gate. The original
+camera/world path must match before these candidates can be compared as a
+visibility-only verdict; no checkpoint coordinates were injected into native
+gameplay to hide the divergence.
+
 ## Actor oracle
 
 ```

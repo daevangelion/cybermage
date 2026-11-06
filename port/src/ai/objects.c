@@ -432,11 +432,11 @@ static int actor_state(ai_state *a, sim_state *s, world *w, unsigned id,
                 }
                 if (w->scene == 10 && id == 2) {
                     if (a->gem_count_down) {
-                        if (a->gem_count_down_timer - 40 < (int32_t)a->timer_ticks && drop->floor_z < 0x2A000)
+                        if (add(a->gem_count_down_timer, -40) < (int32_t)a->timer_ticks && drop->floor_z < 0x2A000)
                             drop->floor_z += 0x800;
                     } else {
                         drop->floor_z = add(o->floor_z, 0x2000);
-                        a->gem_count_down = 1; a->gem_count_down_timer = (int32_t)a->timer_ticks + 120;
+                        a->gem_count_down = 1; a->gem_count_down_timer = add((int32_t)a->timer_ticks, 120);
                     }
                 } else drop->floor_z = add(o->floor_z, 0x1000);
             }
@@ -636,10 +636,10 @@ int ai_update_objects(ai_state *a, sim_state *s, world *w, uint32_t timer_ticks)
                 }
                 if ((unsigned)p->target == w->player_person || (w->scene == 2 && id == 57)) {
                     if (temporary) p->state = 3;
-                    a->events->text_message = p->unk_0090 + world_rnd(&w->rng, p->unk_0094);
+                    a->events->text_message = add(p->unk_0090, world_rnd(&w->rng, p->unk_0094));
                     a->events->text_object = p->object; a->events->text_trigger = 2;
                     snd_message(w, w->scene, (unsigned)a->events->text_message, p->object);
-                    if (p->unk_0098) p->unk_009C = (int32_t)timer_ticks + p->unk_0098 * 40;
+                    if (p->unk_0098) p->unk_009C = (int32_t)(timer_ticks + (uint32_t)p->unk_0098 * 40u);
                     else p->unk_0090 = 0;
                 }
                 if (temporary) p->target = -1;

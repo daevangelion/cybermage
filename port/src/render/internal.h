@@ -34,15 +34,13 @@ static inline int r_clamp(int a,int lo,int hi) { return r_min(r_max(a,lo),hi); }
 static inline uint16_t r_u16(const uint8_t *p) { return (uint16_t)(p[0] | (unsigned)p[1]<<8); }
 static inline uint32_t r_u32(const uint8_t *p) { return (uint32_t)r_u16(p) | (uint32_t)r_u16(p+2)<<16; }
 static inline const world_object *r_object(const world *w,const render_state *s,unsigned id) {
-    return id < CM_RENDER_DYNAMIC_FIRST ? &w->objects[id] : &s->generated[id-CM_RENDER_DYNAMIC_FIRST];
+    return id < CM_VIS_DYNAMIC_FIRST ? &w->objects[id] : &s->scene.generated[id-CM_VIS_DYNAMIC_FIRST];
 }
 static inline int r_fail(render_state *s,const char *message,unsigned offset) {
     s->error = -1; return cm_fail("render_sw",offset,message);
 }
 int r_prepare(const world *w,const world_camera *c,render_state *s);
 int r_sync_textures(const world *w,render_state *s);
-int r_build_lists(const world *w,render_state *s);
-int r_before(const world *w,render_state *s,unsigned a,unsigned b);
 int r_scene(const world *w,render_state *s,render_visibility_list *out);
 int r_paint(const world *w,render_state *s);
 int r_project(const world *w,const render_state *s,int32_t x,int32_t y,int32_t h,int32_t *sx,int32_t *sy,int32_t near);

@@ -1,40 +1,40 @@
 #include "internal.h"
 
-static int add_node(render_state *s,unsigned cell,unsigned object,int before)
+static int add_node(vis_state *s,unsigned cell,unsigned object,int before)
 {
     unsigned n=s->node_count;
     int prev=before<0 ? (s->object_head[cell]<0 ? -1:s->object_tail[cell]) : s->nodes[before].prev;
-    if (n>=CM_RENDER_NODES) return r_fail(s,"object list full",n);
+    if (n>=VIS_NODES) return vis_fail(s,"object list full",n);
     s->nodes[n].object=(uint16_t)object;s->nodes[n].prev=prev;s->nodes[n].next=before;
     if (prev<0) s->object_head[cell]=(int)n;else s->nodes[prev].next=(int)n;
     if (before<0) s->object_tail[cell]=(int)n;else s->nodes[before].prev=(int)n;
     ++s->node_count;return 1;
 }
 
-static int create(render_state *s,const world *w,unsigned id,unsigned level,int flat)
+static int create(vis_state *s,const world *w,unsigned id,unsigned level,int flat)
 {
-    unsigned n=s->generated_count,object=CM_RENDER_DYNAMIC_FIRST+n;
+    unsigned n=s->generated_count,object=VIS_DYNAMIC_FIRST+n;
     unsigned tx=s->tile&31,ty=s->tile>>5,k;
     world_object *o;
     int32_t x=(int32_t)(tx<<16),y=(int32_t)(ty<<16);
     static const int32_t offset[4][4]={
         {32768,-32768,-32768,32768},{-32768,32768,32768,-32768},
         {-32768,32768,32768,-32768},{32768,-32768,-32768,32768}};
-    if (object+1>=CM_OBJECT_MAX) return r_fail(s,"generated object table full",object);
+    if (object+1>=CM_OBJECT_MAX) return vis_fail(s,"generated object table full",object);
     o=&s->generated[n];
-    o->flags=w->map_id_flags[id];o->radius=o->height=R_FIXED_HALF;
+    o->flags=w->map_id_flags[id];o->radius=o->height=VIS_FIXED_HALF;
     o->texture=w->map_id_texture[id];
     if (flat) {
         o->flags|=flat==2 ? UINT32_C(0x02800000):UINT32_C(0x02440000);
-        o->x=x+R_FIXED_HALF;o->y=y+R_FIXED_HALF;
+        o->x=x+VIS_FIXED_HALF;o->y=y+VIS_FIXED_HALF;
         o->heading=0;
         o->z=flat==2 ? (int32_t)((level+1)<<16)-1:(int32_t)(level<<16);
         s->object_kind[object]=1;
     } else {
-        o->flags|=R_WALL;
+        o->flags|=VIS_WALL;
         o->x=x+(s->side==0 ? 65535:(s->side==2 ? 0:32768));
         o->y=y+(s->side==1 ? 65535:(s->side==3 ? 0:32768));
-        o->heading=(uint16_t)(s->side<<14);o->z=(int32_t)(level<<16)+R_FIXED_HALF;
+        o->heading=(uint16_t)(s->side<<14);o->z=(int32_t)(level<<16)+VIS_FIXED_HALF;
         for (k=0;k<4;++k) {
             o->corner_x[k]=o->x+((s->side&1) ? offset[s->side][k]:0);
             o->corner_y[k]=o->y+((s->side&1) ? 0:offset[s->side][k]);
@@ -45,7 +45,7 @@ static int create(render_state *s,const world *w,unsigned id,unsigned level,int 
     return add_node(s,s->tile+(level<<10),object,s->object_head[s->tile+(level<<10)]);
 }
 
-static int insert_object(const world *w,render_state *s,unsigned cell,unsigned obj,int key,int prop)
+static int insert_object(const world *w,vis_state *s,unsigned cell,unsigned obj,int key,int prop)
 {
     int n;
     if (s->object_head[cell]<0) return add_node(s,cell,obj,-1);
@@ -53,7 +53,7 @@ static int insert_object(const world *w,render_state *s,unsigned cell,unsigned o
         n=s->object_tail[cell];
         while (n>=0) {
             unsigned other=s->nodes[n].object;
-            int before=(s->object_kind[obj]==2 && s->object_kind[other]==2) || r_before(w,s,obj,other);
+            int before=(s->object_kind[obj]==2 && s->object_kind[other]==2) || vis_before(w,s,obj,other);
             if (!before) return add_node(s,cell,obj,s->nodes[n].next);
             n=s->nodes[n].prev;
         }
@@ -62,24 +62,24 @@ static int insert_object(const world *w,render_state *s,unsigned cell,unsigned o
     n=s->object_head[cell];
     while (n>=0) {
         unsigned other=s->nodes[n].object;
-        if ((int)other==key || r_before(w,s,obj,other)) break;
+        if ((int)other==key || vis_before(w,s,obj,other)) break;
         n=s->nodes[n].next;
     }
     return add_node(s,cell,obj,n);
 }
 
-static int check_objects(const world *w,render_state *s,unsigned level)
+static int check_objects(const world *w,vis_state *s,unsigned level)
 {
     unsigned node=s->tile,cell=s->tile+(level<<10),n,loops=0;
     unsigned fx[64],props[64],nf=0,np=0;
-    int32_t zlo=(int32_t)(level<<16),zhi=zlo+R_FIXED_ONE;
+    int32_t zlo=(int32_t)(level<<16),zhi=zlo+VIS_FIXED_ONE;
     int found=0,key=-1;
     while (node) {
         const world_link *link;
         unsigned obj;
-        if (node>=CM_CHAIN_NODES || ++loops>CM_CHAIN_NODES) return r_fail(s,"invalid flat chain",node);
+        if (node>=CM_CHAIN_NODES || ++loops>CM_CHAIN_NODES) return vis_fail(s,"invalid flat chain",node);
         link=&w->flatmap.nodes[node];obj=link->object;
-        if (obj>=CM_RENDER_DYNAMIC_FIRST) return r_fail(s,"invalid flat object",obj);
+        if (obj>=VIS_DYNAMIC_FIRST) return vis_fail(s,"invalid flat object",obj);
         if (obj && w->objects[obj].z>=zlo && w->objects[obj].z<zhi) {
             s->object_kind[obj]=1;
             if (insert_object(w,s,cell,obj,-1,0)<0) return -1;
@@ -93,32 +93,32 @@ static int check_objects(const world *w,render_state *s,unsigned level)
         unsigned obj;
         const world_object *o;
         int include=0,isfx;
-        if (node>=CM_CHAIN_NODES || ++loops>CM_CHAIN_NODES) return r_fail(s,"invalid prop chain",node);
+        if (node>=CM_CHAIN_NODES || ++loops>CM_CHAIN_NODES) return vis_fail(s,"invalid prop chain",node);
         link=&w->omap.nodes[node];obj=link->object;node=link->next;
         if (!obj || obj==w->player_object) continue;
-        if (obj>=CM_RENDER_DYNAMIC_FIRST) return r_fail(s,"invalid prop object",obj);
-        o=&w->objects[obj];isfx=(o->flags&R_FXO)!=0;
-        if (isfx) include=r_add(o->z,o->height)>zlo && r_sub(o->z,o->height)<zhi;
+        if (obj>=VIS_DYNAMIC_FIRST) return vis_fail(s,"invalid prop object",obj);
+        o=&w->objects[obj];isfx=(o->flags&VIS_FXO)!=0;
+        if (isfx) include=vis_add(o->z,o->height)>zlo && vis_sub(o->z,o->height)<zhi;
         else if (!((o->flags&UINT32_C(0x00010000)) && s->steps>=3))
-            include=o->floor_z<zhi && r_add(r_add(o->floor_z,o->z),o->height)>=zlo;
+            include=o->floor_z<zhi && vis_add(vis_add(o->floor_z,o->z),o->height)>=zlo;
         if (!include) continue;
         s->object_kind[obj]=isfx ? 0:2;
         if (!isfx && s->camera.z<o->floor_z && (o->flags&UINT32_C(0x00000800))) {
-            unsigned distance=(unsigned)r_abs((int32_t)s->level-(int32_t)level);
+            unsigned distance=(unsigned)vis_abs((int32_t)s->level-(int32_t)level);
             if (!s->object_count[obj]) s->prop_level[obj]=(uint16_t)(s->steps<<8|distance);
             if ((s->prop_level[obj]>>8)>s->steps)
                 s->prop_level[obj]=(uint16_t)(s->steps<<8|(s->prop_level[obj]&255));
-            if ((unsigned)r_abs((int32_t)s->level-(s->prop_level[obj]&255))>distance)
+            if ((unsigned)vis_abs((int32_t)s->level-(s->prop_level[obj]&255))>distance)
                 s->prop_level[obj]=(uint16_t)((s->prop_level[obj]&65280)|distance);
         }
         ++s->object_count[obj];found=1;
         n=isfx ? nf:np;
-        if (n>=64) return r_fail(s,"tile object sublist full",obj);
+        if (n>=64) return vis_fail(s,"tile object sublist full",obj);
         if (isfx) {
-            while (n && r_before(w,s,obj,fx[n-1])) {fx[n]=fx[n-1];--n;}
+            while (n && vis_before(w,s,obj,fx[n-1])) {fx[n]=fx[n-1];--n;}
             fx[n]=obj;++nf;
         } else {
-            while (n && r_before(w,s,obj,props[n-1])) {props[n]=props[n-1];--n;}
+            while (n && vis_before(w,s,obj,props[n-1])) {props[n]=props[n-1];--n;}
             props[n]=obj;++np;
         }
     }
@@ -127,14 +127,14 @@ static int check_objects(const world *w,render_state *s,unsigned level)
     return found;
 }
 
-static int tlist(render_state *s,unsigned level)
+static int tlist(vis_state *s,unsigned level)
 {
     unsigned k=s->cell_count;
     int n=s->cell_head,prev=-1;
-    uint32_t key=(s->steps<<24)+((unsigned)r_abs((int32_t)s->level-(int32_t)level)<<16)+s->order;
-    if (k>=CM_RENDER_CELLS) return r_fail(s,"visible cell list full",k);
+    uint32_t key=(s->steps<<24)+((unsigned)vis_abs((int32_t)s->level-(int32_t)level)<<16)+s->order;
+    if (k>=VIS_CELLS) return vis_fail(s,"visible cell list full",k);
     if (s->steps>=sizeof s->step_first/sizeof s->step_first[0])
-        return r_fail(s,"ray step list index",s->steps);
+        return vis_fail(s,"ray step list index",s->steps);
     if (s->step_first[s->steps]<0) s->step_first[s->steps]=(int)k;
     else {
         n=s->step_first[s->steps];
@@ -149,7 +149,7 @@ static int tlist(render_state *s,unsigned level)
     ++s->cell_count;return 0;
 }
 
-static int check_plane(const world *w,render_state *s,unsigned level,int above,int *found)
+static int check_plane(const world *w,vis_state *s,unsigned level,int above,int *found)
 {
     const world_cell *cell=&w->cells[level][s->tile];
     unsigned id=above ? cell->ceiling:cell->floor,bit=1u<<level;
@@ -175,7 +175,7 @@ static int check_plane(const world *w,render_state *s,unsigned level,int above,i
     return 0;
 }
 
-static int check_wall(const world *w,render_state *s,unsigned level,int *found)
+static int check_wall(const world *w,vis_state *s,unsigned level,int *found)
 {
     unsigned id=(w->cells[level][s->tile].wall_sides>>(s->side*8))&255;
     unsigned bit=1u<<level,mask=bit<<s->level_shift;
@@ -185,7 +185,7 @@ static int check_wall(const world *w,render_state *s,unsigned level,int *found)
             if (result<0) return -1;
             *found=result;
         }
-        if (!(w->map_id_flags[id]&R_TRANSPARENT)) {
+        if (!(w->map_id_flags[id]&VIS_TRANSPARENT)) {
             s->tile_block[s->tile]|=mask;s->blocked|=bit;
             return (int)id;
         }
@@ -194,11 +194,11 @@ static int check_wall(const world *w,render_state *s,unsigned level,int *found)
     return 0;
 }
 
-static int check_vertical(const world *w,render_state *s,unsigned level,int up)
+static int check_vertical(const world *w,vis_state *s,unsigned level,int up)
 {
     unsigned bit,mask,adjacent;
     int found=0;
-    if (level>=CM_MAP_LEVELS || level>(unsigned)w->top_level) return r_fail(s,"vertical ray leaves map",level);
+    if (level>=CM_MAP_LEVELS || level>(unsigned)w->top_level) return vis_fail(s,"vertical ray leaves map",level);
     bit=1u<<level;mask=bit<<s->level_shift;
     if (s->blocked&bit) s->tile_block[s->tile]|=mask;
     else {
@@ -218,7 +218,7 @@ static int check_vertical(const world *w,render_state *s,unsigned level,int up)
     return 0;
 }
 
-static int check_tile(const world *w,render_state *s)
+static int check_tile(const world *w,vis_state *s)
 {
     unsigned cur=s->tile,bit=s->level_bit,mask=bit<<s->level_shift;
     int found=0,wall=0;
@@ -262,7 +262,7 @@ static int check_tile(const world *w,render_state *s)
     return 0;
 }
 
-static int ray(const world *w,render_state *s,unsigned column)
+static int ray(const world *w,vis_state *s,unsigned column)
 {
     uint16_t angle=(uint16_t)(s->camera.angle+s->ray_angles[column]);
     unsigned q=(angle&16383)>>3,quadrant=angle>>14;
@@ -272,36 +272,36 @@ static int ray(const world *w,render_state *s,unsigned column)
     int32_t cu=s->camera.u,cv=s->camera.v;
     int32_t fx=sx>0 ? 65535-(cu&65535):cu&65535;
     int32_t fy=sy>0 ? 65535-(cv&65535):cv&65535;
-    int32_t x1=r_add(cu,r_mul(sx,r_mul16(fy,dx))),y1=r_add(cv,sy*fy);
-    int32_t x2=r_add(cu,sx*fx),y2=r_add(cv,r_mul(sy,r_mul16(fx,dy)));
+    int32_t x1=vis_add(cu,vis_mul(sx,vis_mul16(fy,dx))),y1=vis_add(cv,sy*fy);
+    int32_t x2=vis_add(cu,sx*fx),y2=vis_add(cv,vis_mul(sy,vis_mul16(fx,dy)));
     int choose_y=sx>0 ? x1<=x2:x1>=x2;
-    s->budget=R_RAY_MAX;s->steps=s->blocked=s->above_open=s->below_open=0;
+    s->budget=VIS_RAY_MAX;s->steps=s->blocked=s->above_open=s->below_open=0;
     while (s->budget) {
         int32_t x=choose_y ? x1:x2,y=choose_y ? y1:y2;
         s->side=choose_y ? (sy>0 ? 1u:3u):(sx>0 ? 0u:2u);
         s->level_shift=s->side*8;
         s->tile=(((uint32_t)y>>16)<<5)|(((uint32_t)x>>16)&31);
-        if (s->tile>=CM_MAP_CELLS) return r_fail(s,"ray outside map",s->tile);
+        if (s->tile>=CM_MAP_CELLS) return vis_fail(s,"ray outside map",s->tile);
         if (s->side_done[s->tile]&(1u<<s->side)) break;
         if (check_tile(w,s)) return -1;
         ++s->steps;if (!--s->budget) break;
         if (choose_y) {
-            x1=r_clamp(r_add(x1,r_mul(sx,dx)),0,R_MAX_COORD);
-            y1=r_clamp(r_add(y1,sy*R_FIXED_ONE),0,R_MAX_COORD);
+            x1=vis_clamp(vis_add(x1,vis_mul(sx,dx)),0,VIS_MAX_COORD);
+            y1=vis_clamp(vis_add(y1,sy*VIS_FIXED_ONE),0,VIS_MAX_COORD);
             choose_y=sx>0 ? x1<=x2:x1>=x2;
         } else {
-            x2=r_clamp(r_add(x2,sx*R_FIXED_ONE),0,R_MAX_COORD);
-            y2=r_clamp(r_add(y2,r_mul(sy,dy)),0,R_MAX_COORD);
+            x2=vis_clamp(vis_add(x2,sx*VIS_FIXED_ONE),0,VIS_MAX_COORD);
+            y2=vis_clamp(vis_add(y2,vis_mul(sy,dy)),0,VIS_MAX_COORD);
             choose_y=sy>0 ? y2>y1:y2<y1;
         }
     }
     return 0;
 }
 
-int r_build_lists(const world *w,render_state *s)
+int vis_build_lists(const world *w,vis_state *s)
 {
     int col;
-    if (w->top_level<0 || w->top_level>=CM_MAP_LEVELS) return r_fail(s,"invalid top level",0);
+    if (w->top_level<0 || w->top_level>=CM_MAP_LEVELS) return vis_fail(s,"invalid top level",0);
     for (col=s->width/2-1;col>=0;--col) {
         s->order=(unsigned)col*2;
         if (ray(w,s,(unsigned)col)) return -1;

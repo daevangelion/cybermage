@@ -5,6 +5,13 @@ objects, PERSONs, maps, sight and integer math; `sim` owns movement and classic
 input; `ai` owns actor/combat decisions; `events` owns triggers and inventory;
 renderers read world state. SDL and OS access remain behind the platform adapter.
 
+`vis` owns the pixel-free original ray traversal and ordered scene lists.
+Dependency direction is `render_sw → vis ← target → world`; neither `vis` nor
+`target` includes a renderer header or owns pixels. Targeting reads explicit
+original-view coordinates and world sprite extents. The game collects the
+centre-column candidates after camera follow; the next frame's player firing
+consumes them, regardless of the chosen presentation backend.
+
 ## Original-to-native combat entries
 
 | CM_HI.EXE original | Native |
@@ -14,6 +21,8 @@ renderers read world state. SDL and OS access remain behind the platform adapter
 | UpdateObjects 0x348C4 | ai_update_objects |
 | NewMONBound steering 0x46507..0x46A74 | ai_monster_blocked |
 | SetAutoTarget 0x2F150 | target_query + ai_set_auto_target |
+| RayCast 0x5CBF8; CheckTile 0x5C5C8; CheckObjects | vis_build_lists |
+| CameraInit 0x597EC; MakeRayAngles 0x58E94 | vis_prepare |
 
 ## Deliberate original undefined-memory deviation
 

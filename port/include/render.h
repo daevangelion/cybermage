@@ -1,14 +1,10 @@
 #ifndef CM_RENDER_H
 #define CM_RENDER_H
 
-#include "world.h"
+#include "vis.h"
 
 #define CM_RENDER_WIDTH 640
 #define CM_RENDER_HEIGHT 480
-#define CM_RENDER_DYNAMIC_FIRST 2378 /* Image1::Render NEXT_OBJ = 0x94A. */
-#define CM_RENDER_DYNAMIC_MAX (CM_OBJECT_MAX - CM_RENDER_DYNAMIC_FIRST)
-#define CM_RENDER_NODES 2842
-#define CM_RENDER_CELLS 512
 #define CM_RENDER_TEXTURES CM_PANEL_MAX
 
 typedef struct {
@@ -37,13 +33,9 @@ typedef struct {
     render_quad quad;
 } render_command;
 typedef struct { int32_t x[3], end[3], slope[4], last; } render_edge;
-typedef struct { int32_t prev, next; uint16_t object; } render_node;
-typedef struct { uint32_t info; int32_t next, prev; uint16_t cell; } render_cell;
-
 typedef struct {
     int x, y, width, height, focal, horizon;
     world_camera camera;
-    uint16_t ray_angles[CM_RENDER_WIDTH];
     int32_t camera_cos, camera_sin;
     int32_t u_cos, u_sin, u_step, v_cos, v_sin, v_step;
     uint8_t *framebuffer;
@@ -55,26 +47,9 @@ typedef struct {
     uint8_t sky_fill, sky_fog, fog_on, parity;
     int32_t curve, shade_bias, shade_shift, shade_scale;
     uint32_t shade_override_revision;
-    world_object generated[CM_RENDER_DYNAMIC_MAX];
-    unsigned generated_count, node_count, cell_count;
+    vis_state scene;
     unsigned command_count;
     render_command commands[CM_OBJECT_MAX];
-    render_node nodes[CM_RENDER_NODES];
-    render_cell cells[CM_RENDER_CELLS];
-    int32_t cell_head, object_head[CM_MAP_LEVELS * CM_MAP_CELLS];
-    int32_t object_tail[CM_MAP_LEVELS * CM_MAP_CELLS];
-    int32_t step_first[38];
-    uint16_t object_count[CM_OBJECT_MAX], prop_level[CM_OBJECT_MAX];
-    uint8_t object_kind[CM_OBJECT_MAX];
-    int32_t object_distance[CM_OBJECT_MAX];
-    uint8_t distance_seen[CM_OBJECT_MAX];
-    uint32_t tile_seen[CM_MAP_CELLS], tile_block[CM_MAP_CELLS];
-    uint8_t side_done[CM_MAP_CELLS], object_done[CM_MAP_CELLS];
-    uint8_t floor_done[CM_MAP_CELLS], ceiling_done[CM_MAP_CELLS];
-    uint8_t trans_done[CM_MAP_CELLS], above_seen[CM_MAP_CELLS];
-    uint8_t below_seen[CM_MAP_CELLS];
-    unsigned tile, side, level, level_bit, level_shift, steps, order;
-    unsigned blocked, above_open, below_open, budget, depth_above, depth_below;
     int error;
 } render_state;
 

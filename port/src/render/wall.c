@@ -47,7 +47,7 @@ int r_draw_wall(const world *w,render_state *s,const world_object *o,
     for (x=xl;x<=xr;++x) {
         int y1=ylo>>16,y2=yhi>>16,h=r_add(r_sub(y2,y1),1);
         if (y1<s->height && y2>=0 && h>0) {
-            uint16_t ba=(uint16_t)(s->camera.angle-o->heading+s->ray_angles[x]);
+            uint16_t ba=(uint16_t)(s->camera.angle-o->heading+s->scene.ray_angles[x]);
             int32_t uoff=r_mul16(r_abs(dxw),r_tan(w,ba));
             int32_t tpos=r_add(r_sub(r_add(s->camera.v,uoff),wy),len);
             int col=r_mul(r_add(bias,tpos),t->height)/len;

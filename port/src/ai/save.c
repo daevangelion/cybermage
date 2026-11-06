@@ -1,10 +1,54 @@
 #include "ai.h"
+#include <limits.h>
+
+static int32_t signed_word(uint32_t value)
+{
+    return value <= INT32_MAX ? (int32_t)value : -1 - (int32_t)(UINT32_MAX - value);
+}
+
+static int saved_pc_valid(const uint32_t *p)
+{
+    /* CM_HI.EXE ProcessInputEvents1481E copies cooldown into latch;
+     * HandleNextFrame1D841/1DF9E bounds cooldown/link ticks. Init1097E
+     * enables auto-aim; tank manual clamps1D237..1D28F and the auto
+     * path in PCLaunchMissile2F1C4 uses the same bounds.
+     * Aim X/Y are signed32, not indices: PCLaunchMissile2F1C4 wraps
+     * their arithmetic. No fabricated int16 bound on transient aim. */
+    static const unsigned indices[] = {6, 7, 8, 9, 10, 12, 15};
+    static const int32_t hi[] = {1, 3, 3, 1, 5, 1, 63};
+    unsigned i;
+    for (i = 0; i < sizeof indices / sizeof indices[0]; ++i) {
+        unsigned index = indices[i];
+        int32_t value = signed_word(p[index]);
+        if (value < 0 || value > hi[i])
+            return cm_fail("SAVE*.DAT", 0x6D4 + index * 4, "invalid saved player combat state");
+    }
+    return 0;
+}
 
 /* SaveGame 0x5007C: twelve 0x30 missile records, ten 0x1C SoulFire records.
  * These are numeric fields, never native struct/pointer dumps. */
 int ai_save_import(ai_state *a, world *w, const ui_save_state *save)
 {
     unsigned i;
+    if (saved_pc_valid(save->unk_6D4)) return -1;
+    /* Validate against the pools constructed by scene init, before changing
+     * their ownership or any live state. Saved FXO mappings are not trusted. */
+    for (i = 0; i < AI_MISSILE_MAX; ++i) {
+        const uint32_t *p = save->unk_135ECC + i * 12;
+        if (p[1] != (uint32_t)a->missiles[i].object ||
+            p[1] == 0 || p[1] >= w->object_count ||
+            (p[0] && (p[4] < 1 || p[4] >= AI_MISSILE_TYPES)) || p[7] >= 8)
+            return cm_fail("SAVE*.DAT", 0x2C551 + i * 48, "invalid saved missile");
+    }
+    for (i = 0; i < AI_SOUL_MAX; ++i) {
+        const uint32_t *p = save->unk_13610C + i * 7;
+        if (p[1] != (uint32_t)a->souls[i].object ||
+            p[2] != (uint32_t)a->souls[i].fxo ||
+            p[1] == 0 || p[1] >= w->object_count || p[2] >= w->fxo_count ||
+            p[5] > INT32_MAX || p[6] >= 8)
+            return cm_fail("SAVE*.DAT", 0x2C791 + i * 28, "invalid saved SoulFire");
+    }
     for (i = 0; i < AI_MISSILE_MAX; ++i) {
         const uint32_t *p = save->unk_135ECC + i * 12;
         ai_missile *m = &a->missiles[i];
@@ -14,9 +58,6 @@ int ai_save_import(ai_state *a, world *w, const ui_save_state *save)
         m->source = (int32_t)p[6]; m->frame = (int32_t)p[7];
         m->sound = (int32_t)p[8]; m->speed = (int32_t)p[9];
         m->variant = (int32_t)p[10]; m->radius = (int32_t)p[11];
-        if (m->object < 0 || (unsigned)m->object >= w->object_count ||
-            (m->active && (m->type < 0 || m->type >= AI_MISSILE_TYPES)))
-            return cm_fail("SAVE*.DAT", i * 48, "invalid saved missile");
     }
     for (i = 0; i < AI_SOUL_MAX; ++i) {
         const uint32_t *p = save->unk_13610C + i * 7;
@@ -24,15 +65,21 @@ int ai_save_import(ai_state *a, world *w, const ui_save_state *save)
         s->active = (int32_t)p[0]; s->object = (int32_t)p[1];
         s->fxo = (int32_t)p[2]; s->type = (int32_t)p[3];
         s->value = (int32_t)p[4]; s->lifetime = (int32_t)p[5]; s->frame = (int32_t)p[6];
-        if (s->object < 0 || (unsigned)s->object >= w->object_count ||
-            s->fxo < 0 || s->fxo >= 2048)
-            return cm_fail("SAVE*.DAT", i * 28, "invalid saved SoulFire");
-        w->fxo_objects[s->fxo] = (uint16_t)s->object;
-        w->fxo_types[s->fxo] = -1;
-        if ((unsigned)s->fxo >= w->fxo_count) w->fxo_count = (unsigned)s->fxo + 1;
     }
     a->gem_count_down = (int32_t)save->gemCountDown;
-    a->gem_count_down_timer = (int32_t)save->gemCountDownTimer;
+    a->gem_count_down_timer = signed_word(a->timer_ticks + save->gemCountDownTimer);
+    a->pc.fire = signed_word(save->unk_6D4[6]);
+    a->pc.cooldown = signed_word(save->unk_6D4[7]);
+    a->pc.latch = signed_word(save->unk_6D4[8]);
+    a->unk_144AE0 = signed_word(save->unk_6D4[9]);
+    a->pc.magic_link_ticks = signed_word(save->unk_6D4[10]);
+    /* CM_HI.EXE EventsAction72 3E9D7..3E9FA writes signed payloads,
+     * consumed as nonzero rather than restricted to a boolean. */
+    a->pc.underwater = signed_word(save->unk_6D4[11]);
+    a->pc_aim.auto_enable = signed_word(save->unk_6D4[12]);
+    a->pc_aim.aim_x = signed_word(save->unk_6D4[13]);
+    a->pc_aim.aim_y = signed_word(save->unk_6D4[14]);
+    a->pc_aim.tank_aim_y = signed_word(save->unk_6D4[15]);
     return 0;
 }
 
@@ -57,5 +104,16 @@ void ai_save_export(const ai_state *a, ui_save_state *save)
         p[4] = (uint32_t)s->value; p[5] = (uint32_t)s->lifetime; p[6] = (uint32_t)s->frame;
     }
     save->gemCountDown = (uint32_t)a->gem_count_down;
-    save->gemCountDownTimer = (uint32_t)a->gem_count_down_timer;
+    save->gemCountDownTimer = a->gem_count_down ?
+        (uint32_t)a->gem_count_down_timer - a->timer_ticks : 0;
+    save->unk_6D4[6] = (uint32_t)a->pc.fire;
+    save->unk_6D4[7] = (uint32_t)a->pc.cooldown;
+    save->unk_6D4[8] = (uint32_t)a->pc.latch;
+    save->unk_6D4[9] = (uint32_t)a->unk_144AE0;
+    save->unk_6D4[10] = (uint32_t)a->pc.magic_link_ticks;
+    save->unk_6D4[11] = (uint32_t)a->pc.underwater;
+    save->unk_6D4[12] = (uint32_t)a->pc_aim.auto_enable;
+    save->unk_6D4[13] = (uint32_t)a->pc_aim.aim_x;
+    save->unk_6D4[14] = (uint32_t)a->pc_aim.aim_y;
+    save->unk_6D4[15] = (uint32_t)a->pc_aim.tank_aim_y;
 }

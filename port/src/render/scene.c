@@ -117,24 +117,24 @@ static int flat(const world *w,render_state *s,unsigned object,int top,unsigned 
 
 int r_scene(const world *w,render_state *s,render_visibility_list *out)
 {
-    int cell=s->cell_head;
+    int cell=s->scene.cell_head;
     while (cell>=0) {
-        unsigned id=s->cells[cell].cell,light=w->cells[id>>10][id&1023].light;
-        int node=s->object_head[id];
-        uint32_t info=s->cells[cell].info;
+        unsigned id=s->scene.cells[cell].cell,light=w->cells[id>>10][id&1023].light;
+        int node=s->scene.object_head[id];
+        uint32_t info=s->scene.cells[cell].info;
         while (node>=0) {
-            unsigned object=s->nodes[node].object;
+            unsigned object=s->scene.nodes[node].object;
             const world_object *o=r_object(w,s,object);
             int draw=0,iswall=0;
             if (o->flags&R_WALL) {draw=1;iswall=1;}
-            else if (o->flags&R_FXO) {draw=--s->object_count[object]==0;iswall=1;}
+            else if (o->flags&R_FXO) {draw=--s->scene.object_count[object]==0;iswall=1;}
             else if (o->flags&R_PROP) {
                 if (o->floor_z>s->camera.z && (o->flags&UINT32_C(0x00000800))) {
-                    unsigned pl=s->prop_level[object];
-                    if (s->object_count[object] && (info>>24)<=(pl>>8)+1 && ((info>>16)&255)==(pl&255)) {
-                        draw=1;s->object_count[object]=0;
+                    unsigned pl=s->scene.prop_level[object];
+                    if (s->scene.object_count[object] && (info>>24)<=(pl>>8)+1 && ((info>>16)&255)==(pl&255)) {
+                        draw=1;s->scene.object_count[object]=0;
                     }
-                } else draw=--s->object_count[object]==0;
+                } else draw=--s->scene.object_count[object]==0;
                 if (draw && prop(w,s,object,light,out)) return -1;
                 draw=0;
             } else if (o->flags&R_FLAT) {
@@ -142,9 +142,9 @@ int r_scene(const world *w,render_state *s,render_visibility_list *out)
                 else if (o->z>s->camera.z && (o->flags&R_TOP)) {if (flat(w,s,object,1,light)) return -1;}
             }
             if (draw && iswall && wall(w,s,object,light)) return -1;
-            node=s->nodes[node].next;
+            node=s->scene.nodes[node].next;
         }
-        cell=s->cells[cell].next;
+        cell=s->scene.cells[cell].next;
     }
     if (!s->error) s->visible_world=w;
     return s->error;

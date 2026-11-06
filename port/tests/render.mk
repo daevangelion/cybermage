@@ -4,9 +4,9 @@ CPPFLAGS += -Iinclude $(shell pkg-config --cflags sdl2)
 CFLAGS ?= -O2 -g
 CFLAGS += -std=c99 -pedantic -Wall -Wextra -Werror
 LDLIBS += $(shell pkg-config --libs sdl2) -lm
-SOURCES := $(wildcard src/render/*.c) src/audio/mixer.c src/audio/music.c src/audio/synth.c src/audio/opl3.c src/world/math.c src/rsc.c src/platform_sdl.c
+SOURCES := $(wildcard src/render/*.c src/vis/*.c src/target/*.c) src/audio/mixer.c src/audio/music.c src/audio/synth.c src/audio/opl3.c src/world/math.c src/rsc.c src/platform_sdl.c
 SCENE_SOURCES := $(filter-out src/main.c,$(wildcard src/*.c src/*/*.c))
-HEADERS := $(wildcard include/*.h src/render/*.h)
+HEADERS := $(wildcard include/*.h src/render/*.h src/vis/*.h)
 
 .PHONY: check scene
 check: $(B)/test_render
