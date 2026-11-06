@@ -29,6 +29,9 @@ static SDL_Surface *surface;
 static SDL_Surface *converted;
 static SDL_AudioDeviceID device;
 static uint64_t start;
+static uint64_t suspended_at;
+static int suspended;
+static SDL_SpinLock clock_lock;
 static int is_headless;
 static key_event events[KEY_EVENTS_MAX];
 static unsigned event_count, event_next;
@@ -165,6 +168,25 @@ static void mix_callback(void *unused, Uint8 *out, int bytes)
     audio_mix((int16_t *)out, (unsigned)bytes / (2 * sizeof(int16_t)));
 }
 
+static int lifecycle_watch(void *unused, SDL_Event *event)
+{
+    uint64_t now;
+    (void)unused;
+    if (event->type != SDL_APP_WILLENTERBACKGROUND &&
+        event->type != SDL_APP_DIDENTERFOREGROUND) return 1;
+    now = SDL_GetTicks64();
+    SDL_AtomicLock(&clock_lock);
+    if (event->type == SDL_APP_WILLENTERBACKGROUND && !suspended) {
+        suspended_at = now;
+        suspended = 1;
+    } else if (event->type == SDL_APP_DIDENTERFOREGROUND && suspended) {
+        start += now - suspended_at;
+        suspended = 0;
+    }
+    SDL_AtomicUnlock(&clock_lock);
+    return 1;
+}
+
 int platform_init(int headless)
 {
     SDL_AudioSpec spec, obtained;
@@ -182,6 +204,8 @@ int platform_init(int headless)
     user_dir = SDL_GetPrefPath("jshield", "cybermage");
     if (!user_dir) return cm_fail("SDL user directory", 0, SDL_GetError());
     start = SDL_GetTicks64();
+    suspended = 0;
+    SDL_AddEventWatch(lifecycle_watch, NULL);
     if (headless)
         return audio_init(48000);
     window = SDL_CreateWindow("CyberMage", SDL_WINDOWPOS_CENTERED,
@@ -220,6 +244,7 @@ void platform_audio_unlock(void)
 
 void platform_shutdown(void)
 {
+    SDL_DelEventWatch(lifecycle_watch, NULL);
     if (gl_context) SDL_GL_DeleteContext(gl_context);
     gl_context = NULL;
     gl_window = 0;
@@ -998,13 +1023,21 @@ int platform_dump(const char *directory, unsigned frame,
 
 uint32_t platform_ticks(unsigned frame)
 {
-    return is_headless ? frame : (uint32_t)((SDL_GetTicks64() - start) * CM_TICK_HZ / 1000);
+    uint64_t elapsed;
+    if (is_headless) return frame;
+    SDL_AtomicLock(&clock_lock);
+    elapsed = (suspended ? suspended_at : SDL_GetTicks64()) - start;
+    SDL_AtomicUnlock(&clock_lock);
+    return (uint32_t)(elapsed * CM_TICK_HZ / 1000);
 }
 
 void platform_wait(unsigned frame)
 {
     uint64_t now = SDL_GetTicks64();
-    uint64_t target = start + (uint64_t)(frame + 1) * 1000 / CM_TICK_HZ;
+    uint64_t target;
+    SDL_AtomicLock(&clock_lock);
+    target = start + (uint64_t)(frame + 1) * 1000 / CM_TICK_HZ;
+    SDL_AtomicUnlock(&clock_lock);
     if (!is_headless && now < target) SDL_Delay((Uint32)(target - now));
 }
 

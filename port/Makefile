@@ -20,9 +20,10 @@ $(B)/%.o: src/%.c
 	@mkdir -p $(@D)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -MMD -MP -c -o $@ $<
 
-check: $(B)/test_core $(B)/test_platform $(B)/test_touch $(B)/test_sim $(B)/test_replay $(B)/test_exe $(B)/test_sim_loop $(B)/test_sim_collision $(B)/test_sim_swim $(B)/test_sim_swim_ubsan $(B)/test_sim_swim_original $(B)/test_sim_fire $(B)/test_sim_fire_ubsan $(B)/test_attack_ignore
+check: $(B)/test_core $(B)/test_platform $(B)/test_platform_lifecycle $(B)/test_touch $(B)/test_sim $(B)/test_replay $(B)/test_exe $(B)/test_sim_loop $(B)/test_sim_collision $(B)/test_sim_swim $(B)/test_sim_swim_ubsan $(B)/test_sim_swim_original $(B)/test_sim_fire $(B)/test_sim_fire_ubsan $(B)/test_attack_ignore
 	$(B)/test_core
 	$(B)/test_platform $(B)/platform-keys.txt $(B)/platform-dump
+	$(B)/test_platform_lifecycle
 	$(B)/test_touch
 	$(B)/test_sim
 	$(B)/test_replay
@@ -54,6 +55,10 @@ $(B)/test_platform: tests/test_platform.c src/platform_sdl.c $(AUDIO_CORE)
 $(B)/test_touch: tests/test_touch.c src/platform_sdl.c $(AUDIO_CORE)
 	@mkdir -p $(@D)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+
+$(B)/test_platform_lifecycle: tests/test_platform_lifecycle.c src/platform_sdl.c $(AUDIO_CORE)
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $< $(AUDIO_CORE) $(LDLIBS)
 
 $(B)/test_sim: tests/test_sim.c tests/media_error.c src/sim/input.c src/sim/flat.c src/sim/fire_flat.c src/sim/save.c
 	@mkdir -p $(@D)
