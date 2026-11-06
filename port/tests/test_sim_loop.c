@@ -89,6 +89,29 @@ void sim_loop_checks(void)
     assert((uint16_t)game.persons[0].unk_0038 == 23);
     {
         cm_input key={0};
+        unsigned i;
+        simulation.kb_latch=3;
+        key.pressed[0x1c]=key.held[0x1c]=1;
+        key.raw_count=1;key.raw_scans[0]=0x1c;
+        ui_open(&ui,UI_LOAD);ui.return_screen=UI_GAME;ui.selected=0;
+        sim_input(&simulation,&key);
+        assert(simulation.kb_scan_status[0x1c]==3);
+        assert(menu_input(&key,11)==UI_LOAD_GAME);
+        assert(!key.raw_count && !key.held[0x1c] && !key.pressed[0x1c]);
+        for(i=0;i<SIM_SCAN_COUNT;++i) assert(!simulation.kb_scan_status[i]);
+        assert(load_requested("../orig/retail",test_user,11)==1);
+        sim_input(&simulation,&key);
+        assert(!simulation.kb_scan_status[0x1c]);
+        key.pressed[0x1c]=key.held[0x1c]=1;
+        key.raw_count=1;key.raw_scans[0]=0x1c;
+        assert(menu_input(&key,12)==UI_NONE);
+        assert(key.raw_count==1 && key.pressed[0x1c]);
+        sim_input(&simulation,&key);
+        assert(simulation.kb_scan_status[0x1c]==3);
+        simulation.kb_scan_status[0x1c]=0;
+    }
+    {
+        cm_input key={0};
         ui_open(&ui,UI_GAME);
         assert(!events.items[1].type && events_inventory_add(&events,4,1)==1);
         selector_key(0x3B); /* Real menu_input must not turn F1 into Help. */

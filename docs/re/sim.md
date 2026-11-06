@@ -249,6 +249,16 @@ The real title-menu Training route selects scene11 (100HP/energy,60cash).
 the extended lifecycle/menu tests subsequently passed, including missing-save
 retention and Training through scripted title-menu input.
 
+`MenuOptions` return `01BD28..01BD38` clears all 128 keyboard states. The native
+modal poll has already delivered its raw scans, so returning to gameplay must
+also discard that frame's raw/held/pressed/released keyboard transport. Without
+this, a slot-confirmation Enter is delivered again after `LoadGame` replaces the
+PC and can activate a switch at the saved position. The real `menu_input` →
+`load_requested` → `sim_input` regression fails on the stale confirmation;
+ordinary gameplay Enter remains intact. The same return boundary covers Save,
+resume, Options and new-game/Training confirmations; ISR latch and BIOS modifier
+state are not reset.
+
 Malformed saved motion/mode/stance/body/swim words now fail at individual
 `0x6D4+4*i` offsets; fire fields fail at `0x34F09..0x34F15`.
 Physical map/maximum-input bounds keep subsequent signed arithmetic defined.

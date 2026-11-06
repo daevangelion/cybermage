@@ -560,9 +560,10 @@ static int death_start(frame_draw *draw)
     return 0;
 }
 
-static ui_action menu_input(const cm_input *input, uint32_t ticks)
+static ui_action menu_input(cm_input *input, uint32_t ticks)
 {
     ui_action action;
+    int menu_open=ui.screen!=UI_GAME;
     int options_open=ui.screen==UI_OPTIONS;
     if(input->quit) return UI_QUIT;
     /* Keyboard012F04/01340D owns Escape and all twenty shortcuts before
@@ -579,6 +580,17 @@ static ui_action menu_input(const cm_input *input, uint32_t ticks)
     if (ui.screen != UI_GAME && simulation.swim_loop != -1) {
         snd_abort(simulation.swim_loop, 4);
         simulation.swim_loop = -1;
+    }
+    if(menu_open && (ui.screen==UI_GAME || action==UI_LOAD_GAME ||
+       action==UI_SAVE_GAME || action==UI_NEW_GAME || action==UI_TRAINING)) {
+        /* MenuOptions return01BD28..01BD38 clears the keyboard. The modal
+         * poll already delivered these scans; do not deliver them again to
+         * HandleNextFrame, particularly after LoadGame replaces the PC. */
+        memset(simulation.kb_scan_status,0,sizeof simulation.kb_scan_status);
+        input->raw_count=0;
+        memset(input->held,0,sizeof input->held);
+        memset(input->pressed,0,sizeof input->pressed);
+        memset(input->released,0,sizeof input->released);
     }
     return action;
 }
