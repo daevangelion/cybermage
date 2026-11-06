@@ -93,6 +93,13 @@ int ai_save_import(ai_state *a, world *w, const ui_save_state *save)
         s->active = (int32_t)p[0]; s->object = (int32_t)p[1];
         s->prop = (int32_t)p[2]; s->type = (int32_t)p[3];
         s->value = (int32_t)p[4]; s->lifetime = (int32_t)p[5]; s->frame = (int32_t)p[6];
+        /* LoadGame051596..0515B3 restores active Soul PROP+6 after reading
+         * the records. Collision/pickup reads that word, not s->value. */
+        if (s->active > 0) {
+            uint16_t item = (uint16_t)p[4];
+            w->prop_items[s->prop] = item <= INT16_MAX ? (int16_t)item :
+                (int16_t)(-1 - (int)(UINT16_MAX - item));
+        }
     }
     a->gem_count_down = (int32_t)save->gemCountDown;
     a->gem_count_down_timer = signed_word(a->timer_ticks + save->gemCountDownTimer);

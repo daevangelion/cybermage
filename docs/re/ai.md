@@ -88,6 +88,23 @@ Only descriptor+4 (object) and +6 (pickup item, initially0) are initialized.
 complete32-bit value in the SoulFire record. The native pools and strict save
 identity checks follow those associations; FXO mappings/count are unchanged.
 
+LoadGame051596..0515B3 reconstructs PROP+6 from the low word of each
+**positive-active** saved Soul record's value, after reading the pool. Native
+`ai_save_import` now performs that same mirror only after all validation;
+nonpositive slots retain their prior PROP word. Without it, the real HALLT
+checkpoint restored Soul1538/PROP475/value46 but left its pickup word0.
+Road NPC64's correct first movement candidate(213603,1573858) was then pushed
+toY1573887 by ObjNxNy against that Soul. Item46's kind16 must instead let NPCs
+pass (original043878..0438B2); no movement coefficient or RNG change is needed.
+
+`check-soul-load` in `tests/projectiles.mk` compares ten signed-active/low-word
+cases with unmodified original05158B..0515B9, counts the actual word writes,
+and checks NPC pass-through, unchanged FXO ownership and rejection atomicity.
+The optional `tools/soul_load_original.py NATIVE --save SAVE000.DAT --data DIR`
+check decodes a supplied genuine save through the normal codec and runs the
+same original post-read fixup. The HALLT checkpoint yields one active item46;
+no new original-state input or serialized field was added.
+
 Death state8 samples recoil PERSON+A4/B0 **before** MoveObject
 (036B98..036BB0). A call that finishes recoil still exits that actor update;
 SoulFire may be emitted only on the following update. The genuine Training
@@ -138,6 +155,11 @@ checkpoint coordinates, HP or RNG state. Its replay steps Sim (including
 missile/SoulFire updates), player fire, events, UpdateObjects, Hand2Hand and the
 pixel-free end-frame target query. The one undefined-field input is explicit
 and documented below.
+It is the compact default-view, uninterrupted-New-Game diagnostic; UI/save
+action ledgers are rejected explicitly. Full-game, saved-game, configuration
+and mouse cases use the canonical executable's `--state-dump`, not a second
+menu/save implementation inside the harness. Both consumers require the actual
+draw-clock ledger and use the shared StatusMonitor/PC draw-state rules.
 
 `seed.csv` measures the BIOS source at RANDOM_SEED0x68ABF before its write,
 not a seed fitted from a later RNG checkpoint. The observed tick is44 at
@@ -252,6 +274,11 @@ semi-automatic pulses. No save bytes or actor state are synthesized.
 The observed original trace has418 frames/150 actors: PC HP96→42,
 PERSON42 is killed and PERSON77 falls to2HP. First PC damage is checkpoint31;
 both NPCs first lose HP at301.
+Named5bc4fde closes this case: all418 player records and62,550 actor/RNG
+checkpoints across417 completed frames match, with no first divergence.
+This uses the genuine35fe37fd save, **no** undefined-field import. Primary
+receipt: `gate-5bc4fde.json`; native SHA256
+`8ab2bb6ecc860082db89cd6489d34b24c0d9a383625668ba4c8f79476cfb3d98`.
 
 ```
 tools/run_capped.sh tools/oracle.sh tools/scenarios/scene11-training-landing-save.keys \
