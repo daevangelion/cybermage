@@ -262,6 +262,9 @@ Code links-100..-102 queue the four scene4 messages from the24-byte coder string
 snd_log_replay(world,index) maps the63 recorder entries through the original
 speechLogData table0x95ED8 and enables narration override; the mapping is not
 stored in SPEECH.ENG/TEXT.MSG. A normal snd_message clears that override.
+These mappings, initial sample flags and music playlists are read from the
+separately supplied CM_HI.EXE through the shared numeric LE table reader at
+snd_open; no retail rule-table payload is bundled in the C sources.
 
 snd_movie_begin/step/end in movie.c replace IntroEpilogue0x1F4EC. Original
 selector **1=intro,2=credits,other=ending**, with English/French/German filenames.

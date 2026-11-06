@@ -4,7 +4,7 @@ CPPFLAGS += -Iinclude
 CFLAGS ?= -O2 -g
 CFLAGS += -std=c99 -pedantic -Wall -Wextra -Werror
 AUDIO_SRC := $(filter-out src/audio/game.c src/audio/movie.c,$(wildcard src/audio/*.c))
-GAME_AUDIO_SRC := src/audio/game.c src/audio/movie.c src/rsc.c src/world/math.c src/platform_sdl.c
+GAME_AUDIO_SRC := src/audio/game.c src/audio/movie.c src/rsc.c src/exe.c src/world/math.c src/platform_sdl.c
 MEDIA_HEADERS := $(wildcard include/*.h src/audio/*.h)
 
 .PHONY: all check check-game

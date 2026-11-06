@@ -1,4 +1,5 @@
 #include "audio.h"
+#include "exe.h"
 #include "world.h"
 #include <limits.h>
 #include <string.h>
@@ -8,8 +9,9 @@
 #define SND_MONSTER_BYTES 276
 static rsc raw;
 static cm_file speech_file, text_file;
-static char paths[3][SND_PATH_MAX];
+static char paths[4][SND_PATH_MAX];
 static uint8_t available[SND_SAMPLE_COUNT];
+static uint8_t initial_samples[SND_SAMPLE_COUNT], log_messages[63][2];
 static snd_slot slots[AUDIO_SAMPLE_SLOTS];
 static snd_dialogue dialogue;
 static int opened, enabled = 1, speech_enabled = 1;
@@ -19,11 +21,7 @@ static int current_song = -1, music_loaded, song_loop, speech_slot = -1;
 static unsigned next_segment, linked_count, linked_index, linked_messages[4];
 static int next_video, speech_override;
 static char coder[24];
-/* CM_HI.EXE musicLoop at0x95BF4, two playlists terminated by -1. */
-static const int playlists[2][16] = {
-    {17,18,19,20,21,29,30,22,23,24,25,26,-1,-1,-1,-1},
-    {5,1,0,3,8,2,14,4,15,-1,-1,-1,-1,-1,-1,-1}
-};
+static int playlists[2][16];
 
 static int asset_path(char *out, const char *dir, const char *name)
 {
@@ -43,6 +41,37 @@ static int scale_volume(int n, int master)
     return v < 0 ? 0 : v > 32767 ? 32767 : (int)v;
 }
 static int signed16(unsigned n) { n &= 65535; return n < 32768 ? (int)n : (int)n - 65536; }
+
+static int load_rules(void)
+{
+    cm_file file = {0};
+    cm_exe exe;
+    int32_t words[32];
+    unsigned i;
+    int result;
+    if (platform_file_read(&file, paths[3])) return -1;
+    result = cm_exe_init(&exe, &file, paths[3]);
+    if (!result) result = cm_exe_table(&exe, 0x95bf4, words, 16);
+    if (!result) for (i = 0; i < 32; ++i) {
+        int song = signed16((uint32_t)words[i / 2] >> ((i & 1) * 16));
+        if (song < -1 || song >= 38) { result = cm_fail(paths[3], 0x95bf4 + i * 2, "invalid music playlist"); break; }
+        playlists[i / 16][i % 16] = song;
+    }
+    if (!result) result = cm_exe_table(&exe, 0x95ed8, words, 32);
+    if (!result) for (i = 0; i < 126; ++i)
+        log_messages[i / 2][i & 1] = (uint8_t)((uint32_t)words[i / 4] >> ((i & 3) * 8));
+    if (!result) for (i = 0; i < 63; ++i)
+        if (log_messages[i][0] >= 12 || !log_messages[i][1]) {
+            result = cm_fail(paths[3], 0x95ed8 + i * 2, "invalid speech recorder mapping"); break;
+        }
+    if (!result) result = cm_exe_table(&exe, 0x95c34, words, 30);
+    if (!result) for (i = 0; i < SND_SAMPLE_COUNT; ++i) {
+        initial_samples[i] = (uint8_t)((uint32_t)words[i / 4] >> ((i & 3) * 8));
+        if (initial_samples[i] > 1) { result = cm_fail(paths[3], 0x95c34 + i, "invalid initial sample state"); break; }
+    }
+    platform_file_release(&file);
+    return result;
+}
 
 static int object_ok(const world *w, unsigned object)
 {
@@ -116,7 +145,8 @@ int snd_open(const char *dir)
     uint32_t ml, dl;
     snd_close();
     if (asset_path(paths[0], dir, "RAW.RSC") || asset_path(paths[1], dir, "SPEECH.ENG") ||
-        asset_path(paths[2], dir, "TEXT.MSG")) return -1;
+        asset_path(paths[2], dir, "TEXT.MSG") || asset_path(paths[3], dir, "CM_HI.EXE") ||
+        load_rules()) return -1;
     if (rsc_open(&raw, paths[0]) || platform_file_read(&speech_file, paths[1]) ||
         platform_file_read(&text_file, paths[2]) || rsc_entry(&raw, 252, &m, &ml) ||
         rsc_entry(&raw, 253, &d, &dl)) { snd_close(); return -1; }
@@ -126,7 +156,7 @@ int snd_open(const char *dir)
     current_song = -1; music_loaded = song_loop = 0;
     platform_audio_unlock();
     memset(available, 0, sizeof available);
-    for (ml = 0; ml < 34; ++ml) if (ml != 4 && ml != 9 && ml != 11 && ml != 12)
+    for (ml = 0; ml < SND_SAMPLE_COUNT; ++ml) if (initial_samples[ml])
         if (snd_sample_load(ml)) { snd_close(); return -1; }
     return 0;
 }
@@ -160,7 +190,7 @@ int snd_scene(const world *w)
     platform_audio_lock(); reset_slots(); platform_audio_unlock();
     memset(available, 0, sizeof available);
     /* Static soundDataLoad0x95C34; scene definitions add their own samples. */
-    for (i = 0; i < 34; ++i) if (i != 4 && i != 9 && i != 11 && i != 12)
+    for (i = 0; i < SND_SAMPLE_COUNT; ++i) if (initial_samples[i])
         if (snd_sample_load(i)) return -1;
     for (i = 0; i < w->person_count; ++i) {
         int type = w->persons[i].type;
@@ -405,18 +435,9 @@ int snd_message(const world *w, unsigned scene, unsigned message, int object)
 /* CM_HI.EXE speechLogData0x95ED8: recorder slot -> scene/message. */
 int snd_log_replay(const world *w, unsigned index)
 {
-    static const uint8_t messages[63][2] = {
-        {1,15},{1,1},{1,2},{1,3},{2,12},{2,13},{9,5},{9,6},{9,15},
-        {9,16},{9,17},{4,1},{4,11},{4,32},{4,31},{4,20},{9,28},{9,29},
-        {9,30},{9,31},{9,32},{9,33},{9,34},{5,1},{5,15},{5,16},{5,17},
-        {5,18},{5,19},{5,20},{5,21},{5,22},{5,10},{5,3},{9,35},{9,36},
-        {9,37},{9,38},{3,1},{3,12},{3,2},{3,3},{3,4},{3,5},{3,6},{3,7},
-        {3,8},{7,1},{8,7},{8,1},{8,2},{8,3},{8,8},{8,4},{8,5},{8,6},
-        {8,9},{8,10},{8,15},{10,1},{10,2},{10,3},{10,4}
-    };
     int result;
-    if (index >= 63) return cm_fail("SpeechRecorder", index, "recording outside speech log");
-    result = snd_message(w, messages[index][0], messages[index][1], 0);
+    if (!opened || index >= 63) return cm_fail("SpeechRecorder", index, "recording outside speech log");
+    result = snd_message(w, log_messages[index][0], log_messages[index][1], 0);
     if (!result) speech_override = 1;
     return result;
 }
