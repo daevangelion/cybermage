@@ -4,7 +4,62 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
-from oracle import verified_sources
+import hashlib
+from oracle import verified_sources, copy_saves
+
+
+class SavePersistence(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(prefix="cm-oracle-saves-")
+        self.source = Path(self.temp.name) / "source"
+        self.destination = Path(self.temp.name) / "destination"
+        self.source.mkdir()
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def test_copies_only_original_save_names_and_records_exact_hashes(self):
+        files = {
+            "SAVE010.DAT": b"original autosave bytes",
+            "GAMENAME.USR": b"original menu names",
+            "SAVEGAME/SAVE000.DAT": b"original manual save bytes",
+        }
+        (self.source / "SAVEGAME").mkdir()
+        for name, data in files.items():
+            (self.source / name).write_bytes(data)
+        (self.source / "CMDATA.CNF").write_bytes(b"not a save")
+        (self.source / "CM_HI.EXE").write_bytes(b"not executable input")
+        (self.source / "SAVEGAME/other.dat").write_bytes(b"not a save")
+        receipt = copy_saves(self.source, self.destination)
+        self.assertEqual(receipt, {name: hashlib.sha256(data).hexdigest()
+                                   for name, data in files.items()})
+        for name, data in files.items():
+            self.assertEqual((self.destination / name).read_bytes(), data)
+        self.assertFalse((self.destination / "CMDATA.CNF").exists())
+        self.assertFalse((self.destination / "CM_HI.EXE").exists())
+        self.assertFalse((self.destination / "SAVEGAME/other.dat").exists())
+        replay = Path(self.temp.name) / "replay"
+        self.assertEqual(copy_saves(self.destination, replay), receipt)
+
+    def test_symlink_save_and_symlink_save_directory_are_rejected(self):
+        outside = Path(self.temp.name) / "outside"
+        outside.write_bytes(b"not an original run file")
+        (self.source / "SAVE000.DAT").symlink_to(outside)
+        with self.assertRaises(ValueError):
+            copy_saves(self.source, self.destination)
+        (self.source / "SAVE000.DAT").unlink()
+        (self.source / "SAVEGAME").symlink_to(outside.parent, target_is_directory=True)
+        with self.assertRaises(ValueError):
+            copy_saves(self.source, self.destination)
+
+    def test_missing_empty_and_same_directory_fail_closed(self):
+        with self.assertRaises(ValueError):
+            copy_saves(self.source / "absent", self.destination)
+        with self.assertRaises(ValueError):
+            copy_saves(self.source, self.destination)
+        (self.source / "SAVE000.DAT").write_bytes(b"save")
+        with self.assertRaises(ValueError):
+            copy_saves(self.source, self.source)
 
 
 class SourceTrust(unittest.TestCase):
