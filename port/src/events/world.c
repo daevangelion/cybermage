@@ -29,8 +29,10 @@ static void once(events_event *v)
 
 static int actor_object(const world *w, int32_t person)
 {
+    int object;
     if (person < 0 || (unsigned)person >= w->person_count) return -1;
-    return w->persons[person].object;
+    object=w->persons[person].object;
+    return object>=0 && (unsigned)object<w->object_count?object:-1;
 }
 
 static int event_tile(const world *w, int32_t person, int player_tile)
@@ -38,7 +40,7 @@ static int event_tile(const world *w, int32_t person, int player_tile)
     int object;
     if (!person) return player_tile;
     object = actor_object(w,person);
-    return object >= 0 ? tile_index(&w->objects[object],0) : -1;
+    return object >= 0 ? tile_index(&w->objects[object],INT32_MIN) : -1;
 }
 
 static int set_enabled(events_state *e, int32_t index, int enable)
@@ -641,6 +643,15 @@ static int dispatch(events_state *e, sim_state *s, ai_state *a, world *w, unsign
             else { w->light_type[p[3]]=0;w->light_param[p[3]]=63; }
         }
         once(v); break;
+    case 38: {
+        events_event *relay=event_at(e,p[3]);
+        if(!target || !relay) return cm_fail("MoveWorld",index,"invalid threshold relay");
+        n=target->state>p[7] && target->value[1]==p[9];
+        if(n?relay->value[1]==p[11]:relay->value[1]!=p[11]) {
+            if(event_set(e,p[3],-1) || (p[8] && event_set(e,p[8],-1))) return -1;
+        }
+        break;
+    }
     case 39:
         if(!target || (target->state && target->value[1]!=p[9])) break;
         if(p[3]<0 || (unsigned)p[3]>=w->person_count || p[8]<0 || (unsigned)p[8]>=w->person_count)
@@ -648,12 +659,79 @@ static int dispatch(events_state *e, sim_state *s, ai_state *a, world *w, unsign
         w->persons[p[3]].unk_001E=(int16_t)p[7];
         if(p[8]) w->persons[p[8]].unk_001E=(int16_t)p[7];
         break;
+    case 40:
+        if((unsigned)p[8]>=e->switch_count || (unsigned)p[11]>=e->switch_count ||
+           (unsigned)p[7]>=e->switch_count || (unsigned)p[3]>=e->switch_count)
+            return cm_fail("MoveWorld",index,"invalid triple switch gate");
+        if(e->switches[p[8]].state==1 && e->switches[p[11]].state==1 &&
+           e->switches[p[7]].state==0) {
+            if(!target) return cm_fail("MoveWorld",index,"invalid triple switch target");
+            if(e->switches[p[3]].state!=target->value[1]) return event_set(e,p[0],-1);
+        } else if(e->switches[p[3]].state==1) return event_set(e,p[9],-1);
+        break;
+    case 41:
+        if((unsigned)p[3]>=e->switch_count) return cm_fail("MoveWorld",index,"invalid enable switch");
+        if(e->switches[p[3]].state!=p[9]) break;
+        if((p[0] && set_enabled(e,p[0],p[11])) || (p[13] && set_enabled(e,p[13],p[14]))) return -1;
+        if(p[8]) {
+            events_event *relay=event_at(e,p[8]);
+            if(!relay) return cm_fail("MoveWorld",index,"invalid parameter relay");
+            relay->value[1]=p[7];
+        }
+        once(v);break;
+    case 42:
+        if(v->state) break;
+        e->autoDestruct=4;e->autoDTime=e->ticks+0x41A0u;
+        e->autoMSound=0;e->autoMSlot=-1;e->autoDMsgTimer=e->ticks+160;
+        e->autoLFlag=1;v->state=1;once(v);break;
     case 43:
         w->shade_override.bias=p[0];w->shade_override.shift=p[3];w->shade_override.scale=p[8];
         ++w->shade_override.revision;
         break;
     case 44: return rotate_fxo(w,s,v);
     case 45: return ycrush_fxo(s,a,w,v);
+    case 46:
+        for(i=0;i<w->person_count;++i) {
+            object=actor_object(w,(int32_t)i);
+            if(object<0) return cm_fail("MoveWorld",index,"invalid teleport actor");
+            if(tile_index(&w->objects[object],INT32_MIN)!=p[2] || !w->objects[object].active) continue;
+            if(move_actor(w,object,p[6],p[5],p[4],w->objects[object].heading)) return -1;
+            if((unsigned)object==w->player_object) e->unk_1444EC=3;
+            if(p[13]) (void)snd_object(w,(unsigned)p[13],(unsigned)object,0x60000,32767,0);
+        }
+        break;
+    case 47:
+        if((unsigned)p[3]>=e->switch_count) return cm_fail("MoveWorld",index,"invalid enable switch");
+        return set_enabled(e,p[0],e->switches[p[3]].state==p[9]);
+    case 48:
+        if((unsigned)p[11]>=96 || (!p[15] && (unsigned)p[3]>=e->switch_count))
+            return cm_fail("MoveWorld",index,"invalid aperture controller");
+        w->apertures[p[11]].enabled=(uint8_t)(p[15]?p[1]:e->switches[p[3]].state);
+        break;
+    case 49:
+        if(event_tile(w,p[3],tile)!=p[2]) break;
+        if((unsigned)p[8]>=e->switch_count) return cm_fail("MoveWorld",index,"invalid position switch");
+        if(e->switches[p[8]].state==p[9]) break;
+        if(events_toggle_switch(e,w,(unsigned)p[8])) return -1;
+        once(v);break;
+    case 50:
+        if(event_tile(w,p[3],tile)!=p[2]) break;
+        if(v->state) { if(s->bp_limit_flag) --v->state;break; }
+        if(w->unk_144AA4>=w->object_count) return cm_fail("MoveWorld",index,"invalid missile origin");
+        {
+            world_object *origin=&w->objects[w->unk_144AA4];
+            origin->x=p[6];origin->y=p[5];origin->floor_z=p[4];
+            origin->heading=(uint16_t)p[10];origin->z=origin->height=0;
+            if(ai_launch_missile(a,s,w,w->unk_144AA4,w->player_object,37)) return -1;
+        }
+        v->state=(uint8_t)p[7];break;
+    case 51:
+        if(v->state) break;
+        for(i=0;i<EVENTS_ITEM_MAX;++i)
+            if(e->items[i].type>0 && e->items[i].kind==14 && e->items[i].subtype==p[3]) {
+                e->items[i].type=0;v->state=1;once(v);
+            }
+        break;
     case 52:
         if(v->state) break;
         if(p[7]>p[0]) { ++p[0];break; }
@@ -687,10 +765,51 @@ static int dispatch(events_state *e, sim_state *s, ai_state *a, world *w, unsign
         }
         if((p[8] && set_enabled(e,p[8],0)) || (p[14] && set_enabled(e,p[14],1))) return -1;
         v->state=1; once(v);break;
+    case 53:
+        if(v->state) break;
+        if(p[3]<0 || (unsigned)p[3]>=w->person_count) return cm_fail("MoveWorld",index,"invalid wounded actor");
+        if((int16_t)w->persons[p[3]].unk_0038 >= (a->difficulty?p[8]:p[8]/2)) break;
+        if(p[9]) {
+            uint32_t max=(uint32_t)w->persons[p[3]].unk_0038>>16;
+            w->persons[p[3]].unk_0038=(int32_t)(max<<16|max);w->persons[p[3]].status=0;
+        }
+        if((p[0] && set_enabled(e,p[0],0)) || (p[7] && set_enabled(e,p[7],0)) ||
+           (p[13] && set_enabled(e,p[13],0)) || (p[11] && event_set(e,p[11],-1))) return -1;
+        v->state=1;once(v);break;
+    case 54:
+        object=actor_object(w,p[3]);
+        if(object<0 || !target) return cm_fail("MoveWorld",index,"invalid paired presence actor/event");
+        n=tile_index(&w->objects[object],INT32_MIN);
+        n=n==p[2] || n==p[6] || tile==p[2] || tile==p[6];
+        if(target->value[1]==!n) return event_set(e,p[0],n);
+        break;
     case 55:
         if(v->state) break;
         v->state=1;
         return event_set(e,p[0],p[1]);
+    case 56:
+        if(v->state) break;
+        if((unsigned)p[3]>=3) return cm_fail("MoveWorld",index,"invalid coder row");
+        for(i=0;i<4;++i) {
+            n=world_rnd(&w->rng,i==0 || i==3?4:8)+(i==3?4:0);
+            e->coderStr[p[3]*8+i]=(char)(n<4?'A'+n:'-'+n);
+        }
+        e->coderStr[p[3]*8+4]=0;snd_code(e->coderStr);
+        v->state=1;once(v);break;
+    case 57:
+        if(v->state) break;
+        if(p[3]<0 || p[8]<p[3] || (unsigned)p[8]>w->person_count)
+            return cm_fail("MoveWorld",index,"invalid surviving actor range");
+        n=0;
+        for(i=(unsigned)p[3];i<(unsigned)p[8];++i) n+=w->persons[i].status!=2;
+        if(n>p[13]) break;
+        if((p[0] && (set_enabled(e,p[0],1) || event_set(e,p[0],-1))) ||
+           (p[11] && (set_enabled(e,p[11],1) || event_set(e,p[11],-1))) ||
+           (p[9] && set_enabled(e,p[9],0)) || (p[7] && set_enabled(e,p[7],0))) return -1;
+        if(p[2] && e->text_trigger && e->text_object==actor_object(w,p[2])) {
+            e->text_trigger=0;snd_message_stop();
+        }
+        v->state=1;once(v);break;
     case 58:
         if(v->state || !target || !target->state) break;
         if(event_set(e,p[3],-1)) return -1;
@@ -789,11 +908,75 @@ static int dispatch(events_state *e, sim_state *s, ai_state *a, world *w, unsign
             if(p[11]) once(v);
         }
         v->state=1;break;
+    case 68: case 69:
+        if(v->state || tile!=p[2]) break;
+        if(e->event_count<243 || w->person_count<61)
+            return cm_fail("MoveWorld/arena",index,"missing arena actors/events");
+        if(v->type==68) {
+            e->events[24].enabled=e->events[25].enabled=e->events[66].enabled=1;
+            e->events[24].value[3]=e->events[25].value[3]=e->events[66].value[3]=1;
+            e->events[28].value[3]=0;e->events[243].value[1]=0;
+            e->PCBetPick=-1;e->PCBet=0;
+            for(i=57;i<61;++i) {
+                object=actor_object(w,(int32_t)i);
+                if(object<0) return cm_fail("MoveWorld/arena",index,"invalid arena actor");
+                if(move_actor(w,object,0x1E8000,0x1F8000,w->objects[object].floor_z,w->objects[object].heading)) return -1;
+                w->persons[i].state=9;
+            }
+        } else if(w->persons[57].state==9 || w->persons[57].status==2 ||
+                  (w->persons[58].status==2 && w->persons[59].status==2 && w->persons[60].status==2)) {
+            static const unsigned types[4]={20,5,4,5};
+            static const int32_t xs[4]={0x1B2000,0x1BC000,0x1B8000,0x1B4000};
+            static const int32_t ys[4]={0xE8000,0xAC000,0xA4000,0xAC000};
+            for(i=0;i<4;++i) {
+                object=actor_object(w,(int32_t)i+57);
+                if(object<0) return cm_fail("MoveWorld/arena",index,"invalid arena actor");
+                world_omap_delete(w,(unsigned)object);
+                if(ai_set_person(a,w,i+57,types[i],99,xs[i],ys[i],0,0,0)) return -1;
+                world_omap_insert(w,(unsigned)w->persons[i+57].object);
+            }
+            e->events[24].enabled=e->events[25].enabled=e->events[66].enabled=1;
+            e->events[24].value[3]=e->events[25].value[3]=e->events[66].value[3]=57;
+            e->events[28].value[3]=59;e->events[243].value[1]=0;
+            if(!e->text_trigger && p[0]) {
+                object=world_fxo_object(w,(unsigned)p[3]);
+                if(object<0 || start_text(e,w,w->scene,p[0],object,2)) return -1;
+            }
+        }
+        v->state=1;p[1]^=1;break;
+    case 70:
+        if(!target) return cm_fail("MoveWorld",index,"invalid key presence target");
+        if(tile!=p[2] && tile!=p[6]) {
+            p[1]=0;
+            if(target->value[1]==1) return event_set(e,p[0],0);
+            break;
+        }
+        n=0;
+        for(i=0;i<EVENTS_ITEM_MAX;++i)
+            if(e->items[i].type>0 && e->items[i].kind==14 && e->items[i].subtype==p[3]) n=1;
+        if(n && !target->value[1]) {
+            if(p[9]!=2 && !e->text_trigger) {
+                if(p[8] && start_text(e,w,w->scene,p[8],0,2)) return -1;
+                p[9]=2;
+            }
+            return event_set(e,p[0],1);
+        }
+        if(!n && !p[1]) {
+            if(!p[9] && !e->text_trigger) {
+                if(p[11] && start_text(e,w,w->scene,p[11],0,2)) return -1;
+                p[9]=1;
+            }
+            p[1]=1;
+        }
+        break;
     case 71:
         if((unsigned)p[3]>=e->switch_count) return cm_fail("MoveWorld",index,"invalid random switch");
         if(e->switches[p[3]].state!=p[9]) break;
         if(event_set(e,world_rnd(&w->rng,2)?p[0]:p[8],-1)) return -1;
         once(v);break;
+    case 72:
+        if((unsigned)p[3]>=e->switch_count) return cm_fail("MoveWorld",index,"invalid underwater switch");
+        a->pc.underwater=e->switches[p[3]].state==p[9]?p[8]:p[11];break;
     case 73:
         if(v->state) break;
         if(p[3]<0 || (unsigned)p[3]>=w->person_count) return cm_fail("MoveWorld",index,"invalid actor field");
@@ -886,6 +1069,23 @@ static int dispatch(events_state *e, sim_state *s, ai_state *a, world *w, unsign
         s->fire_check=p[3];s->fire_damage=p[8];s->fire_tile_panel=p[11];s->fire_tile_art=p[7];
         if(p[13]) (void)snd_play((unsigned)p[13],32767,32768);
         v->state=1;once(v);break;
+    case 83:
+        if(p[3]<0 || (unsigned)p[3]>=w->prop_count ||
+           (unsigned)p[7]>=e->switch_count || (unsigned)p[11]>=e->switch_count)
+            return cm_fail("MoveWorld",index,"invalid alternating prop");
+        object=w->prop_objects[p[3]];
+        if((unsigned)object>=w->object_count) return cm_fail("MoveWorld",index,"invalid alternating prop object");
+        {
+            world_object *o=&w->objects[object],*pc=&w->objects[w->player_object];
+            if(!o->active || ((pc->floor_z+0x4800)>>16)!=(o->floor_z>>16) ||
+               cm_distance(o->x,o->y,pc->x,pc->y)>=p[2]) break;
+            p[9]^=1;
+            if(move_actor(w,object,p[p[9]?6:4],p[p[9]?5:10],o->floor_z,o->heading)) return -1;
+            e->switches[p[p[9]?11:7]].key=(int16_t)p[8];
+            e->switches[p[p[9]?7:11]].key=999;
+            if(p[13]) (void)snd_play((unsigned)p[13],32767,32768);
+        }
+        break;
     case 84:
         if((unsigned)p[0]>=e->switch_count) return cm_fail("MoveWorld",index,"invalid item exchange switch");
         if(e->switches[p[0]].state!=p[9]) break;
@@ -914,6 +1114,54 @@ static int dispatch(events_state *e, sim_state *s, ai_state *a, world *w, unsign
             }
         }
         break;
+    case 87:
+        if(!s->bp_limit_flag) break;
+        if(p[3]<0 || (unsigned)p[3]>=w->prop_count)
+            return cm_fail("MoveWorld",index,"invalid draining prop");
+        object=w->prop_objects[p[3]];
+        if((unsigned)object>=w->object_count) return cm_fail("MoveWorld",index,"invalid draining prop object");
+        {
+            world_object *o=&w->objects[object],*pc=&w->objects[w->player_object];
+            int distance=cm_distance(o->x,o->y,pc->x,pc->y),near=distance<=0x5000;
+            o->flags&=~0x2000u;
+            if(!near) {
+                if(e->ticks<=e->DrakMangTime) break;
+                e->DrakMangTime=e->ticks+(uint32_t)(distance/0x5000);
+                n=distance<0x30000?world_rnd(&w->rng,2):0;
+            } else n=world_rnd(&w->rng,2);
+            if(!n) break;
+            e->unk_144B58=near;e->unk_144B5C=e->ticks+40;
+            if(near) {
+                o->flags|=0x2000u;
+                (void)snd_play(world_rnd(&w->rng,3)?28:29,32767,32768);
+            }
+            if(ai_damage_person(a,w,w->player_person,n,0,0)) return -1;
+            e->energy=(int16_t)(uint16_t)(e->energy-n);
+            if(e->energy<0) e->energy=0;
+            if(!near) { if(!e->unk_1444E8) e->unk_1444E8=2;break; }
+            if(!world_rnd(&w->rng,4)) {
+                if(w->person_count<2) return cm_fail("MoveWorld",index,"missing affected actor");
+                if(w->persons[1].status!=2 && (w->persons[1].state==0 || w->persons[1].state==1)) {
+                    w->persons[1].state=6;w->persons[1].unk_001E=2;
+                }
+            }
+            e->unk_1444E8=0;e->unk_1444EC=world_rnd(&w->rng,5)+1;
+            p[7]-=n;
+            if(p[7]<=0) {
+                if(p[8]<0 || (unsigned)p[8]>=w->person_count)
+                    return cm_fail("MoveWorld",index,"invalid restored actor");
+                w->persons[p[8]].unk_00B8=8;w->persons[p[8]].unk_00BA=0;
+                {
+                    uint32_t max=(uint32_t)w->persons[p[8]].unk_0038>>16;
+                    w->persons[p[8]].unk_0038=(int32_t)(max<<16|max);w->persons[p[8]].status=0;
+                }
+                p[7]=0;
+                if(set_enabled(e,p[0],1) || event_set(e,p[0],-1)) return -1;
+                world_omap_delete(w,(unsigned)object);o->active=0;o->x=o->y=0x1F8000;
+                (void)snd_play(29,32767,32768);once(v);
+            } else if(events_rescale_prop(w,(unsigned)p[3],10+(p[7]>100?100:p[7])*9/10)) return -1;
+        }
+        break;
     case 88: {
         const world_object *pc=&w->objects[w->player_object];
         if(!target || p[1]==target->value[1]) break;
@@ -936,7 +1184,7 @@ static int dispatch(events_state *e, sim_state *s, ai_state *a, world *w, unsign
         if(n==p[1]) break;
         p[1]=n;
         return event_set(e,n?p[0]:p[8],1);
-    default: return cm_fail("MoveWorld/type",v->type,"event type not implemented");
+    default: return cm_fail("MoveWorld/type",v->type,"invalid event type");
     }
     return 0;
 }
@@ -968,6 +1216,7 @@ int events_step(events_state *e, sim_state *s, ai_state *a, world *w)
         else if (events_switch_search(e,s,a,w)) return -1;
     }
     if (e->tank_flag && s->pc_mode != 7 && events_set_tank_mode(e,s,w,1)) return -1;
+    if(events_cosmetics(e,s,a,w)) return -1;
     tile = tile_index(&w->objects[w->player_object],0x5000);
     if (tile < 0 || tile >= CM_MAP_LEVELS*CM_MAP_CELLS) return cm_fail("MoveWorld/tile",(uint32_t)tile,"player tile outside map");
     i = w->cells[tile/CM_MAP_CELLS][tile%CM_MAP_CELLS].unk_C5090;

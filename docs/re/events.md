@@ -108,15 +108,32 @@ the latest integrated link is blocked outside this slice by missing
 `ai_pc_input` and `ai_pc_hand2hand`. The focused event tests link and run against
 the current other subsystem sources.
 
-**This slice is not acceptance-complete.** MoveWorld dispatch types
-38,40,41,42,46,47,48,49,50,51,53,54,56,57,68,69,70,72,83,87 still reject
-explicitly; scene-specific water/candle updates and auto-destruction consumption
-are not ported. Every type present in the retail scene1 event table has a
-dispatch implementation, but only the initial real switch/door path is compared.
-Vehicle entry/exit has unit coverage, **not** the required real-oracle vehicle
-entry trace. The attempted real route only reached the post-door corridor.
-The supplied retail SAVE010.DAT is the initial scene1 position, not a vehicle
-save. No vehicle-debug override, coordinate patch or fabricated save was used.
+All90 MoveWorld dispatch types now have implementations. The continuation adds
+types38(03B87E),40(03BA5A),41(03BB70),42(03BC15),46(03C572),
+47(03C6B7),48(03C700),49(03C760),50(03C8CA),51(03CA4E),
+53(03CDEC),54(03CF26),56(03D0AA),57(03D0F3),68(03E351),
+69(03E451),70(03E6D8),72(03E9B4),83(03F36D),87(03F833).
+The default rejects invalid types, rather than silently skipping records.
+Negative actor shape heights retain their signed level calculation.
+
+Scene cosmetics follow037DCA..0387D9 and initialization0116F9..011D46:
+panel pixel-pointer aliases preserve destination dimensions, four-phase water
+uses0,1,2,1 (not0,1,2,hold), scene5 is gated by switch3, and the prop animations,
+scene8 RNG bobbing, scene9 rotating prop46, and scene10 gem removal are retained.
+LoadPANELS027289..0272B0 makes the original panel-to-texture map identity;
+aliases read immutable panel pixels, not a previously aliased destination.
+DrawConsole01942F..019822 consumes auto-destruction, including strict countdown
+thresholds at092630, announcement sample sequencing and PCDeadMan on expiry.
+`events_countdown` is a separate post-world console tick for the integration owner.
+Selected weapon spell/slot and melee dice now travel through selector/save state;
+coder generation uses original04D3B0 and saves its24 bytes explicitly.
+
+The added focused fixtures exercise all20 added dispatch types, signed actor
+height and invalid mapping, panel alias timing, coder alphabet and countdown
+threshold/expiry. These are source-grounded unit checks, not90-type runtime
+oracle parity. Vehicle entry/exit still needs the real-oracle route comparison;
+the supplied retail SAVE010.DAT is the initial scene1 position, not a vehicle
+save. No vehicle-debug override, coordinate patch or fabricated save is used.
 
 Integration contracts: `events_init` now resets scene metadata, **preserving**
 player inventory/status. AI's `ai_init_pc` owns original boot/new-game

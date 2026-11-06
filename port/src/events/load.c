@@ -12,6 +12,7 @@ int events_init(events_state *e, world *w)
     memset(e->switches,0,sizeof(e->switches));
     memset(e->event_heads,0,sizeof(e->event_heads));
     e->event_count=e->switch_count=0;
+    e->scene=w->scene;
     e->selector_kind=e->selector_count=e->selector_index=0;
     e->text_trigger=e->text_object=e->text_message=0;
     e->text_serial=0;
@@ -92,6 +93,7 @@ int events_init(events_state *e, world *w)
             memcpy(v->name,d->name,sizeof(v->name));v->object=d->icon;
             v->kind=d->kind;v->subtype=d->subtype;v->icon=d->scon;
         }
+    events_scene_cosmetics(e,w);
     return 0;
 }
 

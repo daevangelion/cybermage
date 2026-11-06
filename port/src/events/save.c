@@ -1,4 +1,5 @@
 #include "events.h"
+#include "audio.h"
 #include <string.h>
 
 #define INVENTORY_BASE 0x130D50u
@@ -36,6 +37,11 @@ int events_save_import(events_state *e, const ui_save_state *save)
     }
     e->cash=(int32_t)get32(save,0x1313A4); e->spell=(int32_t)get32(save,0x1313A8);
     e->hh_weapon=(int32_t)get32(save,0x1313AC); e->weapon=(int32_t)get32(save,0x1313B0);
+    e->item_spell=(int32_t)get32(save,0x1313B4);e->weapon_slot=get32(save,0x1313B8);e->hh_dice=get32(save,0x1313BC);
+    if(e->weapon_slot>=EVENTS_ITEM_MAX) return cm_fail("events/save",0x1313B8,"invalid selected weapon slot");
+    e->PCBet=(int32_t)save->PCBet;e->PCBetPick=(int32_t)save->PCBetPick;
+    e->PCBetOdds=(int32_t)save->PCBetOdds;e->JackPot=(int32_t)save->JackPot;
+    e->autoDestruct=(int32_t)save->autoDestruct;e->autoDTime=e->ticks+save->autoDTime;
     e->energy=(int16_t)get16(save,0x131410); e->max_energy=(int16_t)get16(save,0x131412);
     for (i=0;i<8;++i) e->spells[i]=(uint8_t)(get16(save,0x1313C0+(i&~1u)) >> (i%2*8));
     for (i=0;i<EVENTS_ARMOR_MAX;++i) { e->armor[i]=(int16_t)get16(save,0x1313C8+i*2); e->max_armor[i]=(int16_t)get16(save,0x1313D4+i*2); }
@@ -53,6 +59,7 @@ int events_save_import(events_state *e, const ui_save_state *save)
     e->text_switch1=(int32_t)save->textSwitch1; e->text_switch0=(int32_t)save->textSwitch0; e->text_event=(int32_t)save->textEvent;
     e->unk_1443FC=(int32_t)save->unk_1443FC; e->unk_144400=(int32_t)save->unk_144400;
     memcpy(e->speechLog,save->speechLog,sizeof(e->speechLog));
+    memcpy(e->coderStr,save->coderStr,sizeof(e->coderStr));snd_code(e->coderStr);
     return 0;
 }
 
@@ -70,6 +77,10 @@ int events_save_export(const events_state *e, ui_save_state *save)
     }
     put32(save,0x1313A4,(uint32_t)e->cash); put32(save,0x1313A8,(uint32_t)e->spell);
     put32(save,0x1313AC,(uint32_t)e->hh_weapon); put32(save,0x1313B0,(uint32_t)e->weapon);
+    put32(save,0x1313B4,(uint32_t)e->item_spell);put32(save,0x1313B8,e->weapon_slot);put32(save,0x1313BC,e->hh_dice);
+    save->PCBet=(uint32_t)e->PCBet;save->PCBetPick=(uint32_t)e->PCBetPick;
+    save->PCBetOdds=(uint32_t)e->PCBetOdds;save->JackPot=(uint32_t)e->JackPot;
+    save->autoDestruct=(uint32_t)e->autoDestruct;save->autoDTime=e->autoDTime-e->ticks;
     put16(save,0x131410,(uint16_t)e->energy); put16(save,0x131412,(uint16_t)e->max_energy);
     for (i=0;i<8;i+=2) put16(save,0x1313C0+i,(uint16_t)(e->spells[i] | (uint16_t)e->spells[i+1]<<8));
     for (i=0;i<EVENTS_ARMOR_MAX;++i) { put16(save,0x1313C8+i*2,(uint16_t)e->armor[i]); put16(save,0x1313D4+i*2,(uint16_t)e->max_armor[i]); }
@@ -86,5 +97,6 @@ int events_save_export(const events_state *e, ui_save_state *save)
     save->textSwitch1=(uint32_t)e->text_switch1; save->textSwitch0=(uint32_t)e->text_switch0; save->textEvent=(uint32_t)e->text_event;
     save->unk_1443FC=(uint32_t)e->unk_1443FC; save->unk_144400=(uint32_t)e->unk_144400;
     memcpy(save->speechLog,e->speechLog,sizeof(e->speechLog));
+    memcpy(save->coderStr,e->coderStr,sizeof(e->coderStr));
     return 0;
 }

@@ -62,10 +62,13 @@ typedef struct events_state {
     events_switch switches[EVENTS_SWITCH_MAX];
     events_definition definitions[256];
     unsigned definition_count;
-    unsigned event_count, switch_count;
+    unsigned event_count, switch_count, scene;
     uint32_t event_heads[64]; /* LoadEVENTS reads 256 bytes, 0x27381. */
     int16_t armor[EVENTS_ARMOR_MAX], max_armor[EVENTS_ARMOR_MAX];
     int32_t energy, max_energy, cash, weapon, hh_weapon, spell;
+    int32_t item_spell;
+    unsigned weapon_slot;
+    uint32_t hh_dice;
     int32_t PCBet, PCBetPick, PCBetOdds, JackPot, SlotWaitTime, SlotVisitTime;
     int16_t SAVEStatus, SAVELife, SAVELifeMax;
     int32_t unk_1443FC, unk_144400;
@@ -87,6 +90,16 @@ typedef struct events_state {
     int32_t video_list[9], video_frames[5], video_fxo[5];
     int32_t video_time[20], video_text[8], video_seq[70], video_flick[8];
     int32_t video_chain, ending_requested;
+    char coderStr[24];
+    int32_t coderEvent[3], coderSlot;
+    int32_t autoDestruct, autoLFlag, autoMSlot, autoMSound, pc_dead_man;
+    uint32_t autoDTime, autoDMsgTimer;
+    uint32_t DrakMangTime;
+    int32_t unk_1444E8, unk_1444EC, unk_144B58;
+    uint32_t unk_144B5C;
+    int32_t waterNdx[12], waterFlag, miscFlag, candleflicker;
+    uint32_t waterTimer, miscTimer;
+    uint16_t prop_base_texture[2048];
     int tables_loaded;
     int32_t tank_flag, vehicle_person, vehicle_type, previous_mode;
     unsigned foot_object, foot_person;
@@ -97,6 +110,9 @@ typedef struct events_state {
 int events_init(events_state *e, world *w);
 int events_load_tables(events_state *e, const char *asset_dir);
 int events_step(events_state *e, sim_state *s, struct ai_state *a, world *w);
+void events_scene_cosmetics(events_state *e, const world *w);
+int events_cosmetics(events_state *e, sim_state *s, struct ai_state *a, world *w);
+int events_countdown(events_state *e, sim_state *s, struct ai_state *a, world *w);
 int events_switch_search(events_state *e, sim_state *s, struct ai_state *a, world *w);
 int events_key_search(events_state *e, sim_state *s, world *w, unsigned key);
 int events_toggle_switch(events_state *e, world *w, unsigned index);

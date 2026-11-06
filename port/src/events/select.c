@@ -93,8 +93,12 @@ int events_process_selector(events_state *e, sim_state *s, world *w)
         s->pc_mode = e->previous_mode;
         if (e->selector_kind == 2) { e->spell = (int32_t)selected; s->pc_mode = 5; }
         else if (e->selector_kind == 1) {
-            if (e->items[selected].kind == 5) { e->hh_weapon = e->items[selected].subtype; s->pc_mode = 2; }
-            else { e->weapon = e->items[selected].subtype; s->pc_mode = 1; }
+            if (e->items[selected].kind == 5) {
+                e->hh_weapon=e->items[selected].subtype;e->hh_dice=(uint32_t)e->items[selected].unk_0024;s->pc_mode=2;
+            } else {
+                e->weapon=e->items[selected].subtype;e->item_spell=e->items[selected].variant;
+                e->weapon_slot=selected;s->pc_mode=1;
+            }
         } else if (events_use_item(e, s, w, selected)) return -1;
         e->selector_kind = 0;
     }

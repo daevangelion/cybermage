@@ -25,6 +25,11 @@ int events_load_tables(events_state *e, const char *asset_dir)
         cm_exe_table(&exe,0x927CC,e->video_seq,70);
     platform_file_release(&file);
     if(result) return -1;
+    if(e->scene==2 || e->scene==9) {
+        static const int32_t list[2][7]={{2,7,3,1,5,0,0},{4,6,3,1,2,5,0}};
+        unsigned i;
+        for(i=0;i<7;++i) e->video_list[i]=list[e->scene==9][i];
+    }
     e->tables_loaded=1;
     return 0;
 }
