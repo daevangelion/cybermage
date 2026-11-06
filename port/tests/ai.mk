@@ -2,7 +2,7 @@ CC ?= cc
 B ?= build/AI
 CPPFLAGS += -Iinclude $(shell pkg-config --cflags sdl2)
 CFLAGS += -std=c99 -pedantic -Wall -Wextra -Werror -O2
-SOURCES := $(filter-out src/main.c src/ai/pc_fire.c,$(wildcard src/*.c src/*/*.c))
+SOURCES := $(filter-out src/main.c,$(wildcard src/*.c src/*/*.c))
 OBJECTS := $(patsubst src/%.c,$(B)/%.o,$(SOURCES))
 LDLIBS += $(shell pkg-config --libs sdl2) -lm
 

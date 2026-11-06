@@ -2,6 +2,7 @@
 #define CM_AI_H
 
 #include "sim.h"
+#include "exe.h"
 #include "ui.h"
 
 #define AI_MONSTER_MAX 109
@@ -86,8 +87,35 @@ typedef struct {
     uint32_t reset_auto_aim_time;
     int32_t weapon_aim_step, tank_aim_step; /* Xox+144A48 / +144A50 */
     int32_t tank_udoffset, tank_ud, tank_fall, tank_falloffset;
+    int32_t grenade_aim_center; /* CM_HI.EXE0x93CB4 = CenterAimY[10]. */
     unsigned hand_type; /* Xox+144A40, CenterAim table index */
 } ai_pc_aim;
+
+typedef struct {
+    int32_t center_aim_x[16], center_aim_y[16];
+    int32_t hand_bound[16][8], trajectory[16][2][8], air_car_trajectory[8];
+    int32_t ammo_type[10], spell_power[16], glow_set[16];
+    int32_t swing_damage[21], swing_mode[9][9], mat_idx[9][9];
+    int16_t swing_frame[9][21];
+    uint8_t pos_mat[6][8][8];
+    int16_t auto_s_pos[11][4], auto_s_init_mode[9][3], auto_s_init_pos[11];
+} ai_pc_rules;
+
+typedef struct {
+    int32_t fire, cooldown, latch; /* Xox+144AB0/144AB4/144AB8 */
+    int32_t hand_x, hand_y; /* +144AA8/+144AAC */
+    int32_t sword_aim_step, sword_frame; /* +144A44/+144A4C */
+    int32_t muzzle_frame, muzzle_mode, muzzle_count; /* +144A5C/60/64 */
+    int32_t underwater, shot_count, loop_sound; /* +144A24/2C/28 */
+    int32_t glow_set, glow_frame; /* +1444F8/+1444F4 */
+    int32_t magic_link_ticks; /* +144AE4 */
+    int32_t key_hand_x, key_hand_y;
+    int32_t auto_s_flag, auto_swinging, auto_s_reset, reset_pos, auto_s_mode;
+    int32_t auto_update_flag;
+    uint32_t auto_s_time, spell_timer, tank_timer;
+    int32_t last_mode, last_weapon;
+    unsigned kb_fire, kb_fire_bit;
+} ai_pc_state;
 
 typedef struct ai_state {
     struct events_state *events;
@@ -119,10 +147,20 @@ typedef struct ai_state {
     int32_t h2h_distance;
     int16_t h2h_angle;
     ai_pc_aim pc_aim;
+    ai_pc_state pc;
+    ai_pc_rules pc_rules;
 } ai_state;
 
 int ai_init(ai_state *a, world *w);
+int ai_init_pc(struct events_state *e, sim_state *s, world_rng *rng,
+                const cm_exe *exe, unsigned start_scene, uint32_t timer_ticks);
+void ai_save_pc_info(struct events_state *e, const world *w);
+void ai_restore_pc_info(const struct events_state *e, world *w);
 int ai_load_tables(ai_state *a, const char *asset_dir);
+int ai_pc_load_tables(ai_state *a, const cm_exe *exe);
+int ai_reset_aim(ai_state *a, const sim_state *s);
+int ai_pc_input(ai_state *a, sim_state *s, world *w);
+int ai_pc_hand2hand(ai_state *a, sim_state *s, world *w);
 int ai_load_scene_definitions(ai_state *a, world *w);
 int ai_save_import(ai_state *a, world *w, const ui_save_state *save);
 void ai_save_export(const ai_state *a, ui_save_state *save);

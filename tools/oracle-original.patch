@@ -130,12 +130,12 @@ index cfdf063..d8fbaf4 100644
          if self.mode == 3 {
 diff --git a/crates/game/src/frame_trace.rs b/crates/game/src/frame_trace.rs
 new file mode 100644
-index 0000000..7aeaf0b
+index 0000000..460a5c0
 --- /dev/null
 +++ b/crates/game/src/frame_trace.rs
-@@ -0,0 +1,169 @@
+@@ -0,0 +1,188 @@
 +use std::io::{BufWriter, Write};
-+use x86::{Cpu, EAX};
++use x86::{Cpu, EAX, ESP};
 +use crate::le::rt;
 +
 +const FRAME_ENTRY: u32 = 0x01B9DC;
@@ -157,6 +157,7 @@ index 0000000..7aeaf0b
 +    pending: Option<Pending>, frame: u32, this: u32,
 +    actors: Option<BufWriter<std::fs::File>>,
 +    seed: BufWriter<std::fs::File>,
++    rng: Option<BufWriter<std::fs::File>>, rng_calls: u64,
 +}
 +
 +impl FrameTrace {
@@ -193,7 +194,12 @@ index 0000000..7aeaf0b
 +            writeln!(out,"frame,ticks,rng0,rng1,rng2,person,object,x,y,z,heading,state,status,hp,target,animation,cursor,active").expect("actor header");
 +            out
 +        });
-+        Some(Self { file, ranges, pending: None, frame: 0, this: 0, actors, seed })
++        let rng = std::env::var_os("CM_RNG_TRACE").map(|path| {
++            let mut out = BufWriter::new(std::fs::File::create(path).expect("create RNG trace"));
++            writeln!(out,"sequence,frame,operation,caller,bound,rng0,rng1,rng2").expect("RNG header");
++            out
++        });
++        Some(Self { file, ranges, pending: None, frame: 0, this: 0, actors, seed, rng, rng_calls: 0 })
 +    }
 +
 +    fn hex(file: &mut BufWriter<std::fs::File>, bytes: &[u8]) {
@@ -215,6 +221,16 @@ index 0000000..7aeaf0b
 +
 +    pub fn observe(&mut self, c: &Cpu, time: f64) {
 +        match c.eip {
++            p if p == rt(0x6731C) || p == rt(0x68AD0) => {
++                if let Some(out) = &mut self.rng {
++                    writeln!(out,"{},{},{},{:x},{},{},{},{}",self.rng_calls,
++                        self.frame as i64 - 1,if p == rt(0x6731C) {"RND"} else {"RANDOM"},
++                        crate::le::link(c.rd32(c.r[ESP])),if p == rt(0x6731C) {c.r[EAX] as i32} else {0},
++                        c.rd16(rt(0x9747F)),c.rd16(rt(0x97481)),c.rd16(rt(0x97483)))
++                        .expect("write RNG call");
++                    self.rng_calls += 1;
++                }
++            }
 +            p if p == rt(0x68ABF) => {
 +                writeln!(self.seed,"{},{},{}",c.rd16(0x46C),c.icount,time).expect("write seed source");
 +                self.seed.flush().expect("flush seed source");
@@ -301,5 +317,8 @@ index 0000000..7aeaf0b
 +}
 +
 +impl Drop for FrameTrace {
-+    fn drop(&mut self) { self.flush_pending(); }
++    fn drop(&mut self) {
++        self.flush_pending();
++        if let Some(out) = &mut self.rng { out.flush().expect("flush RNG trace"); }
++    }
 +}

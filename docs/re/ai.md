@@ -88,3 +88,95 @@ RANDOM calls are missing. Their callers remain unidentified; no dummy calls or
 checkpoint state overrides were added. Both traces contain 151 active NPCs,
 37 changing position, and zero NPCs losing HP. This scenario exercises movement,
 not a demonstrated firefight.
+
+The call-site observer resolves those two missing calls: the original starts with
+`InitPC` return address 0x10698 twice, then LoadScene 0x11541. Both InitPC calls
+compute actual betting odds (`RND(4)+2`) and initialize player inventory/armor;
+they are the boot call 0x10FBA and new-game call 0x11058/0x110D7.
+`pc_init.c` ports that lifecycle and SavePCInfo/RestorePCInfo
+(0x1B8CC/0x1B8F8). LoadScene explicitly restores saved player HP/status at
+0x11FBC..0x11FE5 after randomizing all PERSONs. No artificial RNG advances are used.
+
+`--rng-trace` writes every original RND/RANDOM call's return address, frame,
+bound and pre-call words. Native `world_rnd`/`world_random` tag their C call site
+through an optional observer; the core neither allocates nor performs I/O.
+`tools/compare_rng.py` reports the first mismatching operation/bound/words and
+both caller identities, filtering only the original RND wrapper's nested RANDOM
+record (return 0x67329) to avoid double-counting.
+
+## Player projectiles and radial effects
+
+`pc_launch.c` implements CM_HI.EXE `PCLaunchMissile`0x2F1C4..0x3092C.
+Its two long arguments after type are **screen aim X/Y**, not damage/target.
+The final short enables spread; type4 instead reuses X as an attachment object
+and the short as reverse heading. Player allocation scans all12 slots; NPC
+LaunchMissile reserves0..3. Return1 means launched,0 means full,-1 is malformed
+state/data. Inventory costs, input cadence and weapon animation belong to
+Port's pc_fire.c, not this helper.
+
+MissileData and trajectory/aim constants come from the separately supplied EXE.
+No missile, radius or dice payload is compiled into this implementation.
+Gun muzzle forward offset0x2800 and perpendicular hand offset are applied
+separately, using original fixed-point trig products. Vertical muzzle position
+includes crouch and `(camera_pitch/2)*64` with signed truncation before multiply.
+Manual/auto grenade and mine ballistics, attachment sparks, tank shots, normal
+projectile texture phases and auto-aim feedback follow their separate original
+branches. Original invisible launch types are2,18,40,43,49; UpdateMissile makes
+them active before their first movement.
+
+`missile.c` implements UpdateMissile0x30B38..0x33ECE, all52 jump-table entries
+at0x30A68: fly/impact states, animated explosions, mine arming/proximity,
+attached sparks/DOT, freeze/vortex loops, firestorm/ring children, homing children
+and spell acquisition. Types36,37,48 have the original empty dispatch entries,
+not invented projectile behavior. The original MakeMissileList runs first;
+each active object is removed from the map before its update and reinserted
+only on the original surviving paths. Later allocated slots can update in the
+same frame. Explosion radial damage happens once on active1, then active2 only
+animates. Some lifetimes are per rendered frame; others use bp_limit_flag.
+The10-tick MissileFadeTime pulse controls periodic damage, not animation.
+
+Sim owns CollFire0x40050: swept position, target, vertical/heading attachment
+changes and0/-1/positive-object result; SIM_COLL_ERROR is separate. CollFire
+does not deal damage. For example a type2 shot hits, becomes state3, then on
+its following update deals RND(6)+5 to its attached NPC target and becomes4.
+Player direct hit damage and radial flashes are processed by UpdateMissile.
+
+`radial.c` implements FreezeMonster0x2B3C0, RadialDamage0x2B484,
+PCZoneRadius0x2D478 and PCRadialDamage0x2D838. Radial arguments are source
+object, radius-zone index, shooter object, ZoneDice row, resistance index and
+blast force. The player variant takes source, zone, dice row, double-hit flag,
+armor percentage and erosion percentage, returning raw rolled damage.
+
+The neighborhood is centre, one horizontal neighbor, one vertical neighbor,
+then diagonal (at most4 cells, not a circular nearest-target search). Aperture
+exceptions apply to the first boundary tests; diagonals use the next cell's
+wall mask directly. The horizontal visit changes the wall-mask cursor used
+for the subsequent vertical test: this original ordering quirk is preserved.
+Objects can occur in multiple cell chains and are **not deduplicated**, preserving
+damage and RNG ordering. Three strict XY/Z boxes determine dice tier; monster
+resistance scales by `(100-resistance)/100` before damage/impulse/freeze.
+Player crouch lowers a nonzero tier by one; vehicle mode7's doubled tier3 roll
+is decided before that reduction.
+
+Important original out-of-table read: nominal zoneRadius0x937F0 has5 rows,
+but type11's live fire calls RadialDamage0x321A0 with its remaining lifetime
+as the zone index. MissileData type11 speed8192 initializes that lifetime to
+`0x40000/8192+1 = 33`. The loader therefore reads34 numeric rows at0x937F0,
+including the adjacent original WeaponTrajectory bytes, and the consumer permits
+indices0..33. This reproduces the executable's actual reads instead of clamping
+to5, fabricating a radius, or making normal fire fail.
+
+Focused regression target for the integration owner:
+
+```
+tools/run_capped.sh make -C port -f tests/projectiles.mk B=build/projectiles check-projectiles
+```
+
+It uses the real supplied EXE tables with explicit synthetic world inputs to
+check radial dice/resistance/freeze, player muzzle/slot exhaustion, and single
+impact damage/state3-to4. It does not establish full-firefight parity. Builds
+and test execution for this chunk are left to the consolidated integration gate;
+the earlier actor trace above has no damaged NPCs and must not be presented as
+projectile verification. For frame-trace firefights include Xox135ECC:576
+(12 missile records), object position/shape arrays and PERSON HP/armor/RNG,
+with genuine fire press/hold/release input and the unchanged original assets.

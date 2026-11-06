@@ -117,6 +117,8 @@ def main():
                         help="dump initialized Xox and PERSON records at first gameplay frame")
     parser.add_argument("--actor-trace", action="store_true",
                         help="record original object/PERSON state and RNG words each frame")
+    parser.add_argument("--rng-trace", action="store_true",
+                        help="record every original RND/RANDOM call site and pre-call RNG words")
     args = parser.parse_args()
     total = 0
     for item in args.trace_range:
@@ -130,8 +132,8 @@ def main():
         total += length
     if len(args.trace_range) > 8 or total > 65536:
         raise ValueError("frame traces allow eight ranges / 65536 bytes total")
-    if (args.trace_range or args.snapshot or args.actor_trace) and not args.frame_trace:
-        raise ValueError("--trace-range/--snapshot/--actor-trace require --frame-trace")
+    if (args.trace_range or args.snapshot or args.actor_trace or args.rng_trace) and not args.frame_trace:
+        raise ValueError("--trace-range/--snapshot/--actor-trace/--rng-trace require --frame-trace")
     path = Path(args.scenario)
     if not path.is_file():
         path = ROOT / "tools/scenarios" / f"{args.scenario}.txt"
@@ -154,6 +156,8 @@ def main():
                 env["CM_FRAME_SNAPSHOT"] = str(destination / "scene-start")
             if args.actor_trace:
                 env["CM_ACTOR_TRACE"] = str(destination / "actors.csv")
+            if args.rng_trace:
+                env["CM_RNG_TRACE"] = str(destination / "rng.csv")
         # Each checkpoint replays from boot: no saved user configuration or stale saves.
         with tempfile.TemporaryDirectory(prefix="oracle-", dir=destination) as temp:
             root = Path(temp)
@@ -179,6 +183,7 @@ def main():
                 "trace_ranges": args.trace_range,
                 "actor_trace": "actors.csv" if args.actor_trace else None,
                 "seed_trace": "seed.csv" if args.frame_trace else None,
+                "rng_trace": "rng.csv" if args.rng_trace else None,
                 "exe_sha256": hashlib.sha256((assets / "CM_HI.EXE").read_bytes()).hexdigest(),
                 "binary_sha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
                 "patch_sha256": hashlib.sha256((ROOT / "tools/oracle-original.patch").read_bytes()).hexdigest()}

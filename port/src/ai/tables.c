@@ -39,6 +39,7 @@ int ai_load_tables(ai_state *a, const char *asset_dir)
     }
     for (i = 0; i < 34; ++i)
         if (cm_exe_table(&exe, 0x937F0 + i * 12, a->zone_radius[i], 3)) goto out;
+    if (ai_pc_load_tables(a, &exe)) goto out;
     a->tables_loaded = 1;
     result = 0;
 out:
