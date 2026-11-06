@@ -97,10 +97,13 @@ void sim_loop_checks(void)
     assert(actors.pc.loop_sound == -1);
     {
         cm_input in = {0};
-        assert(!death_step(&in, 69, 0) && death_phase == 1);
-        assert(!death_step(&in, 70, 0) && death_phase >= 2);
+        ui_view view;
+        assert(!ui_game_view(&ui, simulation.pc_mode, simulation.vehicle_type, &view));
+        assert(!render_set_view(view.x, view.y, view.width, view.height));
+        assert(!death_step(&in, 69, 0, view) && death_phase == 1);
+        assert(!death_step(&in, 70, 0, view) && death_phase >= 2);
         in.pressed[1] = 1;
-        assert(!death_step(&in, 71, 0));
+        assert(!death_step(&in, 71, 0, view));
         assert(death_phase == 3 && ui.screen == UI_DEATH);
         ui.restart_game = 10;
         ui.slot = 0;
@@ -184,6 +187,14 @@ int main(int argc, char **args)
         assert(cybermage_main(3, (char **)bad_slot) == 2);
         assert(cybermage_main(5, (char **)missing_user) == 2);
         assert(cybermage_main(3, (char **)snapshot_without_trace) == 2);
+    }
+    {
+        const char *bad_renderer[] = {"cybermage", "--renderer", "invalid"};
+        gl_enabled = gl_recording = gl_overlay_valid = gl_death_prepared = 1;
+        gl_width = 640; gl_height = 480;
+        assert(cybermage_main(3, (char **)bad_renderer) == 2);
+        assert(!gl_enabled && !gl_recording && !gl_overlay_valid && !gl_death_prepared);
+        assert(!gl_width && !gl_height);
     }
     return 0;
 }

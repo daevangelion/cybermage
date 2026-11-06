@@ -355,3 +355,8 @@ The environmental-fire product also now uses explicit uint32 wrap for raw
 EventAction82 damage payloads, matching original IMUL/LEA01CE0C/01CE1A.
 The INTMAX×2 fixture failed under UBSan before the correction and passed after;
 it also checks the original minimum hit flash2 and signed deadline comparison.
+
+The lifecycle fixture uses the current explicit-view death API: it derives the
+view with `ui_game_view`, installs it with `render_set_view`, and passes it to
+all three death steps. The independently executed fixture passes death/menu/save
+checks and its second Training boot, including the invalid-CLI negatives.
