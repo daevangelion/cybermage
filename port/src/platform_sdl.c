@@ -1,5 +1,6 @@
 #include "platform.h"
 #include "audio.h"
+#include "controls.h"
 
 #include <SDL.h>
 #include <ctype.h>
@@ -31,6 +32,49 @@ static uint8_t extended_held[CM_KEY_COUNT];
 static SDL_FingerID primary_finger;
 static int primary_down;
 static char *user_dir;
+static SDL_GameController *controller;
+static SDL_JoystickID controller_id = -1;
+static int modern_controls, gameplay_controls, input_focus = 1;
+static int touch_visible;
+
+#define TOUCH_FINGERS_MAX 10
+typedef struct {
+    SDL_FingerID id;
+    int active, role, x, y, origin_x, origin_y;
+    unsigned action;
+} touch_finger;
+static touch_finger fingers[TOUCH_FINGERS_MAX];
+
+static void controller_open(int index)
+{
+    if (controller || !SDL_IsGameController(index)) return;
+    controller = SDL_GameControllerOpen(index);
+    if (controller)
+        controller_id = SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(controller));
+}
+
+int platform_controls(int modern, int gameplay)
+{
+    int relative = modern && gameplay && input_focus;
+    if (modern && !modern_controls) {
+        int i;
+        if (SDL_InitSubSystem(SDL_INIT_GAMECONTROLLER | SDL_INIT_EVENTS))
+            return cm_fail("SDL controller", 0, SDL_GetError());
+        for (i = 0; i < SDL_NumJoysticks(); ++i) controller_open(i);
+    }
+    modern_controls = modern;
+    gameplay_controls = modern && gameplay;
+#ifdef __ANDROID__
+    if (modern) touch_visible = 1;
+#endif
+    if (!is_headless && SDL_GetRelativeMouseMode() != (relative ? SDL_TRUE : SDL_FALSE)) {
+#ifndef __ANDROID__
+        if (SDL_SetRelativeMouseMode(relative ? SDL_TRUE : SDL_FALSE))
+            return cm_fail("SDL relative mouse", 0, SDL_GetError());
+#endif
+    }
+    return 0;
+}
 
 int cm_fail(const char *file, uint32_t offset, const char *message)
 {
@@ -167,6 +211,12 @@ void platform_audio_unlock(void)
 
 void platform_shutdown(void)
 {
+    if (controller) SDL_GameControllerClose(controller);
+    controller = NULL;
+    controller_id = -1;
+    modern_controls = gameplay_controls = touch_visible = 0;
+    input_focus = 1;
+    memset(fingers, 0, sizeof fingers);
     if (device) SDL_CloseAudioDevice(device);
     if (surface) SDL_FreeSurface(surface);
     if (converted) SDL_FreeSurface(converted);
@@ -221,6 +271,106 @@ static void mouse_button(cm_input *input, unsigned bit, int down)
     }
 }
 
+static void touch_layout(int w, int h, SDL_Rect *stick, SDL_Rect buttons[6])
+{
+    SDL_Rect view = viewport(w, h);
+    int unit = h / 480 + 1;
+    int side = h * 50 / 480, diameter = h * 110 / 480;
+    int right = w - view.x;
+    unsigned i;
+    if (side < 24) side = 24;
+    if (diameter < 48) diameter = 48;
+    stick->w = stick->h = diameter;
+    stick->x = view.x >= diameter + unit * 8 ?
+        (view.x - diameter) / 2 : view.x + unit * 8;
+    stick->y = h - diameter - unit * 16;
+    if (view.x >= 2 * side + unit * 12) right = w - unit * 6;
+    else right -= unit * 6;
+    for (i = 0; i < 6; ++i) {
+        buttons[i].w = buttons[i].h = side;
+        buttons[i].x = right - (2 - (int)(i % 2)) * (side + unit * 4);
+        buttons[i].y = h - (3 - (int)(i / 2)) * (side + unit * 6);
+    }
+}
+
+static int in_rect(int x, int y, const SDL_Rect *r)
+{
+    return x >= r->x && y >= r->y && x < r->x + r->w && y < r->y + r->h;
+}
+
+static int modern_touch(cm_input *input, const SDL_TouchFingerEvent *event,
+                         int w, int h)
+{
+    static const unsigned actions[6] = {
+        CM_CONTROL_FIRE, CM_CONTROL_JUMP, CM_CONTROL_USE,
+        CM_CONTROL_NEXT, CM_CONTROL_MENU, CM_CONTROL_AIM
+    };
+    SDL_Rect stick, buttons[6];
+    touch_finger *finger = NULL;
+    unsigned i;
+    int x = (int)(event->x * w), y = (int)(event->y * h);
+    for (i = 0; i < TOUCH_FINGERS_MAX; ++i)
+        if (fingers[i].active && fingers[i].id == event->fingerId) finger = &fingers[i];
+    if (event->type == SDL_FINGERDOWN && !finger) {
+        for (i = 0; i < TOUCH_FINGERS_MAX; ++i)
+            if (!fingers[i].active) { finger = &fingers[i]; break; }
+        if (!finger) return cm_fail("touch", 0, "more than ten active fingers");
+        memset(finger, 0, sizeof *finger);
+        finger->active = 1;
+        finger->id = event->fingerId;
+        finger->role = gameplay_controls ? 0 : 1;
+        finger->origin_x = x;
+        finger->origin_y = y;
+        if (gameplay_controls) {
+            touch_layout(w, h, &stick, buttons);
+            if (in_rect(x, y, &stick)) finger->role = 2;
+            else {
+                for (i = 0; i < 6; ++i) if (in_rect(x, y, &buttons[i])) {
+                    finger->role = 4;
+                    finger->action = actions[i];
+                    input->touch_pressed |= 1u << finger->action;
+                    break;
+                }
+                if (!finger->role && x >= w / 2) finger->role = 3;
+            }
+        }
+    }
+    if (!finger) return 1;
+    finger->x = x;
+    finger->y = y;
+    if (finger->role == 3 && event->type == SDL_FINGERMOTION && gameplay_controls) {
+        input->touch_look_dx += (int)(event->dx * 640);
+        input->touch_look_dy += (int)(event->dy * 480);
+    }
+    i = (unsigned)finger->role;
+    if (event->type == SDL_FINGERUP) finger->active = 0;
+    touch_visible = 1;
+    return i == 1 ? 0 : 1;
+}
+
+static void touch_sample(cm_input *input)
+{
+    unsigned i;
+    int w, h;
+    SDL_Rect stick, buttons[6];
+    input->touch_move_x = input->touch_move_y = 0;
+    input->touch_buttons = 0;
+    if (!window) return;
+    SDL_GetWindowSize(window, &w, &h);
+    touch_layout(w, h, &stick, buttons);
+    for (i = 0; i < TOUCH_FINGERS_MAX; ++i) {
+        const touch_finger *f = &fingers[i];
+        if (!f->active) continue;
+        if (f->role == 4) input->touch_buttons |= 1u << f->action;
+        else if (f->role == 2) {
+            int64_t x = (int64_t)(f->x - f->origin_x) * 65534 / stick.w;
+            int64_t y = (int64_t)(f->y - f->origin_y) * 65534 / stick.h;
+            input->touch_move_x = (int16_t)(x < -32767 ? -32767 : x > 32767 ? 32767 : x);
+            input->touch_move_y = (int16_t)(y < -32767 ? -32767 : y > 32767 ? 32767 : y);
+        }
+    }
+}
+
 static int touch_event(cm_input *input, const SDL_TouchFingerEvent *finger)
 {
     cm_touch *touch;
@@ -231,6 +381,11 @@ static int touch_event(cm_input *input, const SDL_TouchFingerEvent *finger)
     SDL_GetWindowSize(window, &w, &h);
     rect = viewport(w, h);
     if (!rect.w || !rect.h) return 0;
+    if (modern_controls) {
+        int result = modern_touch(input, finger, w, h);
+        if (result < 0) return -1;
+        if (result) return 0;
+    }
     touch = &input->touches[input->touch_count++];
     touch->id = finger->fingerId;
     touch->inside = (uint8_t)pointer_point((int)(finger->x * w),
@@ -434,11 +589,16 @@ int platform_poll(cm_input *input, unsigned frame)
     input->touch_count = 0;
     input->mouse_pressed = input->mouse_released = 0;
     input->mouse_dx = input->mouse_dy = 0;
-    if (!is_headless) while (SDL_PollEvent(&e)) {
+    input->mouse_wheel = 0;
+    input->touch_look_dx = input->touch_look_dy = 0;
+    input->focus_lost = input->pad_disconnected = 0;
+    input->pad_pressed = input->pad_released = input->touch_pressed = 0;
+    if (!is_headless || modern_controls) while (SDL_PollEvent(&e)) {
         switch (e.type) {
         case SDL_QUIT: input->quit = 1; break;
         case SDL_KEYDOWN: case SDL_KEYUP: {
             unsigned code = dos_scan(e.key.keysym.scancode);
+            if (modern_controls && !input_focus && e.type == SDL_KEYDOWN) break;
             if (code && extended_key(e.key.keysym.scancode)) code |= 0xe000;
             if (e.type == SDL_KEYDOWN && e.key.repeat &&
                 input->raw_count + (code > 255 ? 2u : 1u) > CM_RAW_SCANS_MAX - 2)
@@ -447,20 +607,58 @@ int platform_poll(cm_input *input, unsigned frame)
             break;
         }
         case SDL_MOUSEMOTION: {
-            pointer_point(e.motion.x, e.motion.y, &input->mouse_x, &input->mouse_y);
+            if (modern_controls && !input_focus) break;
+            if (window) pointer_point(e.motion.x, e.motion.y, &input->mouse_x, &input->mouse_y);
             input->mouse_dx += e.motion.xrel;
             input->mouse_dy += e.motion.yrel;
             break;
         }
         case SDL_MOUSEBUTTONDOWN: case SDL_MOUSEBUTTONUP: {
-            int inside = pointer_point(e.button.x, e.button.y,
-                                       &input->mouse_x, &input->mouse_y);
+            int inside = !window || pointer_point(e.button.x, e.button.y,
+                                                  &input->mouse_x, &input->mouse_y);
+            if (modern_controls && !input_focus && e.type == SDL_MOUSEBUTTONDOWN) break;
             if (e.button.button && e.button.button <= 32 &&
                 (inside || e.type == SDL_MOUSEBUTTONUP))
                 mouse_button(input, 1u << (e.button.button - 1),
                              e.type == SDL_MOUSEBUTTONDOWN);
             break;
         }
+        case SDL_MOUSEWHEEL:
+            if (modern_controls) input->mouse_wheel += e.wheel.direction == SDL_MOUSEWHEEL_FLIPPED ?
+                -e.wheel.y : e.wheel.y;
+            break;
+        case SDL_CONTROLLERDEVICEADDED:
+            if (modern_controls) controller_open(e.cdevice.which);
+            break;
+        case SDL_CONTROLLERDEVICEREMOVED:
+            if (modern_controls && e.cdevice.which == controller_id) {
+                SDL_GameControllerClose(controller);
+                controller = NULL;
+                controller_id = -1;
+                input->pad_disconnected = 1;
+                input->pad_released |= input->pad_buttons;
+                input->pad_buttons = 0;
+                input->pad_pressed = 0;
+                memset(input->pad_axes, 0, sizeof input->pad_axes);
+            }
+            break;
+        case SDL_CONTROLLERAXISMOTION:
+            if (modern_controls && input_focus && e.caxis.which == controller_id &&
+                e.caxis.axis < 6) input->pad_axes[e.caxis.axis] = e.caxis.value;
+            break;
+        case SDL_CONTROLLERBUTTONDOWN: case SDL_CONTROLLERBUTTONUP:
+            if (modern_controls && input_focus && e.cbutton.which == controller_id &&
+                e.cbutton.button < 21) {
+                uint32_t bit = 1u << e.cbutton.button;
+                if (e.type == SDL_CONTROLLERBUTTONDOWN) {
+                    if (!(input->pad_buttons & bit)) input->pad_pressed |= bit;
+                    input->pad_buttons |= bit;
+                } else {
+                    if (input->pad_buttons & bit) input->pad_released |= bit;
+                    input->pad_buttons &= ~bit;
+                }
+            }
+            break;
         case SDL_FINGERDOWN: case SDL_FINGERMOTION: case SDL_FINGERUP:
             if (touch_event(input, &e.tfinger)) return -1;
             break;
@@ -474,11 +672,23 @@ int platform_poll(cm_input *input, unsigned frame)
                 input->mouse_released |= input->mouse_buttons;
                 input->mouse_buttons = 0;
                 primary_down = 0;
+                if (modern_controls) {
+                    input->focus_lost = 1;
+                    input_focus = 0;
+                    input->pad_buttons = input->touch_buttons = 0;
+                    memset(input->pad_axes, 0, sizeof input->pad_axes);
+                    memset(fingers, 0, sizeof fingers);
+                    if (platform_controls(1, gameplay_controls)) return -1;
+                }
+            } else if (e.window.event == SDL_WINDOWEVENT_FOCUS_GAINED && modern_controls) {
+                input_focus = 1;
+                if (platform_controls(1, gameplay_controls)) return -1;
             }
             break;
         default: break;
         }
     }
+    if (modern_controls) touch_sample(input);
     while (event_next < event_count && events[event_next].frame <= frame) {
         key_event *k = &events[event_next++];
         if (k->down < 0) {
@@ -486,6 +696,46 @@ int platform_poll(cm_input *input, unsigned frame)
         } else if (emit_key(input, k->scan, k->down)) return -1;
     }
     return 0;
+}
+
+static int touch_overlay(SDL_Surface *dest)
+{
+    static const uint8_t letters[6][7] = {
+        {31,16,16,30,16,16,16}, {7,2,2,2,18,18,12},
+        {17,17,17,17,17,17,14}, {17,17,17,21,21,21,10},
+        {17,27,21,21,17,17,17}, {14,17,17,31,17,17,17}
+    };
+    SDL_Rect stick, buttons[6], r;
+    Uint32 color;
+    unsigned i, x, y;
+    int unit;
+    if (!modern_controls || !gameplay_controls || !touch_visible) return 0;
+    touch_layout(dest->w, dest->h, &stick, buttons);
+    unit = dest->h / 480 + 1;
+    color = SDL_MapRGB(dest->format, 160, 220, 220);
+    for (i = 0; i < 7; ++i) {
+        SDL_Rect box = i ? buttons[i - 1] : stick;
+        r = box; r.h = unit;
+        if (SDL_FillRect(dest, &r, color)) return -1;
+        r.y = box.y + box.h - unit;
+        if (SDL_FillRect(dest, &r, color)) return -1;
+        r = box; r.w = unit;
+        if (SDL_FillRect(dest, &r, color)) return -1;
+        r.x = box.x + box.w - unit;
+        if (SDL_FillRect(dest, &r, color)) return -1;
+        if (!i) continue;
+        for (y = 0; y < 7; ++y) for (x = 0; x < 5; ++x)
+            if (letters[i - 1][y] & (16u >> x)) {
+                r.x = box.x + box.w / 2 + ((int)x - 2) * unit;
+                r.y = box.y + box.h / 2 + ((int)y - 3) * unit;
+                r.w = r.h = unit;
+                if (SDL_FillRect(dest, &r, color)) return -1;
+            }
+    }
+    r.x = stick.x + stick.w / 2 - unit * 3;
+    r.y = stick.y + stick.h / 2 - unit * 3;
+    r.w = r.h = unit * 6;
+    return SDL_FillRect(dest, &r, color);
 }
 
 int platform_present(const uint8_t *pixels, const uint8_t *palette)
@@ -518,6 +768,7 @@ int platform_present(const uint8_t *pixels, const uint8_t *palette)
     if (SDL_BlitSurface(surface, NULL, converted, NULL) ||
         SDL_FillRect(dest, NULL, SDL_MapRGB(dest->format, 0, 0, 0)) ||
         SDL_BlitScaled(converted, NULL, dest, &rect) ||
+        touch_overlay(dest) ||
         SDL_UpdateWindowSurface(window))
         return cm_fail("SDL", 0, SDL_GetError());
     return 0;

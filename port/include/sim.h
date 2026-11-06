@@ -17,6 +17,7 @@ typedef struct {
     struct ai_state *ai;
     struct events_state *events;
     int32_t pc_mode, previous_pc_mode;
+    int modern_aim;
     int32_t vehicle_type, flight_mode, flight_active, flight_unk_144B48;
     int32_t unk_131418; /* Flight height above the local supporting floor. */
     int32_t flight_action, key_hand_y, fly_throttle, fly_curr_throttle;
@@ -53,6 +54,7 @@ void sim_init(sim_state *s, uint32_t timer_ticks);
 int sim_start_scene(sim_state *s, world *w);
 void sim_scan(sim_state *s, uint8_t scan);
 void sim_input(sim_state *s, const cm_input *input);
+int sim_modern_input(sim_state *s, world *w, const cm_input *input);
 int32_t sim_clock(sim_state *s, uint32_t timer_ticks);
 uint16_t sim_turn(uint16_t current, uint16_t target, int32_t step);
 int sim_frame(sim_state *s, world *w, const cm_input *input, uint32_t timer_ticks);
@@ -75,5 +77,10 @@ int sim_coll_fire_flat(world *w, unsigned object, int32_t old_z);
 int sim_coll_fire(sim_state *s, world *w, unsigned missile);
 void sim_save_export(const sim_state *s, uint32_t values[29]);
 int sim_save_import(sim_state *s, const uint32_t values[29]);
+#define SIM_AUTO_PREFIX 207798u
+int sim_auto_pack(const uint8_t *save, uint32_t size, uint8_t *out,
+                    uint32_t capacity, uint32_t *written);
+int sim_auto_unpack(uint8_t *save, uint32_t size, const uint8_t *data,
+                      uint32_t length);
 
 #endif

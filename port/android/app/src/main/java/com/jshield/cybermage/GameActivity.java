@@ -25,6 +25,10 @@ public final class GameActivity extends SDLActivity {
 
     @Override
     protected String[] getArguments() {
-        return new String[] {"--data", new java.io.File(getExternalFilesDir(null), "data").getAbsolutePath()};
+        String controls = getIntent().getStringExtra("controls");
+        return new String[] {
+            "--data", new java.io.File(getExternalFilesDir(null), "data").getAbsolutePath(),
+            "--controls", controls == null ? "classic" : controls
+        };
     }
 }

@@ -58,8 +58,20 @@ The screen is centered at4:3, with black bars rather than stretching640×480.
 Tapping inside the game maps to a left mouse click in menu coordinates; the input
 struct also carries bounded per-frame touch events with IDs, phases, coordinates,
 pressure and an inside-viewport flag. Touches in the black bars do not click.
-No virtual stick, button overlay or gameplay touch mapping is implemented.
-Android Back maps to Escape. Hardware keyboard/mouse use the desktop action path.
+Classic controls remain the default. Opt into the modern action layer with:
+
+```
+adb shell am start -n com.jshield.cybermage/.GameActivity --es controls modern
+```
+
+Modern gameplay has a virtual left stick, a right-side look swipe area and six
+outlined buttons: **F** fire, **J** jump, **U** use, **W** weapon cycle, **M** menu,
+**A** hold hand aim. The overlay uses the black side bars where they are wide
+enough and overlays the lower game corners otherwise. Fingers keep their
+original role until lifted, including across menu transitions. Menus retain
+tap-to-click. Focus loss releases all inputs. Android Back maps to Escape.
+Hardware keyboard/mouse and SDL GameController share the modern action layer.
+See `../../docs/re/controls.md` for bindings and configuration.
 
 ## Emulator
 

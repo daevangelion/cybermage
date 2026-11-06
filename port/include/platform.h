@@ -27,6 +27,21 @@ typedef struct {
     int mouse_dx, mouse_dy;
     unsigned mouse_buttons;
     unsigned mouse_pressed, mouse_released;
+    int mouse_wheel;
+    int16_t pad_axes[6]; /* SDL GameController left/right XY, LT, RT. */
+    uint32_t pad_buttons;
+    uint32_t pad_pressed, pad_released;
+    int focus_lost, pad_disconnected;
+    int16_t touch_move_x, touch_move_y;
+    int touch_look_dx, touch_look_dy;
+    uint32_t touch_buttons; /* CM_CONTROL_* bit positions. */
+    uint32_t touch_pressed;
+    int modern;
+    int32_t move_speed, look_yaw, look_pitch;
+    uint16_t move_angle;
+    uint8_t jump, aim;
+    int8_t fly, cycle;
+    uint8_t select_kind, select_slot;
     cm_touch touches[CM_TOUCH_MAX];
     unsigned touch_count;
     int quit;
@@ -47,6 +62,7 @@ int platform_directory(const char *path);
 void platform_shutdown(void);
 int platform_keys(const char *path);
 int platform_poll(cm_input *input, unsigned frame);
+int platform_controls(int modern, int gameplay);
 int platform_present(const uint8_t *pixels, const uint8_t *palette);
 int platform_dump(const char *directory, unsigned frame,
                   const uint8_t *pixels, const uint8_t *palette);
@@ -57,5 +73,10 @@ uint32_t platform_ticks(unsigned frame);
 void platform_audio_lock(void);
 void platform_audio_unlock(void);
 int platform_report(const char *message);
+int platform_gl_open(int headless,unsigned width,unsigned height,int *gles);
+void *platform_gl_proc(const char *name);
+void platform_gl_size(unsigned *width,unsigned *height);
+int platform_gl_swap(void);
+void platform_gl_close(void);
 
 #endif

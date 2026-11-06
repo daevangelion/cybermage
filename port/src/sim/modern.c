@@ -1,0 +1,70 @@
+#include "events.h"
+
+static int select_action(sim_state *s, world *w, const cm_input *in)
+{
+    events_state *e = s->events;
+    unsigned i, index = 0, kind;
+    if (!e || (!in->cycle && !in->select_slot)) return 0;
+    kind = e->selector_kind ? e->selector_kind : in->select_kind;
+    if (kind < 1 || kind > 3) kind = 1;
+    if (!e->selector_kind) {
+        e->previous_mode = s->modern_aim ? s->previous_pc_mode : s->pc_mode;
+        if (events_make_selector(e, kind)) return -1;
+        for (i = 0; i < e->selector_count; ++i) {
+            unsigned slot = (unsigned)e->selector_items[i];
+            if ((kind == 2 && (int32_t)slot == e->spell) ||
+                (kind == 1 && e->items[slot].subtype ==
+                    (e->previous_mode == 2 ? e->hh_weapon : e->weapon))) index = i;
+        }
+        e->selector_index = index;
+    }
+    if (!e->selector_count) { e->selector_kind = 0; return 0; }
+    if (in->select_slot) {
+        unsigned key = in->select_slot - 1;
+        if (key >= EVENTS_SELECTOR_MAX || e->selector_keys[key] < 0) return 0;
+        e->selector_index = (unsigned)e->selector_keys[key];
+    } else if (in->cycle > 0) e->selector_index = (e->selector_index + 1) % e->selector_count;
+    else e->selector_index = (e->selector_index + e->selector_count - 1) % e->selector_count;
+    if (kind == 3 && !in->select_slot) { s->pc_mode = 3; return 0; }
+    s->kb_scan_status[0x1c] = 2;
+    if (events_process_selector(e, s, w)) return -1;
+    return 0;
+}
+
+/* Enhanced transport only. Classic HandleKeyboardEvents remains unchanged. */
+int sim_modern_input(sim_state *s, world *w, const cm_input *in)
+{
+    int64_t pitch;
+    int selector;
+    world_object *o = &w->objects[w->player_object];
+    if (select_action(s, w, in)) return -1;
+    selector = s->events && s->events->selector_kind;
+    if (!in->aim && s->modern_aim) {
+        if (s->pc_mode == 3 && !selector) s->pc_mode = s->previous_pc_mode;
+        s->modern_aim = 0;
+    }
+    if (in->aim && !selector && !s->modern_aim &&
+        (s->pc_mode == 1 || s->pc_mode == 2 || s->pc_mode == 5)) {
+        s->previous_pc_mode = s->pc_mode;
+        s->pc_mode = 3;
+        s->modern_aim = 1;
+    }
+    s->movement_angle = in->move_angle;
+    s->movement_request = s->modern_aim || selector ? 0 : in->move_speed;
+    if (s->modern_aim || selector) s->unk_144ae8 = s->unk_144af8 = 0;
+    s->yaw_request = 0;
+    if (s->movement_request < 0) s->movement_request = 0;
+    if (s->movement_request > 768) s->movement_request = 768;
+    if (!selector) {
+        o->heading = (uint16_t)((uint32_t)o->heading + (uint32_t)in->look_yaw);
+        pitch = (int64_t)w->camera.pitch + in->look_pitch;
+        w->camera.pitch = pitch < -224 ? -224 : pitch > 224 ? 224 : (int32_t)pitch;
+    }
+    if (in->pressed[0x13]) w->camera.pitch = 0;
+    if (in->pressed[0x52])
+        s->unk_144b3c = s->unk_144b3c == -1 ||
+            s->unk_144b34 == (w->unk_5E7A8 ? -0x3000 : -0x4800) ? 1 : -1;
+    s->kb_scan_status[0x11] = in->fly > 0;
+    s->kb_scan_status[0x2d] = in->fly < 0;
+    return !selector && !s->modern_aim && in->jump;
+}
