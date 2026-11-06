@@ -19,9 +19,10 @@ $(B)/%.o: src/%.c
 
 check: $(B)/test_core
 	$(B)/test_core
-	../.venv/bin/python ../tools/test_rsc.py
+	$(abspath ../.venv/bin/python) ../tools/test_rsc.py
+	$(MAKE) -f tests/audio.mk B=$(B)/audio check
 
-$(B)/test_core: tests/test_core.c src/rsc.c src/gfx.c src/platform_sdl.c
+$(B)/test_core: tests/test_core.c $(filter-out src/main.c,$(SOURCES))
 	@mkdir -p $(@D)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 

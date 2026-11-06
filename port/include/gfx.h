@@ -1,0 +1,27 @@
+#ifndef CM_GFX_H
+#define CM_GFX_H
+
+#include "cm.h"
+
+typedef struct {
+    const uint8_t *data;
+    uint16_t height;
+    uint16_t stride;
+    uint16_t count;
+    int spacing;
+    const char *path;
+} cm_font;
+
+int gfx_palette(uint8_t rgb[768], const uint8_t *data, uint32_t size,
+                const char *path);
+int gfx_font(cm_font *f, const uint8_t *data, uint32_t size, const char *path);
+int gfx_text_width(const cm_font *f, const char *text);
+int gfx_text(uint8_t *dst, const cm_font *f, int x, int y, const char *text);
+int gfx_menu_text(uint8_t *dst, const cm_font *f, int x, int y,
+                  const char *text);
+void gfx_blit(uint8_t *dst, int x, int y, const uint8_t *src,
+              unsigned width, unsigned height);
+void gfx_shade(uint8_t *dst, int x0, int y0, int x1, int y1,
+               const uint8_t table[256]);
+
+#endif
