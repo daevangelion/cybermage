@@ -109,7 +109,9 @@ normalization from original SaveGame/LoadGame remains an integration concern.
   frame0 over the initially null texture: there is **no reserved null slot**
   and no frame-index subtraction. DrawXTankAim298B6 clamps top to0.
   The new cursor API takes live aim and pose; `ui_cursor_pose` implements the
-  directional3x3 open/pressed banks. Pause4F178 adds1 to draw aim_y.
+  directional3x3 open/pressed banks. Pause4F178 adds the press-animation
+  displacement (normally0), not the menu mode: the preceding height push
+  shifts the stack argument. Initial draw aim remains(63,133).
   Mode1 draws firearms,2 draws swords,5 draws powers,
   3/4 draw selectors(0x18948 dispatch table).
 - Glv_xOff/yOff/xPosOff,xFrame,Swd_xFrame,SwordX,CenterAimX/Y,SpellGlow and
@@ -194,14 +196,15 @@ Fresh RGB comparisons, each pixel differing in any channel counted once:
 | left HUD rectangle[10,436)–[216,470),frame000002.ppm | captures/ui-hud/frame000000.png | 0/7004 |
 | right HUD rectangle[424,436)–[630,470),frame000002.ppm | same | 0/7004 |
 | software-renderer world+UI backdrop+static power hand+HUD,frame000003.ppm | captures/newgame/frame000000.png | 7115/307200 |
-| world+pause boxes+current cursor wrapper,frame000004.ppm | captures/ui-pause/frame000000.png | 32729/307200 |
+| world+pause boxes+PRP7 directional cursor,frame000004.ppm | captures/ui-pause/frame000000.png | 0/307200 |
 
 The HUD probe uses original SAVE010 health/armor/energy fields and exercises
 phases0..2; the independent original HUD checkpoint reports HPCount2. No HUD
 color/pixel constants came from the captures. The world-only input to composed
 frames is Render's **port-generated** indexed frame, not an oracle screenshot.
 The7115 gameplay differences lie inside the120000-pixel view(hand pose); pause
-is not accepted as a match, including its incorrect menu cursor. Individual
+now matches exactly with the corrected cursor resource, directional pose, and
+unpressed aim(63,133). Individual
 selector/message/death/weapon variants compile but lack oracle parity tests.
 
 Still open: shops/arena/slot/coder frontend and rules,routing; automap; tank/car

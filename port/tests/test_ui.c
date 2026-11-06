@@ -160,9 +160,9 @@ int main(int argc, char **argv)
             ui_open(&ui,UI_PAUSE);
             assert(ui_draw(&ui,screen) == 0);
             view.x = view.y = 0; view.width = CM_WIDTH; view.height = CM_HEIGHT;
-            assert(ui_cursor_pose(63,134,0) == 2);
+            assert(ui_cursor_pose(63,133,0) == 2);
             assert(ui_cursor_pose(-73,20,1) == 15);
-            assert(ui_draw_menu_cursor(&ui,&w,screen,63,134,
+            assert(ui_draw_menu_cursor(&ui,&w,screen,63,133,
                                        ui_cursor_pose(63,133,0)) == 0);
             assert(platform_dump(argv[1],4,screen,palette) == 0);
             platform_file_release(&rendered);
