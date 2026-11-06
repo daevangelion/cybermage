@@ -9,6 +9,8 @@ static uint8_t packed[16]={8,0,0,0,12,0,0,0,2,0,7,7,2,0,7,7};
 static uint8_t shades[64*256],fixed[10*256],fog[21*256],palette[768],sky[1024*128];
 static uint8_t pixels[64*64];
 static uint8_t canvas[CM_WIDTH*CM_HEIGHT];
+static uint8_t ui_pixels[CM_WIDTH*CM_HEIGHT];
+static cm_overlay overlay;
 static unsigned frame;
 
 static uint32_t hash(void)
@@ -32,6 +34,52 @@ static void image(unsigned id,unsigned kind,int width,int height,uint8_t *data,u
     memset(t,0,sizeof *t);t->kind=kind;t->width=width;t->height=height;
     t->pixels.data=data;t->pixels.size=bytes;t->packed=(uint8_t)pack;t->revision=1;
     t->half_w=8192;t->base=32768;
+}
+static void camera_test(void)
+{
+    uint8_t expected[sizeof pixels];
+    world_camera saved=w.camera;
+    unsigned i;
+    w.objects[1].active=0;
+    for (i=0;i<sizeof wall;++i) wall[i]=(uint8_t)(i*31+i/128*17);
+    ++w.textures[0].revision;
+    w.camera.u=(saved.u&~255)+128;w.camera.v=(saved.v&~255)+128;
+    draw();memcpy(expected,pixels,sizeof expected);
+    w.camera.u-=128;w.camera.v+=127;
+    draw();assert(memcmp(expected,pixels,sizeof expected)==0);
+    w.camera=saved;w.objects[1].active=1;
+    memset(wall,5,sizeof wall);++w.textures[0].revision;
+}
+static void snapshot_test(void)
+{
+    uint8_t map[256];
+    unsigned x,y;
+    memset(ui_pixels,17,sizeof ui_pixels);
+    for (x=0;x<256;++x) map[x]=(uint8_t)(x^128);
+    assert(gfx_overlay_begin(&overlay,ui_pixels)==0);
+    for (y=0;y<80;++y) for (x=0;x<160;++x)
+        gfx_store(ui_pixels+y*CM_WIDTH+x,(uint8_t)(x<80 ? 0:255));
+    gfx_shade(ui_pixels,160,40,319,159,map);
+    for (y=80;y<160;++y)
+        gfx_copy(ui_pixels+y*CM_WIDTH+320,ui_pixels+y*CM_WIDTH+160,160);
+    assert(gfx_overlay_end()==0 && render_gl_read_canvas(&overlay,canvas)==0);
+    /*64x48 centred in64x64: each native UI pixel covers exactly10x10
+     * logical pixels. Reference real world indices, not CPU placeholders. */
+    for (y=0;y<CM_HEIGHT;++y) for (x=0;x<CM_WIDTH;++x) {
+        unsigned nx=x/10,ny=y/10+8,gx=nx*10+5,gy=(ny-8)*10+5;
+        unsigned i=gy*CM_WIDTH+gx,op=overlay.coverage[i],expected=pixel(nx,ny);
+        if (op==1) expected=ui_pixels[i];
+        else if (op>=2) {
+            unsigned source=overlay.source[i];
+            int sx=(int)nx+((int)(source%CM_WIDTH)-(int)gx)/10;
+            int sy=(int)ny+((int)(source/CM_WIDTH)-(int)gy)/10;
+            assert(sx>=0 && sx<64 && sy>=0 && sy<64);
+            expected=overlay.maps[op-2][pixel((unsigned)sx,(unsigned)sy)];
+        }
+        assert(canvas[y*CM_WIDTH+x]==expected);
+    }
+    assert(canvas[20*CM_WIDTH+20]==0 && canvas[20*CM_WIDTH+100]==255);
+    assert(canvas[100*CM_WIDTH+200]==73 && canvas[100*CM_WIDTH+400]==73);
 }
 int main(void)
 {
@@ -60,6 +108,7 @@ int main(void)
     assert(platform_init(1)==0 && render_sync_textures(&w)==0);
     assert(render_gl_open(1,64,64)==0 && render_gl_load(&w,assets,palette)==0);
     draw();assert(pixel(32,20)==7);
+    camera_test();
     o->flags|=0x20000;draw();
     for (y=16;y<32;++y) for (x=24;x<40;++x)
         assert(pixel(x,y)==(((frame+x+y+1)&1) ? 6u:5u));
@@ -103,6 +152,7 @@ int main(void)
         assert(pixel(12,12)==201 && pixel(0,0)==17 && pixel(12,40)==17);
         assert(render_gl_read_canvas(NULL,canvas)==0);
         assert(canvas[40*CM_WIDTH+160]==201 && canvas[400*CM_WIDTH+160]==17);
+        snapshot_test();
     }
     printf("GL primitives passed: %s\n",render_gl_driver());
     render_gl_close();render_unload();platform_shutdown();return 0;

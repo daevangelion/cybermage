@@ -448,8 +448,9 @@ int render_gl_draw_view(const world *w,const world_camera *camera,const cm_gl_vi
         (unsigned)x>s.width-width || (unsigned)y>s.height-height) return cm_fail("GL view",0,"invalid world or view rectangle");
     if (render_sync_textures(w) || static_mesh(w,0)) return -1;
     ++s.frame;
-    s.distance_moved=s.distance_u!=camera->u || s.distance_v!=camera->v;
     s.camera=*camera;s.vx=x;s.vy=(int)s.height-y-(int)height;s.vw=width;s.vh=height;
+    s.camera.u=(camera->u&~255)+128;s.camera.v=(camera->v&~255)+128;
+    s.distance_moved=s.distance_u!=s.camera.u || s.distance_v!=s.camera.v;
     if (!view->preserve_outside) {
         s.primary_rect[0]=s.vx;s.primary_rect[1]=s.vy;
         s.primary_rect[2]=(GLint)width;s.primary_rect[3]=(GLint)height;s.primary_valid=1;
@@ -482,7 +483,7 @@ int render_gl_draw_view(const world *w,const world_camera *camera,const cm_gl_vi
     }
     sort_props(order,n);
     for (i=0;i<n;++i) if (draw_object(order[i])) return -1;
-    s.distance_u=camera->u;s.distance_v=camera->v;
+    s.distance_u=s.camera.u;s.distance_v=s.camera.v;
     s.gl.Disable(GL_SCISSOR_TEST);return error("GL world draw");
 }
 int render_gl_draw(const world *w,const world_camera *camera)
@@ -542,12 +543,14 @@ int render_gl_present(const cm_overlay *overlay)
 }
 static int read_indexed(GLuint framebuffer,uint8_t *pixels,unsigned width,unsigned height,unsigned stride)
 {
-    GLint format,type;
+    GLint format=GL_RED_INTEGER,type=GL_UNSIGNED_BYTE;
     unsigned x,y;
     s.gl.BindFramebuffer(GL_FRAMEBUFFER,framebuffer);s.gl.ReadBuffer(GL_COLOR_ATTACHMENT0);
-    s.gl.GetIntegerv(GL_IMPLEMENTATION_COLOR_READ_FORMAT,&format);
-    s.gl.GetIntegerv(GL_IMPLEMENTATION_COLOR_READ_TYPE,&type);
-    if (!s.gles || (format==GL_RED_INTEGER && type==GL_UNSIGNED_BYTE)) {
+    if (s.gles) {
+        s.gl.GetIntegerv(GL_IMPLEMENTATION_COLOR_READ_FORMAT,&format);
+        s.gl.GetIntegerv(GL_IMPLEMENTATION_COLOR_READ_TYPE,&type);
+    }
+    if (format==GL_RED_INTEGER && type==GL_UNSIGNED_BYTE) {
         s.gl.PixelStorei(GL_PACK_ROW_LENGTH,(GLint)stride);
         s.gl.ReadPixels(0,0,(GLsizei)width,(GLsizei)height,GL_RED_INTEGER,GL_UNSIGNED_BYTE,pixels);
         s.gl.PixelStorei(GL_PACK_ROW_LENGTH,0);

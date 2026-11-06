@@ -126,6 +126,9 @@ vertical FOV (original4:3 focal/height ratio), expanding horizontally at wider
 aspects. `render_gl_draw_view` supports scissored secondary views.
 Its `cm_gl_view` carries the legacy focal-reference dimensions separately from
 the physical viewport, including vehicle views.
+Both backends use CameraInit's `(u&~255)+128` XY eye; the caller supplies canonical
+eye Z, including the player hit offset once. Effective-eye keys also drive GL
+prop frame/distance caches.
 
 R8UI images and separate packed-run coverage retain opaque paletteindex0.
 The indexed R8UI framebuffer is shaded through the original64/10/21 colormap
@@ -150,7 +153,10 @@ the same GPU compositor, samples the actual HUD pixel centres into640x480 R8UI,
 then reads once. It neither inverts RGB palettes nor reconstructs a world image
 in C. This preserves palette-index identity and source-copy pixel phase before
 the original CPU melt/menu bitmap effects. GLES integer readback selects its
-supported format, with bounded row scratch for the guaranteed RGBA32UI path.
+supported format, with bounded row scratch for the guaranteed RGBA32UI path
+([ES3 readback contract](https://registry.khronos.org/OpenGL-Refpages/es3.0/html/glReadPixels.xhtml)).
+Desktop3.3 reads RED_INTEGER/UNSIGNED_BYTE directly without ES-compatibility
+format queries.
 
 `tests/render_gl.mk` provides pure mesh/coverage/decoder tests and a real
 offscreen scene executable. Its comparison uses the same loaded world and
@@ -162,5 +168,33 @@ replace/shade/source-copy operators, including opaque0/255 and aspect scaling.
 Optional `check-gl` / `check-gl-es` exercise real GPU packed/masked coverage,
 invisibility/aura parity, moving panel updates, shade/fixed/fog maps, raised
 floors/topflats and sky/fog modes. Both passed on Mesa26.2.5: desktop4.6 core
-and ES3.2 contexts executing the330/300 shader prefixes respectively (checkpoint
-`c06b7ad`; later compositor/snapshot changes require fresh runtime verification).
+and ES3.2 contexts executing the330/300 shader prefixes respectively.
+
+Fresh consumer/compositor verification:
+
+```
+tools/run_capped.sh make -C port -f tests/render_gl.mk B=build/GL -j2 check check-gl check-gl-es scene scene-es
+MESA_GL_VERSION_OVERRIDE=3.3 MESA_GLSL_VERSION_OVERRIDE=330 tools/run_capped.sh port/build/GL/test_render_gl_runtime
+```
+
+All passed, including the indexed snapshot's307200-pixel opaque0/255,
+world-shade and world-source-copy comparison. The raw-versus-normalized eye
+regression failed before the camera correction and passed afterward. Scene
+overlay comparisons at640x480 and1920x1080 also passed, including ordered world
+tint and native aspect scaling. Desktop/ES scene outputs differ0/307200.
+
+Actual application: two replay frames at640x480 and1920x1080 report
+`player_state=MATCH`. `captures/gl-main-wide/frame000001.png` is the real
+1920x1080 GL backbuffer with gameplay HUD/hand, not a scaled software frame.
+At640, GL versus SW title differs0/307200; HUD bottom differs0/57600; all pixels
+outside the3D rect differ0/187200. The current default SW completed frame115
+still matches the original newgame capture0/307200 (HUD0/57600), proving the
+opt-in recorder did not change the baseline.
+
+GL is not an exact DOS rasterizer: same-world full-view640 comparisons are
+newgame162182/307200(52.7936%) and turn155986/307200(50.7767%); the live400x300
+view differs69094/120000(57.5783%). The GL path uses perspective floating-point
+rasterization, nearest-texel selection and a depth buffer rather than the DOS
+integer span scalers/painter ties. [INFERENCE] Most residuals are sampling phase
+and projection/depth differences; they have not been individually classified.
+Do not apply the SW near-zero claim to Enhanced GL.
