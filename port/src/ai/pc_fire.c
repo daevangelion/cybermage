@@ -249,9 +249,22 @@ static int prepare_aim(ai_state *a, const sim_state *s, int mode)
             if (q->aim_x < q->w_leftaimx) --q->weapon_aim_step;
             else if (q->aim_x > q->w_rightaimx) ++q->weapon_aim_step;
         }
-    } else if (mode == 7 && !s->vehicle_type && q->auto_enable && q->tank_auto &&
-               after(s->timer_ticks, q->reset_auto_aim_time) && !p->latch && !p->cooldown) {
-        q->tank_aim_y = 19;
+    } else if (mode == 7 && !s->vehicle_type) {
+        /* 1D1E2..1D229: enabled auto-aim owns this branch even while its
+         * timer/latch blocks a reset; it must not fall through to manual. */
+        if (q->auto_enable && q->tank_auto) {
+            if (after(s->timer_ticks, q->reset_auto_aim_time) && !p->latch && !p->cooldown)
+                q->tank_aim_y = 19;
+        } else if (s->tank_hand && p->hand_y) {
+            /* 1D22E..1D28F. SBB's carry makes negative division truncate
+             * toward zero. Each nonzero direction clamps only its own edge. */
+            int32_t aim = ai_add32(q->tank_aim_y, p->hand_y / 8);
+            if (p->hand_y < 0 && aim < 19) aim = 19;
+            else if (p->hand_y > 0 && aim > 63) aim = 63;
+            q->tank_aim_y = aim;
+        }
+        if (q->tank_aim_y < 32) ++q->tank_aim_step;
+        else if (q->tank_aim_y > 47) --q->tank_aim_step;
     }
     return 0;
 }

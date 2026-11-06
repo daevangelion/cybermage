@@ -90,6 +90,13 @@ Retail CM_HI.EXE v1.01F LE link addresses. Gameplay only; UI consumes state.
   only swim(0x1BC60..0x1BC79), not hum.
 - Aircar spread0x13208..0x13276: A held adds128, capped1024; D held subtracts128,
   floored−2048; S clears the spread and consumes its scan byte.
+- Tank hand is the separate globalPCTankHand206824 (`sim.tank_hand`), not
+  vehicleType. The type0 tank dispatch1D1D9..1D2BE gives enabled auto-aim
+  priority even while its deadline/latch blocks resetting to19. Only when either
+  auto flag is off does tank_hand apply `hand_y/8`, truncating toward zero.
+  Negative motion clamps only the lower19 edge; positive motion only upper63;
+  zero motion preserves the aim. Wrapping addition and the derived barrel-frame
+  step(<32/32..47/>47) follow the original instructions. Aircar type1 bypasses it.
 - Underwater backfire reads144A24; Events action72 produces it at0x3E9D7/0x3E9FA
   from event parameters. It is a nonzero test, not a validated boolean.
 
@@ -126,6 +133,12 @@ tank/aircar and stop-running breath. Read-only Unicorn observers record RND entr
 and actual return values without replacing instructions or registers. These direct
 loop fixtures take a prepared running gate; Sim's canonical sampling/cap fixture is
 separate.
+
+The tank-only fixture executes unmodified1D1D9..1D2BE for2,328 cases: both
+vehicle types, both auto flags, hand gate, signed division/clamp/wrapping edges,
+zero motion, strict deadline boundaries and latch/cooldown priority. It failed
+before the consumer fix (aim0 barrel step expected2, native1), then matched:
+`tools/pc_fire_original.py port/build/Port/test_pc_fire --tank-only`.
 
 The genuine scene1 fire replay at8d59b10 has193 completed frames,22 PC fields/frame
 and2,316 missile checkpoints across all12 slots(17 active): no field divergence.
@@ -164,7 +177,14 @@ completed frames, including RNG, actual mouse-fired damage and the save redraw.
 The separate154-frame `mouse-movement` replay matches all player position/heading/
 pitch checkpoints, but its actor/RNG gate first differs at original frame2
 (five extra native RANDOM steps), before the first scripted mouse motion16.
-That NewGame-only discrepancy is not declared fixed by the saved-start controls.
+The approved, explicitly logged `--import-undefined scene-start.persons`
+verification adapter imports **only** original uninitialized PERSON+24 for152
+actors. Against the fresh `Standing-original-bee11c5/original/mouse-movement`
+capture, that boot run matches154 player frames and23,256 actor checkpoints/
+153 completed frames, including RNG. It imports no positions, HP or RNG words
+and changes no game algorithm. The adapter-free discrepancy remains a recorded
+original undefined-memory difference, not a hidden fallback. Both saved-start
+controls above match strictly without this adapter.
 
 The original-only `vehicle-powerblade` scenario loads the genuinely earned
 `captures/earned-water` slot0, follows the river, stands/vaults onto the dry

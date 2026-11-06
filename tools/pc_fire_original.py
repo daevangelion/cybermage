@@ -244,10 +244,57 @@ def compare_hum(native, mode, primary, pulse, running, request, vehicle, slot, s
     return len(rows)
 
 
+def compare_tank(native):
+    original = Original()
+    cpu = original.cpu
+    cases = []
+    for vehicle in (0, 1):
+        for enabled, automatic in ((0, 0), (0, 1), (1, 0), (1, 1)):
+            for hand in (0, 1):
+                for aim in (0, 18, 19, 31, 32, 47, 48, 63, 64, 2147483647, -2147483648):
+                    for y in (-2147483648, -96, -9, -8, -7, -1, 0, 1, 7, 8, 9, 96, 2147483647):
+                        cases.append((vehicle, enabled, automatic, hand, aim, y, 300, 299, 0, 0))
+    for now, deadline in ((299, 300), (300, 300), (301, 300), (0xffffffff, 0), (0, 0xffffffff)):
+        for latch in (0, 1):
+            for cooldown in (0, 1):
+                for y in (-96, 96):
+                    cases.append((0, 1, 1, 1, 40, y, now, deadline, latch, cooldown))
+    rows = subprocess.check_output([str(native), str(ROOT / 'orig/retail/CM_HI.EXE'), 'tank'],
+                                   input=''.join(' '.join(map(str, case)) + '\n' for case in cases),
+                                   text=True).splitlines()
+    if len(rows) != len(cases):
+        raise ValueError('tank aim fixture row count mismatch')
+    for case, row in zip(cases, rows):
+        vehicle, enabled, automatic, hand, aim, y, now, deadline, latch, cooldown = case
+        values = ((THIS+0x130D14, vehicle), (THIS+0x4B000, enabled),
+                  (0x206860, automatic), (0x206824, hand),
+                  (THIS+0x144AC4, aim), (THIS+0x144AAC, y),
+                  (0x207473, now), (0x206858, deadline),
+                  (THIS+0x144AB8, latch), (THIS+0x144AB4, cooldown),
+                  (THIS+0x144A50, 1))
+        for address, value in values:
+            cpu.mem_write(address, struct.pack('<I', value & 0xffffffff))
+        cpu.reg_write(UC_X86_REG_ESI, THIS)
+        # One original tank dispatch, stopping at the shared switch re-entry.
+        cpu.emu_start(0x1D1D9, 0x1D1C1, count=128)
+        if cpu.reg_read(UC_X86_REG_EIP) != 0x1D1C1:
+            raise ValueError('original tank aim did not reach its dispatch boundary')
+        expected = (struct.unpack('<i', cpu.mem_read(THIS+0x144AC4, 4))[0],
+                    struct.unpack('<i', cpu.mem_read(THIS+0x144A50, 4))[0])
+        actual = tuple(map(int, row.split()))
+        if actual != expected:
+            raise ValueError(f'tank aim {case}: native={actual}, original={expected}')
+    return len(cases)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('native', type=Path)
+    parser.add_argument('--tank-only', action='store_true')
     args = parser.parse_args()
+    if args.tank_only:
+        print(f'PC tank aim: {compare_tank(args.native.resolve())} unmodified original x86 cases matched')
+        return
     count = 0
     for seed in ((1, 2, 3), (3000, 44, 29999), (65535, 32768, 32767)):
         for weapon in range(4):
@@ -293,6 +340,7 @@ def main():
             count += compare_hum(args.native.resolve(), *case, seed)
     print(f'PC loops: {count} unmodified original x86 input frames matched '
           '(held-primary versus swing pulse, running, melee, tank/aircar, stop breath and exact RND calls)')
+    print(f'PC tank aim: {compare_tank(args.native.resolve())} unmodified original x86 cases matched')
 
 
 if __name__ == '__main__':

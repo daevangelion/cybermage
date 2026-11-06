@@ -350,15 +350,35 @@ static int hum(char **argv)
     return 0;
 }
 
+static int tank(void)
+{
+    int vehicle, enabled, automatic, hand, aim, y, latch, cooldown, count;
+    unsigned now, deadline;
+    while ((count = scanf("%d %d %d %d %d %d %u %u %d %d",
+            &vehicle, &enabled, &automatic, &hand, &aim, &y, &now, &deadline,
+            &latch, &cooldown)) == 10) {
+        s.pc_mode = s.previous_pc_mode = 7;
+        s.vehicle_type = vehicle; s.tank_hand = hand; s.timer_ticks = now;
+        a.pc_aim.auto_enable = enabled; a.pc_aim.tank_auto = automatic;
+        a.pc_aim.tank_aim_y = aim; a.pc_aim.reset_auto_aim_time = deadline;
+        a.pc.hand_y = y; a.pc.latch = latch; a.pc.cooldown = cooldown;
+        CHECK(!ai_pc_prepare_motion(&a, &s, &w));
+        printf("%d %d\n", a.pc_aim.tank_aim_y, a.pc_aim.tank_aim_step);
+    }
+    return count == EOF ? 0 : 2;
+}
+
 int main(int argc, char **argv)
 {
-    if (argc != 2 && (argc != 9 || strcmp(argv[2], "hand")) &&
+    if (argc != 2 && (argc != 3 || strcmp(argv[2], "tank")) &&
+        (argc != 9 || strcmp(argv[2], "hand")) &&
         (argc != 6 || strcmp(argv[2], "regen")) &&
         (argc != 8 || strcmp(argv[2], "bob")) &&
         (argc != 10 || strcmp(argv[2], "breath")) &&
         (argc != 13 || strcmp(argv[2], "hum"))) return 2;
     if (setup(argv[1])) return 1;
     if (argc == 2) return checks();
+    if (argc == 3) return tank();
     if (argc == 9) return hand(argv+3);
     if (argc == 10) return breath(argv+3);
     if (argc == 13) return hum(argv+3);
