@@ -142,6 +142,59 @@ land mid-render; exact frame-boundary capture and repeated-run equality remain
 separate measurements, not assumptions. Changing IPS changes the seeded tick and
 work performed between timer events.
 
+## Physical mouse and original configuration
+
+An oracle scenario may set the **host INT 33h driver**, never game fields:
+
+```
+mouse 11.25 304 112 0
+mouse 12.25 304 112 1
+mouse 12.50 304 112 0
+```
+
+The fields are emulated seconds, X `0..639`, Y `0..239`, and the DOS button
+mask `0..3` (left=1, right=2). Events are delivered at the same 0.05-second
+boundaries as keys. Absolute position changes accumulate driver mickeys;
+make/break edges update the INT 33h press/release counters. The original's
+AX=3/5/6/0B calls read and consume that device state. The CLI equivalent is
+`--raw-mouse TIME:X:Y:BUTTONS`, available only with `--headless`.
+
+Mouse input is **not enabled by injecting the original routing flag**.
+`mouse-config.keys` uses title O → Options → Input Device → Right → Enter →
+Escape. The original `OptInputSlider` (`053538`) chooses device 1;
+`054167..054182` asks `Mouse::Installed` before setting Xox+E3510, and the
+normal options exit calls the original configuration writer (`05422D`).
+
+```
+tools/oracle.sh tools/scenarios/mouse-config.keys --frame-trace
+tools/oracle.sh tools/scenarios/mouse-movement.keys --frame-trace \
+  --import-config captures/mouse-config
+```
+
+The wrapper captures the original final `CMDATA.CNF` bytes beside `run.json`,
+with `config_file` and `config_sha256`. `--import-config DIR` copies only that
+file into each clean writable overlay and records its SHA-256 per checkpoint
+in `imported_config`; it neither edits settings nor loads a game. An unchanged
+imported configuration may be captured again with the same hash. Seed the
+port's `--user` directory with those original bytes when comparing mouse
+routing. Save import/export remains separate and does not copy configuration.
+
+With `--frame-trace`, `mouse-input.csv` observes original `Mouse::ReadStatus`
+at `06BB24` **before** its INT 33h polls:
+
+```
+sequence,frame,ticks,caller,x,y,buttons,mickey_x,mickey_y,press_left,press_right,in_device,mouse_present,joystick_present
+```
+
+Keep all polls in sequence, including several polls per game frame. AX=0B
+consumes the mickeys and AX=5 consumes press counts, so absolute coordinates
+alone cannot reproduce the input. Accumulators are recorded before the BIOS
+truncates them to signed 16-bit return values. The final three columns audit
+the original's routing; **they are not replay input and must not be written
+back into game state**. Native transport converts DOS Y to 640x480 input Y×2
+and DOS right bit 2 to SDL right bit 4, but preserves DOS mickey/count semantics
+in dedicated input fields rather than feeding enhanced relative-look deltas.
+
 ## Frame traces
 
 ```
@@ -279,3 +332,39 @@ opening selector or an early Escape cancellation lacks that action0 row.
 
 Both options require `--frame-trace`. All observations remain read-only and
 use the same source/patch/binary provenance checks as MoveWorld observations.
+
+### Draw clocks and menu actions
+
+Every new `--frame-trace` also writes `draw-clocks.csv`:
+`frame,draw,phase,pc,ticks`. Draw ordinals start at0 per frame; phases0/1/2
+identify the ordinary primary HUD, SaveGame render, or LoadGame render.
+The observer reads the timer at the actual executed instructions:
+StatusMonitor016391 (one sample reused for its deadline), energy compare019377,
+and conditional energy deadline0193A4. It never fabricates a second read.
+Replay consumes the same ordered stream through `replay_draw_begin/clock/end`;
+missing, wrong-phase or unconsumed reads fail closed. The unmatched terminal
+native draw is not executed or claimed as verified. Old clockless datasets
+must be recaptured for integrated draw replay.
+
+`ui-actions.csv` contains `frame,ticks,action,slot,name_hex24`. Read-only
+SaveGame05007C/LoadGame050AD4 entry observations are limited to the actual
+HandleNextFrame menu callers; slot is EDX and the name is the user's24-byte
+gameName input (slot10 has no name). This is separate from the later selector
+reset marker: SaveGame0500B7 calls Image1::Render **before** serialization.
+The port uses the same world/HUD pipeline for that draw and an ordinary draw,
+including actual status, breathing, regeneration, dialogue and countdown effects.
+No RNG words, positions, inventory or deadlines are installed from observations.
+
+The paired `Port-save-clock` fixture has317 frame entries. Frame286 selects
+slot0 at tick1056, draws the save HUD at1058, then the ordinary HUD at1060.
+Its actor, actor-clock and seed files are byte-identical to the earlier
+`Port-first-telecom-rng` capture. The native lifecycle matches48,032 actor
+checkpoints across316 completed frames, including RNG.
+
+The hardware-only `mouse TIME X Y BUTTONS` scenario directive supplies raw
+INT33 device events. `mouse-input.csv` observes Mouse::ReadStatus06BB24
+**before** it consumes counters:
+`sequence,frame,ticks,caller,x,y,buttons,mickey_x,mickey_y,press_left,press_right,in_device,mouse_present,joystick_present`.
+The last three columns audit original routing; they are never installed as
+game inputs. Actual CMDATA.CNF bytes and their SHA256 are captured separately;
+original Options selects the device, not the observer.

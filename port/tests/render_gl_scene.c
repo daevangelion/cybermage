@@ -21,6 +21,14 @@ static events_state events;
 static cm_ui ui;
 static cm_file strings;
 
+static int fixed_draw_time(void *context, uint32_t site, uint32_t *ticks)
+{
+    if (site != 0x16391) return cm_fail("GL HUD fixture", site, "unexpected timer instruction");
+    *ticks = *(const uint32_t *)context;
+    return 0;
+}
+static const cm_draw_clock draw_clock = {&ui.ticks, fixed_draw_time};
+
 static int integer(const char *text,int32_t *value)
 {
     char *end;
@@ -44,7 +52,7 @@ static int hud_draw(void)
     ui_view view={0,0,CM_WIDTH,CM_HEIGHT};
     if (ui_hud_from_world(&hud,&map,&events,0,5) ||
         ui_draw_live_hand(&ui,&map,software,5,&events,&actors,view) ||
-        ui_render_bells_and_whistles(&ui,software,&hud)) return -1;
+        ui_render_bells_and_whistles(&ui, software, &hud, &draw_clock)) return -1;
     return 0;
 }
 

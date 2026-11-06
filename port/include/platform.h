@@ -30,6 +30,8 @@ typedef struct {
     int mouse_present, joystick_present; /* Driver/device availability, not coordinates. */
     int mouse_x, mouse_y;
     int mouse_dx, mouse_dy;
+    int16_t mouse_mickey_x, mouse_mickey_y; /* DOS AX0B signed16 counts; enhanced deltas stay above. */
+    uint16_t mouse_press_count[2]; /* DOS left/right press counters, consumed per poll. */
     unsigned mouse_buttons;
     unsigned mouse_pressed, mouse_released;
     int mouse_wheel;

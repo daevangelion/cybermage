@@ -108,6 +108,8 @@ int ai_save_import(ai_state *a, world *w, const ui_save_state *save)
     a->pc_aim.aim_x = signed_word(save->unk_6D4[13]);
     a->pc_aim.aim_y = signed_word(save->unk_6D4[14]);
     a->pc_aim.tank_aim_y = signed_word(save->unk_6D4[15]);
+    a->pc.regen_interval = signed_word((uint32_t)save->unk_130D50[866] |
+                                      (uint32_t)save->unk_130D50[867] << 16);
     return 0;
 }
 
@@ -144,4 +146,6 @@ void ai_save_export(const ai_state *a, ui_save_state *save)
     save->unk_6D4[13] = (uint32_t)a->pc_aim.aim_x;
     save->unk_6D4[14] = (uint32_t)a->pc_aim.aim_y;
     save->unk_6D4[15] = (uint32_t)a->pc_aim.tank_aim_y;
+    save->unk_130D50[866] = (uint16_t)(uint32_t)a->pc.regen_interval;
+    save->unk_130D50[867] = (uint16_t)((uint32_t)a->pc.regen_interval >> 16);
 }

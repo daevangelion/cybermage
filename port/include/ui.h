@@ -14,6 +14,17 @@
 #define UI_HAND_FRAMES 18
 #define UI_SHOP_ITEMS 40
 #define UI_BITMAPS_MAX 24
+#define UI_CONFIG_BYTES 172
+#define UI_CONFIG_KEYS 15
+
+/* CMDATA.CNF, ReadConfigFile020931..020C05 / WriteConfigFile020C18.
+ * options[] below is the original GUI's separate LoadOptVals projection. */
+typedef struct {
+    int32_t in_device, difficulty, brightness, contrast, text_delay;
+    int32_t midi_volume, digital_volume, speech_volume;
+    int32_t joystick[4];
+    uint32_t key[UI_CONFIG_KEYS], mask[UI_CONFIG_KEYS];
+} ui_config;
 
 typedef enum {
     UI_GAME, UI_TITLE, UI_OPTIONS, UI_PAUSE, UI_SAVE, UI_LOAD, UI_HELP,
@@ -21,7 +32,7 @@ typedef enum {
 } ui_screen;
 typedef enum {
     UI_NONE, UI_NEW_GAME, UI_TRAINING, UI_RESUME, UI_SAVE_GAME,
-    UI_LOAD_GAME, UI_QUIT, UI_CREDITS, UI_SPEECH_REPLAY
+    UI_LOAD_GAME, UI_QUIT, UI_CREDITS, UI_SPEECH_REPLAY, UI_ERROR=-1
 } ui_action;
 
 typedef struct {
@@ -40,6 +51,7 @@ typedef struct {
     uint32_t blink_timer;
     int blink;
     int options[10];
+    ui_config config;
     int applied_volumes[3], volumes_applied;
     unsigned con_size, vdu;
     int32_t view_info[8][4], ACarX[11], ACarY[11];
@@ -132,7 +144,9 @@ int ui_shop_draw(cm_ui *ui, const struct events_state *events, const world *w,
 int ui_draw_selector(const cm_ui *ui, const world *w,
                       const struct events_state *events, uint8_t *dst);
 int ui_render_bells_and_whistles(cm_ui *ui, uint8_t *pixels,
-                                const ui_hud *hud);
+                                const ui_hud *hud, const cm_draw_clock *clock);
+/* Only when StatusMonitor actually runs; shared with pixel-free verification. */
+int ui_status_advance(cm_ui *ui, const cm_draw_clock *clock);
 void ui_draw_monitor(uint8_t *dst, int x, int y, const ui_bitmap *bitmap);
 typedef struct {
     world_span pixels;
@@ -143,6 +157,13 @@ typedef struct {
 } ui_hand;
 typedef struct { int x, y, width, height; } ui_view;
 int ui_apply_settings(cm_ui *ui, uint8_t palette[768], const uint8_t base_rgb[768]);
+void ui_config_defaults(ui_config *config);
+int ui_config_decode(ui_config *config,const uint8_t *data,uint32_t size,const char *path);
+int ui_config_encode(const ui_config *config,uint8_t *data,uint32_t size,const char *path);
+int ui_config_load(ui_config *config,const char *path);
+int ui_config_save(const ui_config *config,const char *path);
+void ui_options_from_config(cm_ui *ui);
+void ui_options_to_config(cm_ui *ui);
 int ui_game_view(const cm_ui *ui, int mode, int vehicle_type, ui_view *view);
 int ui_draw_backdrop(const cm_ui *ui, uint8_t *dst, int mode,
                        int vehicle_type, ui_view view);

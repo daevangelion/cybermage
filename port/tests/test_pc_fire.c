@@ -9,6 +9,25 @@ static ai_state a;
 static world w;
 static sim_state s;
 static events_state e;
+static int fixed_draw_time(void *context, uint32_t site, uint32_t *ticks)
+{
+    const sim_state *state = context;
+    if (site != 0x19377 && site != 0x193a4)
+        return cm_fail("PC draw fixture", site, "unexpected timer instruction");
+    *ticks = state->timer_ticks;
+    return 0;
+}
+static const cm_draw_clock draw_clock = {&s, fixed_draw_time};
+typedef struct { uint32_t compare, deadline; unsigned calls; } split_draw_time;
+static int split_draw_read(void *context, uint32_t site, uint32_t *ticks)
+{
+    split_draw_time *clock = context;
+    if ((!clock->calls && site != 0x19377) ||
+        (clock->calls == 1 && site != 0x193a4) || clock->calls > 1)
+        return cm_fail("PC draw fixture", site, "wrong timer read order");
+    *ticks = clock->calls++ ? clock->deadline : clock->compare;
+    return 0;
+}
 static struct {
     unsigned count;
     int overflow;
@@ -83,20 +102,20 @@ static int checks(void)
         for (sign = -1; sign <= 1; sign += 2) {
             a.pc.muzzle_mode = 3*sign; a.pc.muzzle_count = 0;
             for (i = 0; i < 3; ++i) {
-                CHECK(!ai_pc_draw_advance(&a, &s, &w));
+                CHECK(!ai_pc_draw_advance(&a, &s, &w, &draw_clock));
                 CHECK(a.pc.muzzle_mode == (2-(int)i)*sign);
                 CHECK(a.pc.muzzle_count == (int)i+1);
             }
-            CHECK(!ai_pc_draw_advance(&a, &s, &w));
+            CHECK(!ai_pc_draw_advance(&a, &s, &w, &draw_clock));
             CHECK(a.pc.muzzle_count == 3);
         }
     }
     s.pc_mode = 7; s.vehicle_type = 0;
     a.pc.muzzle_mode = 3; a.pc.muzzle_count = 0;
-    CHECK(!ai_pc_draw_advance(&a, &s, &w));
+    CHECK(!ai_pc_draw_advance(&a, &s, &w, &draw_clock));
     CHECK(a.pc.muzzle_mode == 3 && !a.pc.muzzle_count);
     s.vehicle_type = 1;
-    CHECK(!ai_pc_draw_advance(&a, &s, &w));
+    CHECK(!ai_pc_draw_advance(&a, &s, &w, &draw_clock));
     CHECK(a.pc.muzzle_mode == 2 && a.pc.muzzle_count == 1);
     s.kb_scan_status[0x1e] = 1;
     for (i = 0; i < 24; ++i) CHECK(!pc_step());
@@ -113,21 +132,32 @@ static int checks(void)
     CHECK(a.pc.air_car_spread == 0x380);
     e.energy = 35; e.max_energy = 40; a.pc.sp_regen_timer = 0;
     s.timer_ticks = 300;
-    CHECK(!ai_pc_draw_advance(&a, &s, &w));
+    CHECK(!ai_pc_draw_advance(&a, &s, &w, &draw_clock));
     CHECK(e.energy == 36 && a.pc.sp_regen_timer == 361);
     s.timer_ticks = 361;
-    CHECK(!ai_pc_draw_advance(&a, &s, &w));
+    CHECK(!ai_pc_draw_advance(&a, &s, &w, &draw_clock));
     CHECK(e.energy == 36);
     s.timer_ticks = 362;
-    CHECK(!ai_pc_draw_advance(&a, &s, &w));
+    CHECK(!ai_pc_draw_advance(&a, &s, &w, &draw_clock));
     CHECK(e.energy == 37 && a.pc.sp_regen_timer == 423);
+    {
+        split_draw_time time = {424, 425, 0};
+        const cm_draw_clock split = {&time, split_draw_read};
+        CHECK(!ai_pc_draw_advance(&a, &s, &w, &split));
+        CHECK(time.calls == 2 && e.energy == 38 && a.pc.sp_regen_timer == 486);
+        CHECK(a.pc.regen_interval == 61);
+        time.compare = 486; time.deadline = 999; time.calls = 0;
+        CHECK(!ai_pc_draw_advance(&a, &s, &w, &split));
+        CHECK(time.calls == 1 && e.energy == 38 && a.pc.sp_regen_timer == 486);
+        a.pc.sp_regen_timer = 423;
+    }
     e.energy = e.max_energy = 999; s.timer_ticks = 424;
-    CHECK(!ai_pc_draw_advance(&a, &s, &w));
+    CHECK(!ai_pc_draw_advance(&a, &s, &w, &draw_clock));
     CHECK(e.energy == 999 && a.pc.sp_regen_timer == 430);
     s.pc_mode = 2; s.bp_limit_flag = 0; a.pc_flash = 3;
     for (i = 0; i < 4; ++i) {
         a.pc.unk_1444EC = 2;
-        CHECK(!ai_pc_draw_advance(&a, &s, &w));
+        CHECK(!ai_pc_draw_advance(&a, &s, &w, &draw_clock));
         CHECK(!a.pc.unk_1444EC);
         CHECK(a.pc_flash == (i < 3 ? 2-(int)i : 0));
     }
@@ -150,13 +180,13 @@ static int checks(void)
         w.rng.word[0] = 3000; w.rng.word[1] = 44; w.rng.word[2] = 29999;
         memcpy(before, w.rng.word, sizeof before);
         a.pc.sword_hum_slot = 0; a.pc.sword_hum_sound = 1;
-        CHECK(!ai_pc_draw_advance(&a, &s, &w));
+        CHECK(!ai_pc_draw_advance(&a, &s, &w, &draw_clock));
         CHECK(!memcmp(before, w.rng.word, sizeof before));
         a.pc.sword_hum_slot = -1;
-        CHECK(!ai_pc_draw_advance(&a, &s, &w));
+        CHECK(!ai_pc_draw_advance(&a, &s, &w, &draw_clock));
         CHECK(memcmp(before, w.rng.word, sizeof before));
         w.person_count = 0;
-        CHECK(ai_pc_draw_advance(&a, &s, &w) < 0);
+        CHECK(ai_pc_draw_advance(&a, &s, &w, &draw_clock) < 0);
         w.person_count = 1; w.player_person = 0;
     }
     /* Selector completion is immediate, including during modern RMB aiming. */
@@ -243,7 +273,7 @@ static int regen(char **argv)
     a.pc.sp_regen_timer = (uint32_t)strtoul(argv[2], NULL, 0);
     for (i = 0; i < 80; ++i) {
         s.timer_ticks = 300+i*2+i/5;
-        CHECK(!ai_pc_draw_advance(&a, &s, &w));
+        CHECK(!ai_pc_draw_advance(&a, &s, &w, &draw_clock));
         printf("%u %d %u\n", i, e.energy, (unsigned)a.pc.sp_regen_timer);
     }
     return 0;
@@ -283,7 +313,7 @@ static int breath(char **argv)
     for (i = 0; i < 80; ++i) {
         s.timer_ticks = 300+i*2;
         observe_begin();
-        CHECK(!ai_pc_draw_advance(&a, &s, &w));
+        CHECK(!ai_pc_draw_advance(&a, &s, &w, &draw_clock));
         CHECK(!observed.overflow);
         printf("%u %u %u %u %d %u %d %d %d %d\n", i, (unsigned)w.rng.word[0],
             (unsigned)w.rng.word[1], (unsigned)w.rng.word[2], a.pc_sound,

@@ -106,7 +106,7 @@ static int bar(const cm_ui *ui, uint8_t *dst, unsigned bitmap,
 }
 
 int ui_render_bells_and_whistles(cm_ui *ui, uint8_t *dst,
-                                const ui_hud *hud)
+                                const ui_hud *hud, const cm_draw_clock *clock)
 {
     /* Constructor0x1026A–0x10333: monitors(10,436),(424,436). */
     unsigned phase = hud->hp_count;
@@ -158,9 +158,18 @@ int ui_render_bells_and_whistles(cm_ui *ui, uint8_t *dst,
                  ui->console[9].width, ui->console[9].height);
         if (number(ui, dst, 294, y+18, hud->ammo, 3, 59, 174)) return -1;
     }
-    if (ui->ticks > ui->blip_time) {
+    return ui_status_advance(ui, clock);
+}
+
+int ui_status_advance(cm_ui *ui, const cm_draw_clock *clock)
+{
+    uint32_t ticks;
+    if (!ui || !clock || !clock->read)
+        return cm_fail("StatusMonitor", 0x16391, "missing draw clock");
+    if (clock->read(clock->context, 0x16391, &ticks)) return -1;
+    if (ticks > ui->blip_time) {
         ui->hp_count = (ui->hp_count + 1) % 8;
-        ui->blip_time = ui->ticks + 4;
+        ui->blip_time = ticks + 4;
     }
     return 0;
 }

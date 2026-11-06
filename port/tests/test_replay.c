@@ -3,12 +3,15 @@
 #include <stdio.h>
 #include <string.h>
 
-static char trace[4096], clocks[512];
-static const char *clock_input;
+static char trace[4096], clocks[512], draw_data[2048], ui_data[512];
+static const char *clock_input, *draw_input, *ui_input;
 
 int platform_file_exists(const char *path)
 {
-    return strstr(path, "actor-clocks.csv") != NULL && clock_input != NULL;
+    if (strstr(path, "actor-clocks.csv")) return clock_input != NULL;
+    if (strstr(path, "draw-clocks.csv")) return draw_input != NULL;
+    if (strstr(path, "ui-actions.csv")) return ui_input != NULL;
+    return 0;
 }
 
 int platform_file_read(cm_file *file, const char *path)
@@ -18,6 +21,16 @@ int platform_file_read(cm_file *file, const char *path)
         memcpy(clocks, clock_input, strlen(clock_input) + 1);
         file->data = (uint8_t *)clocks;
         file->size = (uint32_t)strlen(clocks);
+    } else if (strstr(path, "draw-clocks.csv")) {
+        if (!draw_input) return -1;
+        memcpy(draw_data, draw_input, strlen(draw_input) + 1);
+        file->data = (uint8_t *)draw_data;
+        file->size = (uint32_t)strlen(draw_data);
+    } else if (strstr(path, "ui-actions.csv")) {
+        if (!ui_input) return -1;
+        memcpy(ui_data, ui_input, strlen(ui_input) + 1);
+        file->data = (uint8_t *)ui_data;
+        file->size = (uint32_t)strlen(ui_data);
     } else {
         file->data = (uint8_t *)trace;
         file->size = (uint32_t)strlen(trace);
@@ -30,6 +43,7 @@ static void fixture(void)
 {
     unsigned frame, column;
     size_t at;
+    draw_input = ui_input = NULL;
     memset(trace, 0, sizeof trace);
     at = (size_t)snprintf(trace, sizeof trace,
         "CMTRACE1,0\nframe,ticks,previous,delta,limit_time,limit_flag,object,person,"
@@ -45,6 +59,65 @@ static void fixture(void)
         memset(trace + at, '0', 256); at += 256;
         trace[at++] = '\n';
     }
+}
+
+static void draw_controls(void)
+{
+    static const char ui_header[] = "frame,ticks,action,slot,name_hex24\n";
+    cm_replay r;
+    cm_replay_frame frame;
+    cm_replay_ui action;
+    uint32_t ticks;
+    fixture(); clock_input = NULL;
+    draw_input = "frame,draw,phase,pc,ticks\n"
+        "0,0,1,16391,10\n0,0,1,19377,11\n0,0,1,193a4,12\n"
+        "0,1,0,19377,13\n1,0,0,19377,14\n";
+    ui_input = "frame,ticks,action,slot,name_hex24\n"
+        "0,10,1,0,414200000000000000000000000000000000000000000000\n";
+    assert(!replay_open(&r, "frames.csv") && replay_next(&r, &frame) == 1);
+    assert(replay_ui_next(&r, 0, &action) == 1 && action.slot == 0 &&
+           action.ticks == 10 && !strcmp((char *)action.name, "AB"));
+    assert(!replay_ui_next(&r, 0, &action));
+    assert(replay_draw_begin(&r, 0, CM_DRAW_SAVE) == 1);
+    assert(!replay_draw_clock(&r, 0x16391, &ticks) && ticks == 10);
+    assert(!replay_draw_clock(&r, 0x19377, &ticks) && ticks == 11);
+    assert(!replay_draw_clock(&r, 0x193a4, &ticks) && ticks == 12);
+    assert(!replay_draw_end(&r));
+    assert(replay_draw_begin(&r, 0, CM_DRAW_NORMAL) == 1);
+    assert(!replay_draw_clock(&r, 0x19377, &ticks) && ticks == 13);
+    assert(!replay_draw_end(&r));
+    assert(replay_next(&r, &frame) == 1);
+    assert(replay_draw_begin(&r, 1, CM_DRAW_NORMAL) == 1);
+    assert(!replay_draw_clock(&r, 0x19377, &ticks) && ticks == 14);
+    assert(!replay_draw_end(&r));
+    assert(replay_next(&r, &frame) == 1);
+    assert(!replay_draw_begin(&r, 2, CM_DRAW_NORMAL));
+    assert(!replay_next(&r, &frame));
+    replay_close(&r);
+    fixture();
+    draw_input = "frame,draw,phase,pc,ticks\n0,0,0,19377,10\n0,0,0,193a4,11\n";
+    ui_input = ui_header;
+    assert(!replay_open(&r, "frames.csv") && replay_next(&r, &frame) == 1);
+    assert(replay_draw_begin(&r, 0, CM_DRAW_NORMAL) == 1);
+    assert(!replay_draw_clock(&r, 0x19377, &ticks));
+    assert(replay_draw_end(&r) == -1); /* A real conditional read was omitted. */
+    replay_close(&r);
+    fixture();
+    draw_input = "frame,draw,phase,pc,ticks\n0,0,0,19377,10\n";
+    ui_input = ui_header;
+    assert(!replay_open(&r, "frames.csv") && replay_next(&r, &frame) == 1);
+    assert(replay_draw_begin(&r, 0, CM_DRAW_SAVE) == -1);
+    replay_close(&r);
+    fixture();
+    ui_input = "frame,ticks,action,slot,name_hex24\n"
+        "0,10,1,11,000000000000000000000000000000000000000000000000\n";
+    assert(!replay_open(&r, "frames.csv") && replay_next(&r, &frame) == 1);
+    assert(replay_ui_next(&r, 0, &action) == -1);
+    replay_close(&r);
+    fixture();
+    assert(!replay_open(&r, "frames.csv") && replay_next(&r, &frame) == 1);
+    assert(replay_draw_begin(&r, 0, CM_DRAW_NORMAL) == -1);
+    replay_close(&r);
 }
 
 int main(void)
@@ -124,5 +197,6 @@ int main(void)
     f.values[CM_TRACE_BIOS_SHIFT] = 4; /* Original BDA Ctrl, not a Shift bit. */
     replay_input(&s, &f);
     assert(s.bios_shift == 4);
+    draw_controls();
     return 0;
 }

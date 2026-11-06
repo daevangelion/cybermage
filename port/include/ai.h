@@ -115,6 +115,7 @@ typedef struct {
     int32_t auto_update_flag;
     uint32_t auto_s_time, spell_timer, tank_timer;
     uint32_t sp_regen_timer; /* global spRegenTimer206834, survives scene loads */
+    int32_t regen_interval; /* Xox+131414, recomputed every draw, saved words866/867 */
     int32_t last_mode, last_weapon;
     unsigned kb_fire, kb_fire_bit;
     int32_t air_car_spread; /* ACarSpreadAngle, original signed16 */
@@ -190,7 +191,8 @@ int ai_pc_prepare_motion(ai_state *a, sim_state *s, world *w);
 int ai_pc_input(ai_state *a, sim_state *s, world *w);
 int ai_pc_hit_response(ai_state *a, sim_state *s, world *w);
 int ai_pc_hand2hand(ai_state *a, sim_state *s, world *w);
-int ai_pc_draw_advance(ai_state *a, const sim_state *s, world *w);
+int ai_pc_draw_advance(ai_state *a, const sim_state *s, world *w,
+                        const cm_draw_clock *clock);
 int ai_load_scene_definitions(ai_state *a, world *w);
 int ai_save_import(ai_state *a, world *w, const ui_save_state *save);
 void ai_save_export(const ai_state *a, ui_save_state *save);

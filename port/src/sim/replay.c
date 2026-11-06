@@ -147,8 +147,144 @@ static int actor_clock_metadata(cm_replay *r)
     return 0;
 }
 
+static int draw_metadata(cm_replay *r, cm_file *file, char *path, size_t capacity,
+                         uint32_t *next, const char *name, const char *const header[5])
+{
+    const char *slash = strrchr(r->path, '/');
+    size_t prefix = slash ? (size_t)(slash - r->path) + 1 : 0;
+    char *fields[5];
+    unsigned i;
+    int exists, n;
+    if (prefix + strlen(name) + 1 > capacity)
+        return cm_fail(r->path, 0, "draw metadata path too long");
+    memcpy(path, r->path, prefix);
+    strcpy(path + prefix, name);
+    exists = platform_file_exists(path);
+    if (exists <= 0) return exists < 0 ? -1 : 0;
+    if (platform_file_read(file, path)) return -1;
+    n = read_line(file, next, path, fields, 5);
+    if (n < 0) return -1;
+    if (n != 5) return cm_fail(path, 0, "invalid draw metadata header");
+    for (i = 0; i < 5; ++i)
+        if (strcmp(fields[i], header[i])) return cm_fail(path, 0, "invalid draw metadata header");
+    return 0;
+}
+
+static int draw_peek(cm_replay *r)
+{
+    char *fields[5];
+    int64_t word[5];
+    unsigned i;
+    int n;
+    if (r->has_draw_pending) return 1;
+    n = read_line(&r->draw_clocks, &r->draw_clock_next, r->draw_clock_path, fields, 5);
+    if (n <= 0) return n;
+    if (n != 5) goto bad;
+    for (i = 0; i < 5; ++i)
+        if (integer(fields[i], i == 3 ? 16 : 10, 0, UINT32_MAX, &word[i])) goto bad;
+    if (word[2] > CM_DRAW_LOAD ||
+        (word[3] != 0x16391 && word[3] != 0x19377 && word[3] != 0x193a4)) goto bad;
+    r->draw_pending.frame = (uint32_t)word[0];
+    r->draw_pending.draw = (uint32_t)word[1];
+    r->draw_pending.phase = (uint32_t)word[2];
+    r->draw_pending.site = (uint32_t)word[3];
+    r->draw_pending.ticks = (uint32_t)word[4];
+    r->has_draw_pending = 1;
+    return 1;
+bad:
+    return cm_fail(r->draw_clock_path, r->draw_clock_next, "invalid draw clock row");
+}
+
+static int ui_peek(cm_replay *r)
+{
+    char *fields[5];
+    int64_t word[4];
+    unsigned i;
+    int n;
+    if (r->has_ui_pending) return 1;
+    n = read_line(&r->ui_actions, &r->ui_action_next, r->ui_action_path, fields, 5);
+    if (n <= 0) return n;
+    if (n != 5) goto bad;
+    for (i = 0; i < 4; ++i)
+        if (integer(fields[i], 10, 0, UINT32_MAX, &word[i])) goto bad;
+    if (word[2] < 1 || word[2] > 2 || word[3] > 10 ||
+        hex(fields[4], r->ui_pending.name, 24) ||
+        !memchr(r->ui_pending.name, 0, 24)) goto bad;
+    if (word[3] == 10)
+        for (i = 0; i < 24; ++i) if (r->ui_pending.name[i]) goto bad;
+    r->ui_pending.frame = (uint32_t)word[0];
+    r->ui_pending.ticks = (uint32_t)word[1];
+    r->ui_pending.action = (uint32_t)word[2];
+    r->ui_pending.slot = (uint32_t)word[3];
+    r->has_ui_pending = 1;
+    return 1;
+bad:
+    return cm_fail(r->ui_action_path, r->ui_action_next, "invalid UI action input");
+}
+
+int replay_draw_begin(cm_replay *r, uint32_t frame, unsigned phase)
+{
+    uint32_t index = r->has_draw_frame && r->draw_frame == frame ? r->draw_index + 1 : 0;
+    int n;
+    if (r->draw_active || phase > CM_DRAW_LOAD)
+        return cm_fail(r->draw_clock_path, r->draw_clock_next, "overlapping draw phase");
+    /* No next original checkpoint exists for the last native frame. Do not
+     * invent its conditional timer inputs or claim its draw as verified. */
+    if (r->next == r->file.size) return 0;
+    if (!r->draw_clocks.data)
+        return cm_fail(r->draw_clock_path, 0, "missing measured draw clocks; recapture original");
+    n = draw_peek(r);
+    if (n < 0) return -1;
+    if (!n || r->draw_pending.frame != frame || r->draw_pending.draw != index ||
+        r->draw_pending.phase != phase)
+        return cm_fail(r->draw_clock_path, r->draw_clock_next, "missing or wrong draw phase");
+    r->draw_frame = frame; r->draw_index = index; r->draw_phase = phase;
+    r->draw_active = r->has_draw_frame = 1;
+    return 1;
+}
+
+int replay_draw_clock(cm_replay *r, uint32_t site, uint32_t *ticks)
+{
+    int n = draw_peek(r);
+    if (n < 0) return -1;
+    if (!r->draw_active || !n || r->draw_pending.frame != r->draw_frame ||
+        r->draw_pending.draw != r->draw_index || r->draw_pending.phase != r->draw_phase ||
+        r->draw_pending.site != site)
+        return cm_fail(r->draw_clock_path, r->draw_clock_next, "missing or wrong timer read");
+    *ticks = r->draw_pending.ticks;
+    r->has_draw_pending = 0;
+    return 0;
+}
+
+int replay_draw_end(cm_replay *r)
+{
+    int n;
+    if (!r->draw_active) return cm_fail(r->draw_clock_path, 0, "draw was not started");
+    n = draw_peek(r);
+    if (n < 0) return -1;
+    if (n && r->draw_pending.frame == r->draw_frame && r->draw_pending.draw == r->draw_index)
+        return cm_fail(r->draw_clock_path, r->draw_clock_next, "unconsumed timer read");
+    r->draw_active = 0;
+    return 0;
+}
+
+int replay_ui_next(cm_replay *r, uint32_t frame, cm_replay_ui *action)
+{
+    int n = ui_peek(r);
+    if (n < 0) return -1;
+    if (r->next == r->file.size) return 0; /* Unpaired terminal checkpoint. */
+    if (n && r->ui_pending.frame < frame)
+        return cm_fail(r->ui_action_path, r->ui_action_next, "missed UI action input");
+    if (!n || r->ui_pending.frame > frame) return 0;
+    *action = r->ui_pending;
+    r->has_ui_pending = 0;
+    return 1;
+}
+
 int replay_open(cm_replay *r, const char *path)
 {
+    static const char *const draw_header[5] = {"frame","draw","phase","pc","ticks"};
+    static const char *const ui_header[5] = {"frame","ticks","action","slot","name_hex24"};
     char *fields[TRACE_FIELDS_MAX];
     int64_t n, address, length;
     uint32_t total = 0;
@@ -175,15 +311,21 @@ int replay_open(cm_replay *r, const char *path)
         strcmp(fields[0], "frame") || strcmp(fields[CM_TRACE_COLUMNS], "keys") ||
         strcmp(fields[CM_TRACE_COLUMNS + 1], "input_keys") ||
         strcmp(fields[CM_TRACE_COLUMNS + 2], "ranges...")) goto bad;
-    if (seed_metadata(r) || actor_clock_metadata(r)) {
-        platform_file_release(&r->file);
-        platform_file_release(&r->actor_clocks);
+    if (seed_metadata(r) || actor_clock_metadata(r) ||
+        draw_metadata(r, &r->draw_clocks, r->draw_clock_path, sizeof r->draw_clock_path,
+                      &r->draw_clock_next, "draw-clocks.csv", draw_header) ||
+        draw_metadata(r, &r->ui_actions, r->ui_action_path, sizeof r->ui_action_path,
+                      &r->ui_action_next, "ui-actions.csv", ui_header)) {
+        replay_close(r);
         return -1;
+    }
+    if (r->draw_clocks.data && !r->ui_actions.data) {
+        replay_close(r);
+        return cm_fail(path, 0, "draw clocks require companion UI action inputs");
     }
     return 0;
 bad:
-    platform_file_release(&r->file);
-    platform_file_release(&r->actor_clocks);
+    replay_close(r);
     return cm_fail(path, r->next, "invalid CMTRACE1 header");
 }
 
@@ -191,6 +333,8 @@ void replay_close(cm_replay *r)
 {
     platform_file_release(&r->file);
     platform_file_release(&r->actor_clocks);
+    platform_file_release(&r->draw_clocks);
+    platform_file_release(&r->ui_actions);
 }
 
 int replay_next(cm_replay *r, cm_replay_frame *frame)
@@ -202,6 +346,18 @@ int replay_next(cm_replay *r, cm_replay_frame *frame)
         if (n < 0) goto bad;
         if (r->actor_clock_next != r->actor_clocks.size)
             return cm_fail(r->actor_clock_path, r->actor_clock_next, "extra actor clock rows");
+        while ((n = draw_peek(r)) > 0) {
+            if (!r->frame || r->draw_pending.frame != r->frame - 1)
+                return cm_fail(r->draw_clock_path, r->draw_clock_next, "extra or missed draw clocks");
+            r->has_draw_pending = 0;
+        }
+        if (n < 0) return -1;
+        while ((n = ui_peek(r)) > 0) {
+            if (!r->frame || r->ui_pending.frame != r->frame - 1)
+                return cm_fail(r->ui_action_path, r->ui_action_next, "extra or missed UI inputs");
+            r->has_ui_pending = 0;
+        }
+        if (n < 0) return -1;
         return 0;
     }
     if ((unsigned)n != CM_TRACE_COLUMNS + 2 + r->range_count) goto bad;

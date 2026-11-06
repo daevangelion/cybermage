@@ -52,6 +52,21 @@ static char executable_path[PATH_BYTES];
 static char controls_path[PATH_BYTES];
 static int auto_save = -1;
 
+typedef struct {
+    uint32_t frame;
+    cm_replay *trace;
+} frame_draw;
+
+static int draw_time(void *context, uint32_t site, uint32_t *ticks)
+{
+    frame_draw *draw = context;
+    if (draw->trace) {
+        if (replay_draw_clock(draw->trace, site, ticks)) return -1;
+    } else *ticks = platform_ticks(draw->frame);
+    ui.ticks = events.ticks = *ticks;
+    return 0;
+}
+
 static int make_path(char *out, size_t size, const char *dir, const char *file)
 {
     int n = snprintf(out, size, "%s/%s", dir, file);
@@ -172,6 +187,65 @@ static void camera_follow(void)
     game.camera.angle = o->heading;
 }
 
+/* Image1::Render -> primary Xox::RenderBellsAndWhistles. SaveGame0500B7
+ * invokes this same pipeline before serializing, without advancing the world. */
+static int game_draw(frame_draw *draw, unsigned phase)
+{
+    const cm_draw_clock clock = {draw, draw_time};
+    ui_view view, backdrop_view;
+    ui_hud hud = {0};
+    int visual_mode = simulation.modern_aim && simulation.pc_mode == 3 ?
+        simulation.previous_pc_mode : simulation.pc_mode;
+    if (draw->trace) {
+        int begin = replay_draw_begin(draw->trace, draw->frame, phase);
+        if (begin <= 0) return begin;
+    }
+    if (ui_game_view(&ui, simulation.pc_mode, simulation.vehicle_type, &view) ||
+        render_set_view(view.x, view.y, view.width, view.height)) return -1;
+    {
+        vis_view target = {view.x, view.y, view.width, view.height};
+        if (target_query(&actors.targets, &game, &game.camera, &target)) return -1;
+    }
+    backdrop_view = view;
+    if (gl_enabled) {
+        /* A save redraw and the following game redraw are separate composites. */
+        if (gl_overlay_end() || gl_world_view(view, &backdrop_view) || gl_overlay_begin())
+            return -1;
+    } else if (render_draw(&game, &game.camera, pixels)) return -1;
+    if (ui_draw_backdrop(&ui, pixels, simulation.pc_mode,
+                         simulation.vehicle_type, backdrop_view) ||
+        ui_draw_pc_tint(&ui, pixels, &actors, view, 0)) return -1;
+    if (simulation.pc_mode == 7 &&
+        ((simulation.vehicle_type == 1 && ui_draw_vehicle_muzzle(&ui, &actors, pixels)) ||
+         ui_draw_vehicle(&ui, &game, pixels, simulation.vehicle_type,
+                          simulation.flight_unk_144B48, simulation.unk_131418)))
+        return -1;
+    if ((visual_mode == 1 || visual_mode == 2 || visual_mode == 5) &&
+        ui_draw_live_hand(&ui, &game, pixels, visual_mode, &events, &actors, view))
+        return -1;
+    if (!simulation.modern_aim && (simulation.pc_mode == 3 || simulation.pc_mode == 4) &&
+        events_selector_needs_input(&events) &&
+        ui_draw_selector(&ui, &game, &events, pixels)) return -1;
+    if (ui_draw_pc_tint(&ui, pixels, &actors, view, 1) ||
+        ui_hud_from_world(&hud, &game, &events, ui.hp_count, visual_mode) ||
+        ui_render_bells_and_whistles(&ui, pixels, &hud, &clock) ||
+        (!death_phase && ai_pc_draw_advance(&actors, &simulation, &game, &clock)))
+        return -1;
+    {
+        const snd_dialogue *dialogue = snd_text();
+        if (dialogue->active && !dialogue->spoken) {
+            int result = ui_text_message(&ui, &game, pixels, dialogue->lines,
+                dialogue->line_count, dialogue->revision, dialogue->object, view);
+            if (result < 0) return -1;
+            if (result > 0) snd_message_stop();
+        }
+    }
+    /* SpeechMessage019423/TextMessage01942A precedes DrawConsole01942F. */
+    if (events_text_finish(&events, &game) ||
+        events_countdown(&events, &simulation, &actors, &game)) return -1;
+    return draw->trace ? replay_draw_end(draw->trace) : 0;
+}
+
 static int load_scene(const char *data, unsigned scene)
 {
     uint32_t regen_timer = actors.pc.sp_regen_timer;
@@ -236,13 +310,15 @@ static int encode_save(uint32_t *size)
     return result ? -1 : 0;
 }
 
-static int save_game(const char *user, unsigned slot)
+static int save_game(const char *user, unsigned slot, frame_draw *draw)
 {
     char name[24];
     uint32_t size;
     if (slot > UI_SAVE_SLOTS) return cm_fail("SaveGame", slot, "invalid save slot");
     if (auto_save < -1 || auto_save >= EVENTS_AUTO_MAX)
         return cm_fail("GAMENAME.USR", slot, "invalid automatic save reference");
+    camera_follow();
+    if (game_draw(draw, CM_DRAW_SAVE)) return -1;
     snprintf(name, sizeof name, "SAVE%03u.DAT", slot);
     if (make_path(save_path, sizeof save_path, user, name) || encode_save(&size)) return -1;
     if (platform_file_write(save_path, save_data, size)) return -1;
@@ -414,7 +490,7 @@ out:
     return result;
 }
 
-static int next_scene(const char *data, const char *user)
+static int next_scene(const char *data, const char *user, frame_draw *draw)
 {
     events_scene_request request = events.scene_requested;
     world_object *player;
@@ -438,8 +514,7 @@ static int next_scene(const char *data, const char *user)
     player->floor_z = request.z;
     player->heading = request.heading;
     if (world_make_omap(&game)) return -1;
-    camera_follow();
-    return save_game(user, UI_SAVE_SLOTS);
+    return save_game(user, UI_SAVE_SLOTS, draw);
 }
 
 static int movie_start(const char *data, unsigned kind, uint32_t ticks)
@@ -776,6 +851,7 @@ int main(int argc, char **argv)
     if (ai_init_pc(&events, &simulation, &game.rng, &exe, 1, platform_ticks(0))) goto out;
     while (!input.quit && (!frames || frame < frames)) {
         uint32_t ticks = platform_ticks(frame);
+        frame_draw draw = {frame, trace ? &replay : NULL};
         ui_action action;
         int shop_modal = 0;
         int movie_canvas = 0, drawable = 1;
@@ -853,6 +929,25 @@ int main(int argc, char **argv)
             input.raw_count = 0;
             memset(input.pressed, 0, sizeof input.pressed);
             memset(input.released, 0, sizeof input.released);
+            {
+                cm_replay_ui command;
+                int next;
+                while ((next = replay_ui_next(&replay, frame, &command)) > 0) {
+                    ui.ticks = events.ticks = command.ticks;
+                    if (command.action == 1) {
+                        if (command.slot < UI_SAVE_SLOTS)
+                            memcpy(ui.names[command.slot], command.name, sizeof command.name);
+                        if (save_game(user, command.slot, &draw)) goto out;
+                    } else {
+                        if (load_game(data, user, command.slot, command.ticks)) goto out;
+                        replay_input(&simulation, &recorded);
+                    }
+                    /* Menu-return loop01BD28 clears all keyboard states. */
+                    memset(simulation.kb_scan_status, 0, sizeof simulation.kb_scan_status);
+                    ui_open(&ui, UI_GAME);
+                }
+                if (next < 0) goto out;
+            }
         }
         if (!trace && (!playing || ui.screen != UI_GAME)) {
             unsigned key;
@@ -892,13 +987,13 @@ int main(int argc, char **argv)
         if (action == UI_SPEECH_REPLAY && snd_log_replay(&game, ui.slot)) goto out;
         if (action == UI_NEW_GAME || action == UI_TRAINING) {
             unsigned scene = action == UI_TRAINING ? 11u : 1u;
-            if (new_game(data, scene, ticks) || save_game(user, UI_SAVE_SLOTS)) goto out;
+            if (new_game(data, scene, ticks) || save_game(user, UI_SAVE_SLOTS, &draw)) goto out;
             input.raw_count = 0;
             playing = 1;
         }
         if (action == UI_SAVE_GAME || action == UI_LOAD_GAME) {
             if (action == UI_SAVE_GAME) {
-                if (save_game(user, ui.slot)) goto out;
+                if (save_game(user, ui.slot, &draw)) goto out;
                 ui_open(&ui, UI_GAME);
             } else {
                 int loaded = load_requested(data, user, ticks);
@@ -928,9 +1023,8 @@ int main(int argc, char **argv)
                 fast_ticks = trace ? recorded.fast_actor_ticks : platform_ticks(frame);
                 normal_ticks = trace ? recorded.normal_actor_ticks : platform_ticks(frame);
                 if (ai_update_objects(&actors, &simulation, &game, normal_ticks, fast_ticks) ||
-                    ai_pc_hand2hand(&actors, &simulation, &game) ||
-                    events_countdown(&events, &simulation, &actors, &game)) goto out;
-                if (events.scene_requested.pending && next_scene(data, user)) goto out;
+                    ai_pc_hand2hand(&actors, &simulation, &game)) goto out;
+                if (events.scene_requested.pending && next_scene(data, user, &draw)) goto out;
                 camera_follow();
                 if (snd_tick(&game)) goto out;
                 if (events.ending_requested) {
@@ -947,55 +1041,23 @@ int main(int argc, char **argv)
                 simulation.previous_ticks = simulation.bp_limit_time = ticks;
                 ai_start_clock(&actors, ticks);
             }
-            if (ui.screen == UI_GAME) {
-                if (ui_game_view(&ui, simulation.pc_mode, simulation.vehicle_type, &view))
-                    goto out;
+            if (ui.screen == UI_GAME && !shop_modal) {
+                if (game_draw(&draw, CM_DRAW_NORMAL)) goto out;
             } else {
-                view.x = view.y = 0;
-                view.width = CM_WIDTH;
-                view.height = CM_HEIGHT;
-            }
-            if (render_set_view(view.x, view.y, view.width, view.height)) goto out;
-            if (ui.screen == UI_GAME && !shop_modal) {
-                vis_view target = {view.x, view.y, view.width, view.height};
-                if (target_query(&actors.targets, &game, &game.camera, &target)) goto out;
-            }
-            if (ui.screen != UI_GAME) memset(pixels, 0, sizeof pixels);
-            backdrop_view = view;
-            if (gl_enabled) {
-                if (gl_world_view(view, &backdrop_view) || gl_overlay_begin()) goto out;
-            } else if (render_draw(&game, &game.camera, pixels)) goto out;
-            if (ui.screen == UI_GAME && !shop_modal) {
-                ui_hud hud = {0};
-                int visual_mode = simulation.modern_aim && simulation.pc_mode == 3 ?
-                    simulation.previous_pc_mode : simulation.pc_mode;
-                if (ui_draw_backdrop(&ui, pixels, simulation.pc_mode,
-                                     simulation.vehicle_type, backdrop_view) ||
-                    ui_draw_pc_tint(&ui, pixels, &actors, view, 0)) goto out;
-                if (simulation.pc_mode == 7 &&
-                    ((simulation.vehicle_type == 1 &&
-                      ui_draw_vehicle_muzzle(&ui, &actors, pixels)) ||
-                     ui_draw_vehicle(&ui, &game, pixels, simulation.vehicle_type,
-                                     simulation.flight_unk_144B48, simulation.unk_131418)))
-                     goto out;
-                if ((visual_mode == 1 || visual_mode == 2 || visual_mode == 5) &&
-                    ui_draw_live_hand(&ui, &game, pixels, visual_mode,
-                                      &events, &actors, view)) goto out;
-                if (!simulation.modern_aim && (simulation.pc_mode == 3 || simulation.pc_mode == 4) &&
-                    ui_draw_selector(&ui, &game, &events, pixels)) goto out;
-                if (ui_draw_pc_tint(&ui, pixels, &actors, view, 1)) goto out;
-                if (ui_hud_from_world(&hud, &game, &events, ui.hp_count, visual_mode) ||
-                    ui_render_bells_and_whistles(&ui, pixels, &hud)) goto out;
-                if (!death_phase && ai_pc_draw_advance(&actors, &simulation, &game)) goto out;
-                {
-                    const snd_dialogue *dialogue = snd_text();
-                    if (dialogue->active && !dialogue->spoken) {
-                        int result = ui_text_message(&ui, &game, pixels, dialogue->lines,
-                            dialogue->line_count, dialogue->revision, dialogue->object, view);
-                        if (result < 0) goto out;
-                        if (result > 0) snd_message_stop();
-                    }
+                if (ui.screen == UI_GAME) {
+                    if (ui_game_view(&ui, simulation.pc_mode, simulation.vehicle_type, &view))
+                        goto out;
+                } else {
+                    view.x = view.y = 0;
+                    view.width = CM_WIDTH;
+                    view.height = CM_HEIGHT;
+                    memset(pixels, 0, sizeof pixels);
                 }
+                if (render_set_view(view.x, view.y, view.width, view.height)) goto out;
+                backdrop_view = view;
+                if (gl_enabled) {
+                    if (gl_world_view(view, &backdrop_view) || gl_overlay_begin()) goto out;
+                } else if (render_draw(&game, &game.camera, pixels)) goto out;
             }
             if (modern && ui.screen == UI_GAME && !shop_modal &&
                 controls_draw_map(&controls, &game, pixels)) goto out;

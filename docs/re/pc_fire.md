@@ -54,7 +54,7 @@ Retail CM_HI.EXE v1.01F LE link addresses. Gameplay only; UI consumes state.
   previous combat mode while the existing input machinery uses mode3.
 - RenderBells0x18BA4/0x18D73 advances positive/negative muzzle sequences after
   drawing; DrawACarMonitor0x157AC does the same for aircar positive sequences.
-  Call `ai_pc_draw_advance(a,s,w)` after the read-only HUD, before dialogue.
+  Call `ai_pc_draw_advance(a,s,w,clock)` after the read-only HUD, before dialogue.
   Glow frame advances modulo4 at0x1BA49 when bp_limit_flag is nonzero.
 - One-frame tint1444EC clears at0x18A05; damage flash1444E8 decrements at0x190F1
   after its viewport tint. Both use every draw, including zero-tick draws, rather
@@ -63,6 +63,15 @@ Retail CM_HI.EXE v1.01F LE link addresses. Gameplay only; UI consumes state.
   than global spRegenTimer206834. The interval is max(6,65-signed16(max_energy)/10);
   the deadline advances even at full energy. It survives scene/NewGame/save loads.
   StatusMonitor0x19286 precedes recovery, so the HUD sees the increment next frame.
+  The clock is read at19377 for comparison and, only when due, again at193A4
+  for the new deadline; an IRQ may separate those reads. The canonical
+  `pc.regen_interval`(+131414) is recomputed on every draw and saved explicitly
+  in prefix words866/867. Status blip time uses its separate16391 input through
+  `ui_status_advance`, shared with pixel-free verification.
+  SaveGame0500B7 invokes the same render/HUD pipeline once before encoding;
+  it is not an artificial extra RNG request. `draw-clocks.csv` and actual
+  slot/name `ui-actions.csv` inputs drive replay; missing timing inputs fail
+  closed. See `bootstrap.md` for the frame286 save fixture.
 - Low-HP respiration0x1928B..0x19340 reads PERSON0, including while driving.
   Positive HP below signed maxHP/2 and the real SwordHum gate consume
   RND(HP/2+2) before CheckSound(PCSound,3). A zero chance result and completed

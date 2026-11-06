@@ -40,6 +40,7 @@ static void selector_key(unsigned scan)
 /* Run while main still owns the loaded resources; no duplicated scene loader. */
 void sim_loop_checks(void)
 {
+    frame_draw draw = {0, NULL};
     world_object position = game.objects[game.player_object];
     if(generic_hand) {
         assert(game.scene==1 && simulation.pc_mode==3 && !events.selector_kind);
@@ -69,7 +70,7 @@ void sim_loop_checks(void)
     assert(!ai_set_difficulty(&actors, &game, 2));
     ui.options[8] = 2;
     dirty_selectors();
-    assert(!save_game(test_user, 0));
+    assert(!save_game(test_user, 0, &draw));
     selectors_reset();
     assert(actors.difficulty == 2);
     events.cash = 0;
@@ -132,7 +133,7 @@ void sim_loop_checks(void)
     events.scene_requested.y = position.y;
     events.scene_requested.z = position.floor_z;
     events.scene_requested.heading = position.heading;
-    assert(!next_scene("../orig/retail", test_user));
+    assert(!next_scene("../orig/retail", test_user, &draw));
     assert(!events.scene_requested.pending);
     assert(events.cash == 123 && events.energy == 31);
     assert((uint16_t)game.persons[0].unk_0038 == 23);
@@ -141,14 +142,14 @@ void sim_loop_checks(void)
     events.events[1].value[0] = 765;
     events.scene_requested.pending = 1;
     events.scene_requested.auto_mode = 2;
-    assert(!next_scene("../orig/retail", test_user));
+    assert(!next_scene("../orig/retail", test_user, &draw));
     assert(auto_save == 0);
     events.cash = 124;
     events.energy = 30;
     game.persons[0].unk_0038 = 40 * 65536 + 17;
     events.scene_requested.pending = 1;
     events.scene_requested.auto_mode = 1;
-    assert(!next_scene("../orig/retail", test_user));
+    assert(!next_scene("../orig/retail", test_user, &draw));
     assert(auto_save == -1);
     assert(events.events[1].value[0] == 765);
     assert(events.cash == 124 && events.energy == 30);
@@ -201,7 +202,7 @@ void sim_loop_checks(void)
             assert(!load_requested("../orig/retail", test_user, 73));
             assert(auto_save == before);
             ui.auto_ptr[1] = pointer;
-            assert(!save_game(test_user, 0));
+            assert(!save_game(test_user, 0, &draw));
         }
     }
     {

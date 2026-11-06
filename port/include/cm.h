@@ -14,6 +14,13 @@ typedef struct {
     const char *message;
 } cm_error;
 
+/* Timer input at an original draw instruction, not a frame-entry estimate.
+ * read returns zero or a diagnosed -1. The deadline read is conditional. */
+typedef struct {
+    void *context;
+    int (*read)(void *context, uint32_t site, uint32_t *ticks);
+} cm_draw_clock;
+
 /* Platform owns diagnostics; failures return -1, success returns zero. */
 int cm_fail(const char *file, uint32_t offset, const char *message);
 const cm_error *cm_last_error(void);

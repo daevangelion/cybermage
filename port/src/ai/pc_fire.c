@@ -814,17 +814,25 @@ int ai_pc_input(ai_state *a, sim_state *s, world *w)
 
 /* RenderBells: defer hand counters until after the read-only HUD, then run
  * low-HP respiration 0x1928B..0x19340 and energy recovery 0x19340..0x193B2. */
-int ai_pc_draw_advance(ai_state *a, const sim_state *s, world *w)
+int ai_pc_draw_advance(ai_state *a, const sim_state *s, world *w,
+                        const cm_draw_clock *clock)
 {
     ai_pc_state *p;
     events_state *e;
+    uint32_t ticks;
     int mode, maximum, interval, hp, max_hp;
-    if (!a || !s || !w || !a->events || !w->person_count)
+    if (!a || !s || !w || !a->events || !w->person_count || !clock || !clock->read)
         return cm_fail("RenderBells", 0x1928b, "missing player state");
     p = &a->pc; e = a->events; mode = combat_mode(s);
     /* RenderBells 0x18A05/0x190F1: per-draw effects, not timer-gated. */
     p->unk_1444EC = 0;
     if (a->pc_flash) a->pc_flash = ai_sub32(a->pc_flash, 1);
+    /* The hand was drawn before StatusMonitor and respiration. */
+    if ((mode == 1 || mode == 5 || (mode == 7 && s->vehicle_type)) &&
+        p->muzzle_mode && !(mode == 7 && p->muzzle_mode < 0)) {
+        p->muzzle_count = ai_add32(p->muzzle_count, 1);
+        p->muzzle_mode += p->muzzle_mode > 0 ? -1 : 1;
+    }
     /* PERSON0 is the foot body even while player_person names a vehicle.
      * Death dispatch is owned by the main loop. Chance precedes CheckSound. */
     hp = low_word(w->persons[0].unk_0038);
@@ -836,15 +844,14 @@ int ai_pc_draw_advance(ai_state *a, const sim_state *s, world *w)
     maximum = signed16((uint32_t)e->max_energy);
     interval = 65-maximum/10;
     if (interval < 6) interval = 6;
-    if (after(s->timer_ticks, p->sp_regen_timer)) {
+    p->regen_interval = interval; /* 19362..1936D, including full energy. */
+    if (clock->read(clock->context, 0x19377, &ticks)) return -1;
+    if (after(ticks, p->sp_regen_timer)) {
         if (signed16((uint32_t)e->energy) < maximum)
             e->energy = signed16((uint32_t)e->energy+1);
-        p->sp_regen_timer = s->timer_ticks+(uint32_t)interval;
+        if (clock->read(clock->context, 0x193a4, &ticks)) return -1;
+        p->sp_regen_timer = ticks+(uint32_t)interval;
     }
-    if (mode != 1 && mode != 5 && !(mode == 7 && s->vehicle_type)) return 0;
-    if (!p->muzzle_mode || (mode == 7 && p->muzzle_mode < 0)) return 0;
-    p->muzzle_count = ai_add32(p->muzzle_count, 1);
-    p->muzzle_mode += p->muzzle_mode > 0 ? -1 : 1;
     return 0;
 }
 

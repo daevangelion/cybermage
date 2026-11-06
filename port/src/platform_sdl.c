@@ -43,6 +43,8 @@ static int touch_visible;
 static double touch_look_fraction_x, touch_look_fraction_y;
 static uint8_t focus_keys[CM_KEY_COUNT], focus_axes[6];
 static uint32_t focus_mouse, focus_pad;
+static int64_t mickey_fraction_x, mickey_fraction_y;
+static int mickey_width, mickey_height, mouse_warp_pending, mouse_warp_x, mouse_warp_y;
 
 #define TOUCH_FINGERS_MAX 10
 typedef struct {
@@ -242,6 +244,8 @@ void platform_shutdown(void)
     surface = NULL;
     converted = NULL;
     window = NULL;
+    mickey_fraction_x = mickey_fraction_y = 0;
+    mickey_width = mickey_height = mouse_warp_pending = 0;
     SDL_free(user_dir);
     user_dir = NULL;
     SDL_Quit();
@@ -277,6 +281,32 @@ static int pointer_point(int x, int y, int *game_x, int *game_y)
            x < rect.x + rect.w && y < rect.y + rect.h;
 }
 
+static int16_t mickey_add(int16_t old, int64_t delta)
+{
+    uint16_t bits = (uint16_t)((uint64_t)(int64_t)old + (uint64_t)delta);
+    return bits <= INT16_MAX ? (int16_t)bits : (int16_t)((int)bits - 65536);
+}
+
+static void classic_motion(cm_input *input, int dx, int dy)
+{
+    SDL_Rect rect;
+    int w, h;
+    int64_t x, y;
+    if (modern_controls || !window) return;
+    SDL_GetWindowSize(window, &w, &h);
+    rect = viewport(w, h);
+    if (!rect.w || !rect.h) return;
+    if (rect.w != mickey_width || rect.h != mickey_height) {
+        mickey_fraction_x = mickey_fraction_y = 0;
+        mickey_width = rect.w; mickey_height = rect.h;
+    }
+    x = (int64_t)dx * CM_WIDTH + mickey_fraction_x;
+    y = (int64_t)dy * (CM_HEIGHT / 2) + mickey_fraction_y;
+    input->mouse_mickey_x = mickey_add(input->mouse_mickey_x, x / rect.w);
+    input->mouse_mickey_y = mickey_add(input->mouse_mickey_y, y / rect.h);
+    mickey_fraction_x = x % rect.w; mickey_fraction_y = y % rect.h;
+}
+
 void platform_mouse_warp(int x, int y)
 {
     SDL_Rect rect;
@@ -286,14 +316,22 @@ void platform_mouse_warp(int x, int y)
     if(!rect.w || !rect.h) return;
     if(x<0) x=0;else if(x>=CM_WIDTH) x=CM_WIDTH-1;
     if(y<0) y=0;else if(y>=CM_HEIGHT) y=CM_HEIGHT-1;
-    SDL_WarpMouseInWindow(window,rect.x+(int)((int64_t)x*rect.w/CM_WIDTH),
-                         rect.y+(int)((int64_t)y*rect.h/CM_HEIGHT));
+    mouse_warp_x = rect.x+(int)((int64_t)x*rect.w/CM_WIDTH);
+    mouse_warp_y = rect.y+(int)((int64_t)y*rect.h/CM_HEIGHT);
+    mouse_warp_pending = 1;
+    SDL_WarpMouseInWindow(window,mouse_warp_x,mouse_warp_y);
 }
 
 static void mouse_button(cm_input *input, unsigned bit, int down)
 {
     if (down) {
-        if (!(input->mouse_buttons & bit)) input->mouse_pressed |= bit;
+        if (!(input->mouse_buttons & bit)) {
+            input->mouse_pressed |= bit;
+            if (bit == SDL_BUTTON_LMASK || bit == SDL_BUTTON_RMASK) {
+                unsigned index = bit == SDL_BUTTON_RMASK;
+                input->mouse_press_count[index] = (uint16_t)(input->mouse_press_count[index] + 1u);
+            }
+        }
         input->mouse_buttons |= bit;
     } else {
         if (input->mouse_buttons & bit) input->mouse_released |= bit;
@@ -635,6 +673,8 @@ int platform_poll(cm_input *input, unsigned frame)
     input->touch_count = 0;
     input->mouse_pressed = input->mouse_released = 0;
     input->mouse_dx = input->mouse_dy = 0;
+    input->mouse_mickey_x = input->mouse_mickey_y = 0;
+    input->mouse_press_count[0] = input->mouse_press_count[1] = 0;
     input->mouse_wheel = 0;
     input->touch_look_dx = input->touch_look_dy = 0;
     input->focus_lost = input->pad_disconnected = 0;
@@ -656,10 +696,15 @@ int platform_poll(cm_input *input, unsigned frame)
             break;
         }
         case SDL_MOUSEMOTION: {
+            int warped = mouse_warp_pending &&
+                e.motion.x == mouse_warp_x && e.motion.y == mouse_warp_y;
             if (modern_controls && !input_focus) break;
+            mouse_warp_pending = 0;
             if (window) pointer_point(e.motion.x, e.motion.y, &input->mouse_x, &input->mouse_y);
+            if (warped) break; /* Guest SetXY does not create AX0B mickeys. */
             input->mouse_dx += e.motion.xrel;
             input->mouse_dy += e.motion.yrel;
+            classic_motion(input, e.motion.xrel, e.motion.yrel);
             break;
         }
         case SDL_MOUSEBUTTONDOWN: case SDL_MOUSEBUTTONUP: {

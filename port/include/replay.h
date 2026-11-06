@@ -6,12 +6,26 @@
 #define CM_TRACE_COLUMNS 23
 
 typedef struct { unsigned relative; uint32_t address, length; } cm_trace_range;
+enum { CM_DRAW_NORMAL, CM_DRAW_SAVE, CM_DRAW_LOAD };
 typedef struct {
-    cm_file file, actor_clocks;
+    uint32_t frame, draw, phase, site, ticks;
+} cm_replay_draw;
+typedef struct {
+    uint32_t frame, ticks, action, slot;
+    uint8_t name[24];
+} cm_replay_ui;
+typedef struct {
+    cm_file file, actor_clocks, draw_clocks, ui_actions;
     const char *path;
     char actor_clock_path[1024];
+    char draw_clock_path[1024], ui_action_path[1024];
     uint32_t next, frame;
     uint32_t actor_clock_next;
+    uint32_t draw_clock_next, ui_action_next;
+    cm_replay_draw draw_pending;
+    cm_replay_ui ui_pending;
+    uint32_t draw_frame, draw_index, draw_phase;
+    int has_draw_pending, has_ui_pending, draw_active, has_draw_frame;
     unsigned range_count;
     uint16_t bios_seed;
     int has_bios_seed;
@@ -40,6 +54,13 @@ int replay_open(cm_replay *r, const char *path);
 void replay_close(cm_replay *r);
 /* 1 record, 0 EOF, -1 malformed. Ranges borrow ASCII-hex spans in file. */
 int replay_next(cm_replay *r, cm_replay_frame *frame);
+/* Exact read-only draw inputs. begin returns1, or0 for the unpaired terminal
+ * frame. No frame-tick replacement for missing measured clocks. */
+int replay_draw_begin(cm_replay *r, uint32_t frame, unsigned phase);
+int replay_draw_clock(cm_replay *r, uint32_t site, uint32_t *ticks);
+int replay_draw_end(cm_replay *r);
+/* Completed menu inputs before this frame's simulation:1 row,0 none,-1 bad. */
+int replay_ui_next(cm_replay *r, uint32_t frame, cm_replay_ui *action);
 void replay_input(sim_state *s, const cm_replay_frame *f);
 const char *replay_compare(const world *w, const cm_replay_frame *f,
                             int64_t *expected, int64_t *actual);

@@ -11,485 +11,12 @@ index fc1ccc6..8ae8265 100644
          for frame in 0..280 {
              if frame == 180 {gamepad::tap(&mut emu.m.kbd_queue,0x1C,false);}
              gamepad::controller_input(&emu.m,&mut emu.cpu);
-diff --git a/crates/game/src/frontend.rs b/crates/game/src/frontend.rs
-index b28668a..4e25654 100644
---- a/crates/game/src/frontend.rs
-+++ b/crates/game/src/frontend.rs
-@@ -532,7 +532,7 @@ mod tests {
-             crate::native::install(&mut m,&mut cpu);
-             m.gamepad.connected = true;
-             let mut emu = Emu { cpu, m, ips: 100_000_000.0, cfg_trace: false, watches: Vec::new(),
--                profile: None, counter: None, profile_start: 0.0, scene_override: None, vehicle_anywhere: None, realtime_last: None };
-+                profile: None, counter: None, profile_start: 0.0, scene_override: None, vehicle_anywhere: None, realtime_last: None, frame_trace: None };
-             for frame in 0..280 {
-                 if in_game && frame == 180 { gamepad::tap(&mut emu.m.kbd_queue,0x1C,false); }
-                 advance(&mut emu);
-diff --git a/crates/game/src/machine.rs b/crates/game/src/machine.rs
-index 5118211..9d52000 100644
---- a/crates/game/src/machine.rs
-+++ b/crates/game/src/machine.rs
-@@ -24,6 +24,14 @@ pub const SEL_DATA: u16 = 0x10;
- pub const SEL_PSP: u16 = 0x18;
- pub const SEL_ENV: u16 = 0x20;
- const FIRST_DYN_SEL: usize = 8;
-+const BIOS_KB_HEAD: u32 = 0x41A;
-+const BIOS_KB_TAIL: u32 = 0x41C;
-+const BIOS_KB_START: u32 = 0x480;
-+const BIOS_KB_END: u32 = 0x482;
-+const BIOS_DATA: u32 = 0x400;
-+const BIOS_KB_FLAGS: u32 = 0x417;
-+const BIOS_KB_FLAGS2: u32 = 0x418;
-+const BIOS_KB_FLAGS3: u32 = 0x496;
- 
- // ---- HLE trap ids ----------------------------------------------------------
- /// Default handler for interrupt vector n: id = n (stub ends with IRET).
-@@ -107,7 +115,7 @@ pub struct Machine {
-     pub pit_chan0_write_lo: Option<u8>,
-     pub kbd_queue: VecDeque<u8>,
-     pub port60: u8,
--    pub kbd_bios: VecDeque<u16>,
-+    dos_key_pending: Option<u8>,
-     pub mouse: Mouse,
-     pub hooks: Vec<Hook>,
-     pub exit_code: Option<i32>,
-@@ -151,7 +159,7 @@ impl Machine {
-             pit_chan0_write_lo: None,
-             kbd_queue: VecDeque::new(),
-             port60: 0,
--            kbd_bios: VecDeque::new(),
-+            dos_key_pending: None,
-             mouse: Mouse {
-                 x: 320,
-                 y: 240,
-@@ -254,6 +262,14 @@ impl Machine {
-         cpu.wr8(0x449, 3);
-         cpu.wr16(0x44A, 80);
-         cpu.wr8(0x484, 24);
-+        cpu.wr16(BIOS_KB_START, 0x1E);
-+        cpu.wr16(BIOS_KB_END, 0x3E);
-+        cpu.wr16(BIOS_KB_HEAD, 0x1E);
-+        cpu.wr16(BIOS_KB_TAIL, 0x1E);
-+        cpu.wr8(BIOS_KB_FLAGS, 0);
-+        cpu.wr8(BIOS_KB_FLAGS2, 0);
-+        cpu.wr8(BIOS_KB_FLAGS3, 0x10); // Enhanced keyboard present.
-+        self.dos_key_pending = None;
-         // interrupt stubs: for each vector n, `0F FF n 00 ; IRET`
-         for n in 0..256u32 {
-             let a = STUB_BASE + n * 8;
-@@ -354,15 +370,98 @@ impl Machine {
-             1 => {
-                 // BIOS keyboard handler: translate the latched scancode into the BIOS buffer
-                 let sc = self.port60;
-+                if Self::bios_key_modifier(cpu, sc) { return; }
-                 if sc & 0x80 == 0 && sc != 0xE0 {
-                     let ascii = crate::input::scancode_ascii(sc);
--                    self.kbd_bios.push_back(((sc as u16) << 8) | ascii as u16);
-+                    Self::bios_key_put(cpu, ((sc as u16) << 8) | ascii as u16);
-                 }
-             }
-             _ => {}
-         }
-     }
- 
-+    fn bios_key_flag(cpu: &mut Cpu, address: u32, mask: u8, down: bool) {
-+        let old = cpu.rd8(address);
-+        cpu.wr8(address, if down { old | mask } else { old & !mask });
-+    }
-+
-+    fn bios_key_modifier(cpu: &mut Cpu, scan: u8) -> bool {
-+        // BDA 40:17/18/96: left/right modifiers and the E0 prefix, not characters.
-+        // http://www.techhelpmanual.com/58-keyboard_shift_status_flags.html
-+        let flags3 = cpu.rd8(BIOS_KB_FLAGS3);
-+        if scan == 0xE0 {
-+            cpu.wr8(BIOS_KB_FLAGS3, flags3 | 2);
-+            return true;
-+        }
-+        let extended = flags3 & 2 != 0;
-+        cpu.wr8(BIOS_KB_FLAGS3, flags3 & !2);
-+        let down = scan & 0x80 == 0;
-+        match scan & 0x7F {
-+            0x2A | 0x36 => {
-+                if !extended { // Ignore PrintScreen's fake E0 Shift bytes.
-+                    Self::bios_key_flag(cpu, BIOS_KB_FLAGS,
-+                        if scan & 0x7F == 0x2A { 2 } else { 1 }, down);
-+                }
-+            }
-+            0x1D => {
-+                Self::bios_key_flag(cpu, if extended { BIOS_KB_FLAGS3 } else { BIOS_KB_FLAGS2 },
-+                    if extended { 4 } else { 1 }, down);
-+                let held = cpu.rd8(BIOS_KB_FLAGS2) & 1 != 0 || cpu.rd8(BIOS_KB_FLAGS3) & 4 != 0;
-+                Self::bios_key_flag(cpu, BIOS_KB_FLAGS, 4, held);
-+            }
-+            0x38 => {
-+                Self::bios_key_flag(cpu, if extended { BIOS_KB_FLAGS3 } else { BIOS_KB_FLAGS2 },
-+                    if extended { 8 } else { 2 }, down);
-+                let held = cpu.rd8(BIOS_KB_FLAGS2) & 2 != 0 || cpu.rd8(BIOS_KB_FLAGS3) & 8 != 0;
-+                Self::bios_key_flag(cpu, BIOS_KB_FLAGS, 8, held);
-+            }
-+            _ => return false,
-+        }
-+        true
-+    }
-+
-+    fn bios_key_ring(cpu: &Cpu) -> Option<(u16, u16, u16, u16)> {
-+        let start = cpu.rd16(BIOS_KB_START);
-+        let end = cpu.rd16(BIOS_KB_END);
-+        let head = cpu.rd16(BIOS_KB_HEAD);
-+        let tail = cpu.rd16(BIOS_KB_TAIL);
-+        if start & 1 != 0 || end & 1 != 0 || end.checked_sub(start)? < 4 ||
-+            head < start || head >= end || tail < start || tail >= end ||
-+            head & 1 != 0 || tail & 1 != 0 {
-+            return None;
-+        }
-+        Some((start, end, head, tail))
-+    }
-+
-+    fn bios_key_put(cpu: &mut Cpu, key: u16) {
-+        let Some((start, end, head, tail)) = Self::bios_key_ring(cpu) else { return; };
-+        let next = if tail + 2 == end { start } else { tail + 2 };
-+        if next == head { return; } // Full BIOS ring retains unread keys.
-+        cpu.wr16(BIOS_DATA + tail as u32, key);
-+        cpu.wr16(BIOS_KB_TAIL, next);
-+    }
-+
-+    fn bios_key_peek(cpu: &Cpu) -> Option<u16> {
-+        let (_, _, head, tail) = Self::bios_key_ring(cpu)?;
-+        if head == tail { None } else { Some(cpu.rd16(BIOS_DATA + head as u32)) }
-+    }
-+
-+    fn bios_key_get(cpu: &mut Cpu) -> Option<u16> {
-+        let (start, end, head, tail) = Self::bios_key_ring(cpu)?;
-+        if head == tail { return None; }
-+        let key = cpu.rd16(BIOS_DATA + head as u32);
-+        cpu.wr16(BIOS_KB_HEAD, if head + 2 == end { start } else { head + 2 });
-+        Some(key)
-+    }
-+
-+    fn dos_key_get(&mut self, cpu: &mut Cpu) -> Option<u8> {
-+        if let Some(scan) = self.dos_key_pending.take() { return Some(scan); }
-+        let key = Self::bios_key_get(cpu)?;
-+        let ascii = key as u8;
-+        if ascii == 0 { self.dos_key_pending = Some((key >> 8) as u8); }
-+        Some(ascii)
-+    }
-+
-     pub fn pit_hz(&self) -> f64 {
-         1193182.0 / self.pit_div as f64
-     }
-@@ -701,8 +800,8 @@ impl Machine {
-             }
-             0x06 => {
-                 if r.dx() as u8 == 0xFF {
--                    if let Some(k) = self.kbd_bios.pop_front() {
--                        r.set_al(k as u8);
-+                    if let Some(k) = self.dos_key_get(cpu) {
-+                        r.set_al(k);
-                         r.zf(false);
-                     } else {
-                         r.set_al(0);
-@@ -714,8 +813,8 @@ impl Machine {
-                 }
-             }
-             0x07 | 0x08 => {
--                let k = self.kbd_bios.pop_front().unwrap_or(0x1C0D);
--                r.set_al(k as u8);
-+                if let Some(k) = self.dos_key_get(cpu) { r.set_al(k); }
-+                else { cpu.eip = cpu.cur_eip; } // Wait for IRQ1; never invent Enter.
-             }
-             0x09 => {
-                 let mut a = r.ds_dx(cpu);
-@@ -730,7 +829,7 @@ impl Machine {
-                 }
-                 self.print(&s);
-             }
--            0x0B => r.set_al(if self.kbd_bios.is_empty() { 0 } else { 0xFF }),
-+            0x0B => r.set_al(if self.dos_key_pending.is_some() || Self::bios_key_peek(cpu).is_some() { 0xFF } else { 0 }),
-             0x0E => r.set_al(26),
-             0x19 => r.set_al(2), // C:
-             0x1A => self.dta = r.ds_dx(cpu),
-@@ -742,7 +841,7 @@ impl Machine {
-             0x25 => {
-                 let n = r.al();
-                 self.pm_vec[n as usize] = (r.ds, r.edx);
--                if n == 9 {
-+                if n == 9 && std::env::var_os("CM_ORIGINAL").is_none() {
-                     // On real hardware the release of the Enter key used to start the
-                     // game arrives after CM_ISR9 is installed; it primes the ISR's
-                     // key-state latch (otherwise the first key press is swallowed).
-@@ -813,7 +912,9 @@ impl Machine {
-                 };
-                 match res {
-                     Some(mut f) => {
--                        let patch = if mode == 0 { crate::rebrand::title_patch(&name, &mut f) } else { None };
-+                        let patch = if mode == 0 && std::env::var_os("CM_ORIGINAL").is_none() {
-+                            crate::rebrand::title_patch(&name, &mut f)
-+                        } else { None };
-                         let h = self.alloc_handle(DosFile { f, name: name.clone(), patch });
-                         if self.trace_ints {
-                             eprintln!("[dos] open {} -> {}", name, h);
-@@ -1360,17 +1461,23 @@ impl Machine {
-             0x10 => self.int10(cpu, r),
-             0x16 => match r.ah() {
-                 0x00 | 0x10 => {
--                    let k = self.kbd_bios.pop_front().unwrap_or(0);
--                    r.set_ax(k);
-+                    if let Some(k) = Self::bios_key_get(cpu) { r.set_ax(k); }
-+                    else { cpu.eip = cpu.cur_eip; }
-                 }
--                0x01 | 0x11 => match self.kbd_bios.front() {
--                    Some(&k) => {
-+                0x01 | 0x11 => match Self::bios_key_peek(cpu) {
-+                    Some(k) => {
-                         r.set_ax(k);
-                         r.zf(false);
-                     }
-                     None => r.zf(true),
-                 },
--                0x02 | 0x12 => r.set_al(0),
-+                0x02 => r.set_al(cpu.rd8(BIOS_KB_FLAGS)),
-+                0x12 => {
-+                    let left = cpu.rd8(BIOS_KB_FLAGS2);
-+                    let right = cpu.rd8(BIOS_KB_FLAGS3);
-+                    let high = (left & 0x73) | (right & 0x0C) | ((left & 4) << 5);
-+                    r.set_ax(cpu.rd8(BIOS_KB_FLAGS) as u16 | ((high as u16) << 8));
-+                }
-                 _ => {}
-             },
-             0x1A => {
-@@ -1640,3 +1747,103 @@ impl Machine {
-         }
-     }
- }
-+
-+#[cfg(test)]
-+mod bios_keyboard_tests {
-+    use super::*;
-+
-+    fn call(m: &mut Machine, cpu: &mut Cpu, vector: u8, ax: u16) -> Regs {
-+        let mut r = Regs::from_cpu(cpu);
-+        r.set_ax(ax);
-+        if vector == 0x21 { m.int21(cpu, &mut r).unwrap(); }
-+        else { m.bios_int(cpu, vector, &mut r); }
-+        r
-+    }
-+
-+    fn scan(m: &mut Machine, cpu: &mut Cpu, bytes: &[u8]) {
-+        for &byte in bytes { m.port60 = byte; m.default_irq(cpu, 1); }
-+    }
-+
-+    #[test]
-+    fn bios_keyboard_modifiers_follow_make_break() {
-+        let root = std::env::temp_dir().join(format!("cm-bios-mods-{}", std::process::id()));
-+        let mut m = Machine::new(Vfs::new(root.join("iso"), root.join("run")));
-+        let mut cpu = Cpu::new();
-+        cpu.wr16(0x480, 0x1e); cpu.wr16(0x482, 0x3e);
-+        cpu.wr16(0x41a, 0x1e); cpu.wr16(0x41c, 0x1e);
-+        cpu.wr8(0x417, 0xf0); cpu.wr8(0x418, 0xf4); cpu.wr8(0x496, 0x10);
-+        scan(&mut m, &mut cpu, &[0x2a, 0x2a]);
-+        assert_eq!(cpu.rd8(0x417), 0xf2);
-+        scan(&mut m, &mut cpu, &[0x36]);
-+        assert_eq!(cpu.rd8(0x417), 0xf3);
-+        scan(&mut m, &mut cpu, &[0xaa]);
-+        assert_eq!(cpu.rd8(0x417), 0xf1);
-+        scan(&mut m, &mut cpu, &[0xb6]);
-+        assert_eq!(cpu.rd8(0x417), 0xf0);
-+        scan(&mut m, &mut cpu, &[0x1d, 0xe0, 0x1d, 0x9d]);
-+        assert_eq!(cpu.rd8(0x417), 0xf4); // Right Ctrl still owns aggregate Ctrl.
-+        assert_eq!(cpu.rd8(0x418), 0xf4);
-+        assert_eq!(cpu.rd8(0x496) & 0x0c, 4);
-+        scan(&mut m, &mut cpu, &[0xe0, 0x9d]);
-+        assert_eq!(cpu.rd8(0x417), 0xf0);
-+        scan(&mut m, &mut cpu, &[0x38, 0xe0, 0x38, 0xb8]);
-+        assert_eq!(cpu.rd8(0x417), 0xf8);
-+        assert_eq!(cpu.rd8(0x418), 0xf4);
-+        scan(&mut m, &mut cpu, &[0xe0, 0xb8, 0x1d, 0xe0, 0x38]);
-+        assert_eq!(call(&mut m, &mut cpu, 0x16, 0x0200).al(), 0xfc);
-+        assert_eq!(call(&mut m, &mut cpu, 0x16, 0x1200).ax(), 0xf9fc);
-+        scan(&mut m, &mut cpu, &[0x9d, 0xe0, 0xb8, 0x2a, 0xe0, 0xaa]);
-+        assert_eq!(cpu.rd8(0x417), 0xf2); // PrintScreen fake Shift break is ignored.
-+        scan(&mut m, &mut cpu, &[0xaa, 0xe0, 0x2a]);
-+        assert_eq!(cpu.rd8(0x417), 0xf0);
-+        assert_eq!(cpu.rd8(0x418), 0xf4); // Preserve unrelated lock/system bits.
-+        assert_eq!(cpu.rd16(0x41a), cpu.rd16(0x41c)); // No modifier enters BIOS queue.
-+        std::fs::remove_dir_all(root).unwrap();
-+    }
-+
-+    #[test]
-+    fn bios_keyboard_ring_services_follow_guest_memory() {
-+        let root = std::env::temp_dir().join(format!("cm-bios-keys-{}", std::process::id()));
-+        let mut m = Machine::new(Vfs::new(root.join("iso"), root.join("run")));
-+        let mut cpu = Cpu::new();
-+        cpu.wr16(0x480, 0x1e); cpu.wr16(0x482, 0x3e);
-+        cpu.wr16(0x41a, 0x1e); cpu.wr16(0x41c, 0x1e);
-+        m.port60 = 0x1e; m.default_irq(&mut cpu, 1);
-+        assert_eq!(cpu.rd16(0x41e), 0x1e61);
-+        assert_eq!(cpu.rd16(0x41c), 0x20);
-+        let r = call(&mut m, &mut cpu, 0x16, 0x0100);
-+        assert_eq!(r.ax(), 0x1e61); assert_eq!(r.flags & ZF, 0);
-+        assert_eq!(cpu.rd16(0x41a), 0x1e);
-+        assert_eq!(call(&mut m, &mut cpu, 0x16, 0).ax(), 0x1e61);
-+        m.port60 = 0x30; m.default_irq(&mut cpu, 1);
-+        /* The original CM_ISR8 clears these guest BDA words itself. */
-+        cpu.wr16(0x41a, cpu.rd16(0x480)); cpu.wr16(0x41c, cpu.rd16(0x480));
-+        assert_eq!(call(&mut m, &mut cpu, 0x21, 0x0b00).al(), 0);
-+
-+        cpu.wr16(0x480, 0x90); cpu.wr16(0x482, 0x98);
-+        cpu.wr16(0x41a, 0x90); cpu.wr16(0x41c, 0x90);
-+        for scan in [0x1e, 0x30, 0x2e, 0x20] {
-+            m.port60 = scan; m.default_irq(&mut cpu, 1);
-+        }
-+        for expected in [0x1e61, 0x3062, 0x2e63] {
-+            assert_eq!(call(&mut m, &mut cpu, 0x16, 0x1000).ax(), expected);
-+        }
-+        assert_ne!(call(&mut m, &mut cpu, 0x16, 0x1100).flags & ZF, 0);
-+        m.port60 = 0x4b; m.default_irq(&mut cpu, 1);
-+        assert_eq!(call(&mut m, &mut cpu, 0x21, 0x0b00).al(), 0xff);
-+        assert_eq!(call(&mut m, &mut cpu, 0x21, 0x0800).al(), 0);
-+        assert_eq!(call(&mut m, &mut cpu, 0x21, 0x0b00).al(), 0xff);
-+        assert_eq!(call(&mut m, &mut cpu, 0x21, 0x0800).al(), 0x4b);
-+        assert_eq!(call(&mut m, &mut cpu, 0x21, 0x0b00).al(), 0);
-+        m.port60 = 0x9e; m.default_irq(&mut cpu, 1);
-+        assert_eq!(call(&mut m, &mut cpu, 0x21, 0x0b00).al(), 0);
-+        cpu.cur_eip = 0x1234; cpu.eip = 0x1236;
-+        assert_eq!(call(&mut m, &mut cpu, 0x21, 0x0800).ax(), 0x0800);
-+        assert_eq!(cpu.eip, cpu.cur_eip);
-+        cpu.wr16(0x41c, 0x91);
-+        m.port60 = 0x1e; m.default_irq(&mut cpu, 1);
-+        assert_eq!(cpu.rd16(0x41c), 0x91);
-+        assert_eq!(call(&mut m, &mut cpu, 0x21, 0x0b00).al(), 0);
-+        std::fs::remove_dir_all(root).unwrap();
-+    }
-+}
-diff --git a/crates/game/src/main.rs b/crates/game/src/main.rs
-index e9094e3..eda66ea 100644
---- a/crates/game/src/main.rs
-+++ b/crates/game/src/main.rs
-@@ -14,6 +14,7 @@ mod desktop;
- mod display;
- mod gamepad;
- mod frontend;
-+mod frame_trace;
- mod tgv;
- mod verify;
- mod input;
-@@ -70,6 +71,7 @@ pub struct Emu {
-     pub vehicle_anywhere: Option<u32>,
-     /// Includes time spent presenting/sleeping between realtime slices.
-     pub realtime_last: Option<std::time::Instant>,
-+    frame_trace: Option<frame_trace::FrameTrace>,
- }
- 
- impl Emu {
-@@ -87,8 +89,17 @@ impl Emu {
-         if let Some(vulkan) = cfg.renderer { m.display.vulkan = vulkan; }
-         if m.verifier.is_some() { m.display.mode = 0; }
-         let exe = std::fs::read(game.join("CM_HI.EXE")).expect("CM_HI.EXE not found");
--        m.load_program(&mut cpu, &exe, "").expect("load");
--        native::install(&mut m, &mut cpu);
-+        m.load_program(&mut cpu, &exe, if std::env::var_os("CM_ORIGINAL").is_some() { "-x" } else { "" }).expect("load");
-+        if std::env::var_os("CM_ORIGINAL").is_some() {
-+            assert!(m.verifier.is_none(), "original mode forbids verification hooks");
-+            assert!(cfg.headless && !cfg.realtime && cfg.pads.is_empty() && cfg.desktop.is_empty());
-+            assert!(std::env::var_os("CM_SCENE").is_none());
-+            assert!(std::env::var_os("CM_VEHICLE").is_none());
-+            assert!(m.hooks.is_empty());
-+            eprintln!("ORACLE original-x86: native::install bypassed; hooks=0; asset patches=off; raw VGA");
-+        } else {
-+            native::install(&mut m, &mut cpu);
-+        }
-         let watches = std::env::var("CM_WATCH")
-             .map(|v| {
-                 v.split(',')
-@@ -102,7 +113,8 @@ impl Emu {
-         let profile_start = std::env::var("CM_PROFILE_START").ok().and_then(|v| v.parse().ok()).unwrap_or(0.0);
-         let scene_override = std::env::var("CM_SCENE").ok().and_then(|v| v.parse().ok());
-         let vehicle_anywhere = std::env::var("CM_VEHICLE").ok().and_then(|v| v.parse().ok());
--        Emu { cpu, m, ips: cfg.ips, cfg_trace: cfg.trace, watches, profile, counter, profile_start, scene_override, vehicle_anywhere, realtime_last: None }
-+        let frame_trace = frame_trace::FrameTrace::open();
-+        Emu { cpu, m, ips: cfg.ips, cfg_trace: cfg.trace, watches, profile, counter, profile_start, scene_override, vehicle_anywhere, realtime_last: None, frame_trace }
-     }
- 
-     fn debug_overrides(&mut self) {
-@@ -140,6 +152,7 @@ impl Emu {
-             let start_ic = self.cpu.icount;
-             let mut res = Ok(());
-             for _ in 0..n {
-+                if let Some(trace) = &mut self.frame_trace { trace.observe(&self.cpu, self.m.time); }
-                 if let Err(e) = self.cpu.step(&mut self.m) {
-                     res = Err(e);
-                     break;
-@@ -286,7 +299,10 @@ impl Emu {
- 
-     pub fn screenshot(&mut self, path: &std::path::Path) {
-         let mut buf = Vec::new();
--        let (w, h) = display::render(&mut self.m, &self.cpu, &mut buf);
-+        let (w, h) = if std::env::var_os("CM_ORIGINAL").is_some() {
-+            assert!(self.m.hooks.is_empty(), "native hook installed during original run");
-+            self.m.vga.render(&self.cpu, &mut buf)
-+        } else { display::render(&mut self.m, &self.cpu, &mut buf) };
-         write_bmp(path, w, h, &buf);
-     }
- }
-@@ -472,11 +488,17 @@ fn headless(cfg: &Config) {
-             }
-             previous_pad = p;
-         }
--        gamepad::controller_input(&emu.m,&mut emu.cpu);
-+        if std::env::var_os("CM_ORIGINAL").is_some() {
-+            assert!(cfg.pads.is_empty() && cfg.desktop.is_empty());
-+            assert!(emu.m.hooks.is_empty(), "original headless input has native hooks");
-+        } else {
-+            gamepad::controller_input(&emu.m,&mut emu.cpu);
-+        }
-         keys.retain(|&(kt, sc)| {
-             if kt <= t {
-                 let was_open = emu.m.display.options_open;
--                if !display::settings_key(&mut emu.m.display,sc) {
-+                if std::env::var_os("CM_ORIGINAL").is_some() ||
-+                    !display::settings_key(&mut emu.m.display,sc) {
-                     emu.m.kbd_queue.push_back(sc);
-                     emu.m.kbd_queue.push_back(sc | 0x80);
-                 }
-@@ -704,7 +726,7 @@ mod timing_tests {
-         let mut emu = Emu {
-             cpu: Cpu::new(), m: Machine::new(vfs::Vfs::new(path.clone(),path)),
-             ips: 1_000_000.0, cfg_trace: false, watches: Vec::new(), profile: None,
--            counter: None, profile_start: 0.0, scene_override: None, vehicle_anywhere: None, realtime_last: None,
-+            counter: None, profile_start: 0.0, scene_override: None, vehicle_anywhere: None, realtime_last: None, frame_trace: None,
-         };
-         emu.cpu.r[x86::ESP] = 0x30000;
-         // call flip; jmp back to call. A frame slice must not start a second flip.
-@@ -726,7 +748,7 @@ mod timing_tests {
-         let mut emu = Emu {
-             cpu: Cpu::new(), m: Machine::new(vfs::Vfs::new(path.clone(),path)),
-             ips: 1_000_000.0, cfg_trace: false, watches: Vec::new(), profile: None,
--            counter: None, profile_start: 0.0, scene_override: None, vehicle_anywhere: None, realtime_last: None,
-+            counter: None, profile_start: 0.0, scene_override: None, vehicle_anywhere: None, realtime_last: None, frame_trace: None,
-         };
-         // A halted CPU is sufficient: the game clock must still advance.
-         emu.cpu.wr8(0,0xF4);
-diff --git a/crates/game/src/vga.rs b/crates/game/src/vga.rs
-index cfdf063..d8fbaf4 100644
---- a/crates/game/src/vga.rs
-+++ b/crates/game/src/vga.rs
-@@ -204,9 +204,10 @@ impl Vga {
-     /// A full-screen native world only needs the DOS pixels marked as HUD.
-     /// An empty/wrong-size mask retains ordinary full-frame conversion.
-     pub fn render_masked(&mut self, cpu: &Cpu, out: &mut Vec<u32>, mask: &[bool]) -> (usize, usize) {
-+        let original = std::env::var_os("CM_ORIGINAL").is_some();
-         let pal: [u32;256] = std::array::from_fn(|i| {
-             let c = self.dac[i];
--            let e = |x: u8| ((x as u32) << 2) | ((x as u32) >> 4);
-+            let e = |x: u8| ((x as u32) << 2) | if original { 0 } else { (x as u32) >> 4 };
-             (e(c[0]) << 16) | (e(c[1]) << 8) | e(c[2])
-         });
-         if self.mode == 3 {
 diff --git a/crates/game/src/frame_trace.rs b/crates/game/src/frame_trace.rs
 new file mode 100644
-index 0000000..2b6bd22
+index 0000000..ca310ac
 --- /dev/null
 +++ b/crates/game/src/frame_trace.rs
-@@ -0,0 +1,357 @@
+@@ -0,0 +1,435 @@
 +use std::io::{BufWriter, Write};
 +use x86::{Cpu, EAX, EBX, ECX, EDX, ESI, ESP};
 +use crate::le::rt;
@@ -520,6 +47,10 @@ index 0000000..2b6bd22
 +    events: Option<BufWriter<std::fs::File>>,
 +    items: Option<BufWriter<std::fs::File>>,
 +    selectors: Option<BufWriter<std::fs::File>>,
++    draw_clocks: BufWriter<std::fs::File>, ui_actions: BufWriter<std::fs::File>,
++    draw_next: u32, draw_current: Option<u32>, draw_phase: u32,
++    ui_stack: [(u32,u32,u32);4], ui_depth: usize,
++    mouse_inputs: Option<BufWriter<std::fs::File>>, mouse_calls: u64,
 +    collision: Option<BufWriter<std::fs::File>>, collision_object: u32, collision_calls: u64,
 +}
 +
@@ -546,6 +77,13 @@ index 0000000..2b6bd22
 +        seed_path.set_file_name("seed.csv");
 +        let mut seed = BufWriter::new(std::fs::File::create(seed_path).expect("create seed trace"));
 +        writeln!(seed,"bios_tick,icount,time").expect("seed header");
++        let mut companion = std::path::PathBuf::from(&path);
++        companion.set_file_name("draw-clocks.csv");
++        let mut draw_clocks = BufWriter::new(std::fs::File::create(&companion).expect("create draw clock trace"));
++        writeln!(draw_clocks,"frame,draw,phase,pc,ticks").expect("draw clock header");
++        companion.set_file_name("ui-actions.csv");
++        let mut ui_actions = BufWriter::new(std::fs::File::create(&companion).expect("create UI action trace"));
++        writeln!(ui_actions,"frame,ticks,action,slot,name_hex24").expect("UI action header");
 +        let mut file = BufWriter::new(std::fs::File::create(path).expect("create frame trace"));
 +        writeln!(file,"CMTRACE1,{}",ranges.len()).expect("write trace");
 +        for r in &ranges {
@@ -593,9 +131,17 @@ index 0000000..2b6bd22
 +            out
 +        });
 +        let collision_object = std::env::var("CM_COLLISION_OBJECT").unwrap_or_default().parse().unwrap_or(0);
++        let mouse_inputs = std::env::var_os("CM_MOUSE_TRACE").map(|path| {
++            let mut out = BufWriter::new(std::fs::File::create(path).expect("create hardware mouse trace"));
++            writeln!(out,"sequence,frame,ticks,caller,x,y,buttons,mickey_x,mickey_y,press_left,press_right,in_device,mouse_present,joystick_present").expect("mouse input header");
++            out
++        });
 +        Some(Self { file, ranges, pending: None, frame: 0, this: 0, actors, actor_clocks,
 +                    actor_fast_tick: None, seed, rng, rng_calls: 0,
-+                    steering, steering_calls: 0, events, items, selectors, collision, collision_object, collision_calls: 0 })
++                    steering, steering_calls: 0, events, items, selectors,
++                    draw_clocks, ui_actions, draw_next: 0, draw_current: None, draw_phase: 0,
++                    ui_stack: [(0,0,0);4], ui_depth: 0, mouse_inputs, mouse_calls: 0,
++                    collision, collision_object, collision_calls: 0 })
 +    }
 +
 +    fn hex(file: &mut BufWriter<std::fs::File>, bytes: &[u8]) {
@@ -615,8 +161,63 @@ index 0000000..2b6bd22
 +        }
 +    }
 +
-+    pub fn observe(&mut self, c: &Cpu, time: f64) {
++    pub fn observe(&mut self, c: &Cpu, time: f64, mouse: &crate::machine::Mouse) {
++        if self.ui_depth != 0 {
++            let (pc,stack,phase) = self.ui_stack[self.ui_depth-1];
++            if c.eip == pc && c.r[ESP] == stack {
++                self.ui_depth -= 1;
++                self.draw_phase = phase;
++            }
++        }
 +        match c.eip {
++            p if p == rt(0x5007C) || p == rt(0x50AD4) => {
++                if self.frame != 0 {
++                    let action = if p == rt(0x5007C) {1} else {2};
++                    let caller = crate::le::link(c.rd32(c.r[ESP]));
++                    assert!(self.ui_depth < self.ui_stack.len(), "nested save/load trace overflow");
++                    self.ui_stack[self.ui_depth] = (c.rd32(c.r[ESP]),c.r[ESP]+4,self.draw_phase);
++                    self.ui_depth += 1; self.draw_phase = action;
++                    if matches!(caller,0x1BCAB|0x1BCC2|0x1BCD7) {
++                        let slot = c.r[EDX];
++                        assert!(slot <= 10, "invalid UI save/load input slot");
++                        write!(self.ui_actions,"{},{},{},{}," ,self.frame-1,
++                            c.rd32(rt(0x207473)),action,slot).expect("UI action input");
++                        if slot < 10 {
++                            Self::hex(&mut self.ui_actions,c.read_bytes(rt(0x1E3297)+slot*24,24));
++                        } else { Self::hex(&mut self.ui_actions,&[0;24]); }
++                        writeln!(self.ui_actions).expect("UI action input");
++                        self.ui_actions.flush().expect("flush UI input");
++                    }
++                }
++            }
++            p if p == rt(0x1899C) => {
++                if self.frame != 0 && c.r[EAX] == self.this &&
++                    c.r[EBX] == c.rd32(self.this+0xBDEBC) {
++                    self.draw_current = None;
++                }
++            }
++            p if p == rt(0x16391) || p == rt(0x19377) || p == rt(0x193A4) => {
++                if self.frame != 0 {
++                    let index = match self.draw_current {
++                        Some(index) => index,
++                        None => { let index = self.draw_next; self.draw_next += 1;
++                            self.draw_current = Some(index); index }
++                    };
++                    writeln!(self.draw_clocks,"{},{},{},{:x},{}",self.frame-1,index,
++                        self.draw_phase,crate::le::link(p),c.rd32(rt(0x207473))).expect("draw clock input");
++                }
++            }
++            p if p == rt(0x6BB24) => {
++                if let Some(out) = &mut self.mouse_inputs {
++                    let x = if self.this == 0 {rt(0x9E5DC)} else {self.this};
++                    writeln!(out,"{},{},{},{:x},{},{},{},{},{},{},{},{},{},{}",
++                        self.mouse_calls,self.frame as i64-1,c.rd32(rt(0x207473)),
++                        crate::le::link(c.rd32(c.r[ESP])),mouse.x,mouse.y,mouse.buttons,
++                        mouse.mickey_x,mouse.mickey_y,mouse.press_count[0],mouse.press_count[1],
++                        c.rd32(rt(0x1E38CC)),c.rd32(x+0xE3510),c.rd32(x+0xE3518)).expect("hardware mouse input");
++                    self.mouse_calls += 1;
++                }
++            }
 +            p if p == rt(0x42700) &&
 +                matches!(crate::le::link(c.rd32(c.r[ESP])),0x43898|0x43B0A|0x43D7E|0x43FF0) => {
 +                if let Some(out) = &mut self.items {
@@ -756,6 +357,7 @@ index 0000000..2b6bd22
 +            }
 +            p if p == rt(FRAME_ENTRY) => {
 +                self.flush_pending();
++                self.draw_next = 0; self.draw_current = None;
 +                self.this = c.r[EAX];
 +                let x = self.this;
 +                if let Some(out) = &mut self.actors {
@@ -845,5 +447,686 @@ index 0000000..2b6bd22
 +        if let Some(out) = &mut self.events { out.flush().expect("flush event input trace"); }
 +        if let Some(out) = &mut self.items { out.flush().expect("flush item input trace"); }
 +        if let Some(out) = &mut self.selectors { out.flush().expect("flush selector input trace"); }
++        self.draw_clocks.flush().expect("flush draw clocks");
++        self.ui_actions.flush().expect("flush UI actions");
++        if let Some(out) = &mut self.mouse_inputs { out.flush().expect("flush mouse inputs"); }
 +    }
 +}
+diff --git a/crates/game/src/frontend.rs b/crates/game/src/frontend.rs
+index b28668a..4e25654 100644
+--- a/crates/game/src/frontend.rs
++++ b/crates/game/src/frontend.rs
+@@ -532,7 +532,7 @@ mod tests {
+             crate::native::install(&mut m,&mut cpu);
+             m.gamepad.connected = true;
+             let mut emu = Emu { cpu, m, ips: 100_000_000.0, cfg_trace: false, watches: Vec::new(),
+-                profile: None, counter: None, profile_start: 0.0, scene_override: None, vehicle_anywhere: None, realtime_last: None };
++                profile: None, counter: None, profile_start: 0.0, scene_override: None, vehicle_anywhere: None, realtime_last: None, frame_trace: None };
+             for frame in 0..280 {
+                 if in_game && frame == 180 { gamepad::tap(&mut emu.m.kbd_queue,0x1C,false); }
+                 advance(&mut emu);
+diff --git a/crates/game/src/machine.rs b/crates/game/src/machine.rs
+index 5118211..2e45d06 100644
+--- a/crates/game/src/machine.rs
++++ b/crates/game/src/machine.rs
+@@ -24,6 +24,14 @@ pub const SEL_DATA: u16 = 0x10;
+ pub const SEL_PSP: u16 = 0x18;
+ pub const SEL_ENV: u16 = 0x20;
+ const FIRST_DYN_SEL: usize = 8;
++const BIOS_KB_HEAD: u32 = 0x41A;
++const BIOS_KB_TAIL: u32 = 0x41C;
++const BIOS_KB_START: u32 = 0x480;
++const BIOS_KB_END: u32 = 0x482;
++const BIOS_DATA: u32 = 0x400;
++const BIOS_KB_FLAGS: u32 = 0x417;
++const BIOS_KB_FLAGS2: u32 = 0x418;
++const BIOS_KB_FLAGS3: u32 = 0x496;
+ 
+ // ---- HLE trap ids ----------------------------------------------------------
+ /// Default handler for interrupt vector n: id = n (stub ends with IRET).
+@@ -84,6 +92,29 @@ pub struct Mouse {
+     pub release_count: [u16; 3],
+ }
+ 
++impl Mouse {
++    /// A host device event. Guest routing and the Mouse object are not touched.
++    pub fn hardware_event(&mut self, x: i32, y: i32, buttons: u16) {
++        let old_x = self.x.clamp(self.min_x, self.max_x);
++        let old_y = self.y.clamp(self.min_y, self.max_y);
++        let x = x.clamp(self.min_x, self.max_x);
++        let y = y.clamp(self.min_y, self.max_y);
++        self.mickey_x = self.mickey_x.wrapping_add(x - old_x);
++        self.mickey_y = self.mickey_y.wrapping_add(y - old_y);
++        for index in 0..2 {
++            let bit = 1 << index;
++            if buttons & bit != 0 && self.buttons & bit == 0 {
++                self.press_count[index] = self.press_count[index].wrapping_add(1);
++            } else if buttons & bit == 0 && self.buttons & bit != 0 {
++                self.release_count[index] = self.release_count[index].wrapping_add(1);
++            }
++        }
++        self.x = x;
++        self.y = y;
++        self.buttons = buttons;
++    }
++}
++
+ pub struct Machine {
+     pub vfs: Vfs,
+     pub files: Vec<Option<DosFile>>,
+@@ -107,7 +138,7 @@ pub struct Machine {
+     pub pit_chan0_write_lo: Option<u8>,
+     pub kbd_queue: VecDeque<u8>,
+     pub port60: u8,
+-    pub kbd_bios: VecDeque<u16>,
++    dos_key_pending: Option<u8>,
+     pub mouse: Mouse,
+     pub hooks: Vec<Hook>,
+     pub exit_code: Option<i32>,
+@@ -151,7 +182,7 @@ impl Machine {
+             pit_chan0_write_lo: None,
+             kbd_queue: VecDeque::new(),
+             port60: 0,
+-            kbd_bios: VecDeque::new(),
++            dos_key_pending: None,
+             mouse: Mouse {
+                 x: 320,
+                 y: 240,
+@@ -254,6 +285,14 @@ impl Machine {
+         cpu.wr8(0x449, 3);
+         cpu.wr16(0x44A, 80);
+         cpu.wr8(0x484, 24);
++        cpu.wr16(BIOS_KB_START, 0x1E);
++        cpu.wr16(BIOS_KB_END, 0x3E);
++        cpu.wr16(BIOS_KB_HEAD, 0x1E);
++        cpu.wr16(BIOS_KB_TAIL, 0x1E);
++        cpu.wr8(BIOS_KB_FLAGS, 0);
++        cpu.wr8(BIOS_KB_FLAGS2, 0);
++        cpu.wr8(BIOS_KB_FLAGS3, 0x10); // Enhanced keyboard present.
++        self.dos_key_pending = None;
+         // interrupt stubs: for each vector n, `0F FF n 00 ; IRET`
+         for n in 0..256u32 {
+             let a = STUB_BASE + n * 8;
+@@ -354,15 +393,98 @@ impl Machine {
+             1 => {
+                 // BIOS keyboard handler: translate the latched scancode into the BIOS buffer
+                 let sc = self.port60;
++                if Self::bios_key_modifier(cpu, sc) { return; }
+                 if sc & 0x80 == 0 && sc != 0xE0 {
+                     let ascii = crate::input::scancode_ascii(sc);
+-                    self.kbd_bios.push_back(((sc as u16) << 8) | ascii as u16);
++                    Self::bios_key_put(cpu, ((sc as u16) << 8) | ascii as u16);
+                 }
+             }
+             _ => {}
+         }
+     }
+ 
++    fn bios_key_flag(cpu: &mut Cpu, address: u32, mask: u8, down: bool) {
++        let old = cpu.rd8(address);
++        cpu.wr8(address, if down { old | mask } else { old & !mask });
++    }
++
++    fn bios_key_modifier(cpu: &mut Cpu, scan: u8) -> bool {
++        // BDA 40:17/18/96: left/right modifiers and the E0 prefix, not characters.
++        // http://www.techhelpmanual.com/58-keyboard_shift_status_flags.html
++        let flags3 = cpu.rd8(BIOS_KB_FLAGS3);
++        if scan == 0xE0 {
++            cpu.wr8(BIOS_KB_FLAGS3, flags3 | 2);
++            return true;
++        }
++        let extended = flags3 & 2 != 0;
++        cpu.wr8(BIOS_KB_FLAGS3, flags3 & !2);
++        let down = scan & 0x80 == 0;
++        match scan & 0x7F {
++            0x2A | 0x36 => {
++                if !extended { // Ignore PrintScreen's fake E0 Shift bytes.
++                    Self::bios_key_flag(cpu, BIOS_KB_FLAGS,
++                        if scan & 0x7F == 0x2A { 2 } else { 1 }, down);
++                }
++            }
++            0x1D => {
++                Self::bios_key_flag(cpu, if extended { BIOS_KB_FLAGS3 } else { BIOS_KB_FLAGS2 },
++                    if extended { 4 } else { 1 }, down);
++                let held = cpu.rd8(BIOS_KB_FLAGS2) & 1 != 0 || cpu.rd8(BIOS_KB_FLAGS3) & 4 != 0;
++                Self::bios_key_flag(cpu, BIOS_KB_FLAGS, 4, held);
++            }
++            0x38 => {
++                Self::bios_key_flag(cpu, if extended { BIOS_KB_FLAGS3 } else { BIOS_KB_FLAGS2 },
++                    if extended { 8 } else { 2 }, down);
++                let held = cpu.rd8(BIOS_KB_FLAGS2) & 2 != 0 || cpu.rd8(BIOS_KB_FLAGS3) & 8 != 0;
++                Self::bios_key_flag(cpu, BIOS_KB_FLAGS, 8, held);
++            }
++            _ => return false,
++        }
++        true
++    }
++
++    fn bios_key_ring(cpu: &Cpu) -> Option<(u16, u16, u16, u16)> {
++        let start = cpu.rd16(BIOS_KB_START);
++        let end = cpu.rd16(BIOS_KB_END);
++        let head = cpu.rd16(BIOS_KB_HEAD);
++        let tail = cpu.rd16(BIOS_KB_TAIL);
++        if start & 1 != 0 || end & 1 != 0 || end.checked_sub(start)? < 4 ||
++            head < start || head >= end || tail < start || tail >= end ||
++            head & 1 != 0 || tail & 1 != 0 {
++            return None;
++        }
++        Some((start, end, head, tail))
++    }
++
++    fn bios_key_put(cpu: &mut Cpu, key: u16) {
++        let Some((start, end, head, tail)) = Self::bios_key_ring(cpu) else { return; };
++        let next = if tail + 2 == end { start } else { tail + 2 };
++        if next == head { return; } // Full BIOS ring retains unread keys.
++        cpu.wr16(BIOS_DATA + tail as u32, key);
++        cpu.wr16(BIOS_KB_TAIL, next);
++    }
++
++    fn bios_key_peek(cpu: &Cpu) -> Option<u16> {
++        let (_, _, head, tail) = Self::bios_key_ring(cpu)?;
++        if head == tail { None } else { Some(cpu.rd16(BIOS_DATA + head as u32)) }
++    }
++
++    fn bios_key_get(cpu: &mut Cpu) -> Option<u16> {
++        let (start, end, head, tail) = Self::bios_key_ring(cpu)?;
++        if head == tail { return None; }
++        let key = cpu.rd16(BIOS_DATA + head as u32);
++        cpu.wr16(BIOS_KB_HEAD, if head + 2 == end { start } else { head + 2 });
++        Some(key)
++    }
++
++    fn dos_key_get(&mut self, cpu: &mut Cpu) -> Option<u8> {
++        if let Some(scan) = self.dos_key_pending.take() { return Some(scan); }
++        let key = Self::bios_key_get(cpu)?;
++        let ascii = key as u8;
++        if ascii == 0 { self.dos_key_pending = Some((key >> 8) as u8); }
++        Some(ascii)
++    }
++
+     pub fn pit_hz(&self) -> f64 {
+         1193182.0 / self.pit_div as f64
+     }
+@@ -701,8 +823,8 @@ impl Machine {
+             }
+             0x06 => {
+                 if r.dx() as u8 == 0xFF {
+-                    if let Some(k) = self.kbd_bios.pop_front() {
+-                        r.set_al(k as u8);
++                    if let Some(k) = self.dos_key_get(cpu) {
++                        r.set_al(k);
+                         r.zf(false);
+                     } else {
+                         r.set_al(0);
+@@ -714,8 +836,8 @@ impl Machine {
+                 }
+             }
+             0x07 | 0x08 => {
+-                let k = self.kbd_bios.pop_front().unwrap_or(0x1C0D);
+-                r.set_al(k as u8);
++                if let Some(k) = self.dos_key_get(cpu) { r.set_al(k); }
++                else { cpu.eip = cpu.cur_eip; } // Wait for IRQ1; never invent Enter.
+             }
+             0x09 => {
+                 let mut a = r.ds_dx(cpu);
+@@ -730,7 +852,7 @@ impl Machine {
+                 }
+                 self.print(&s);
+             }
+-            0x0B => r.set_al(if self.kbd_bios.is_empty() { 0 } else { 0xFF }),
++            0x0B => r.set_al(if self.dos_key_pending.is_some() || Self::bios_key_peek(cpu).is_some() { 0xFF } else { 0 }),
+             0x0E => r.set_al(26),
+             0x19 => r.set_al(2), // C:
+             0x1A => self.dta = r.ds_dx(cpu),
+@@ -742,7 +864,7 @@ impl Machine {
+             0x25 => {
+                 let n = r.al();
+                 self.pm_vec[n as usize] = (r.ds, r.edx);
+-                if n == 9 {
++                if n == 9 && std::env::var_os("CM_ORIGINAL").is_none() {
+                     // On real hardware the release of the Enter key used to start the
+                     // game arrives after CM_ISR9 is installed; it primes the ISR's
+                     // key-state latch (otherwise the first key press is swallowed).
+@@ -813,7 +935,9 @@ impl Machine {
+                 };
+                 match res {
+                     Some(mut f) => {
+-                        let patch = if mode == 0 { crate::rebrand::title_patch(&name, &mut f) } else { None };
++                        let patch = if mode == 0 && std::env::var_os("CM_ORIGINAL").is_none() {
++                            crate::rebrand::title_patch(&name, &mut f)
++                        } else { None };
+                         let h = self.alloc_handle(DosFile { f, name: name.clone(), patch });
+                         if self.trace_ints {
+                             eprintln!("[dos] open {} -> {}", name, h);
+@@ -1360,17 +1484,23 @@ impl Machine {
+             0x10 => self.int10(cpu, r),
+             0x16 => match r.ah() {
+                 0x00 | 0x10 => {
+-                    let k = self.kbd_bios.pop_front().unwrap_or(0);
+-                    r.set_ax(k);
++                    if let Some(k) = Self::bios_key_get(cpu) { r.set_ax(k); }
++                    else { cpu.eip = cpu.cur_eip; }
+                 }
+-                0x01 | 0x11 => match self.kbd_bios.front() {
+-                    Some(&k) => {
++                0x01 | 0x11 => match Self::bios_key_peek(cpu) {
++                    Some(k) => {
+                         r.set_ax(k);
+                         r.zf(false);
+                     }
+                     None => r.zf(true),
+                 },
+-                0x02 | 0x12 => r.set_al(0),
++                0x02 => r.set_al(cpu.rd8(BIOS_KB_FLAGS)),
++                0x12 => {
++                    let left = cpu.rd8(BIOS_KB_FLAGS2);
++                    let right = cpu.rd8(BIOS_KB_FLAGS3);
++                    let high = (left & 0x73) | (right & 0x0C) | ((left & 4) << 5);
++                    r.set_ax(cpu.rd8(BIOS_KB_FLAGS) as u16 | ((high as u16) << 8));
++                }
+                 _ => {}
+             },
+             0x1A => {
+@@ -1640,3 +1770,159 @@ impl Machine {
+         }
+     }
+ }
++
++#[cfg(test)]
++mod bios_mouse_tests {
++    use super::*;
++
++    fn call(m: &mut Machine, cpu: &mut Cpu, ax: u16, bx: u16, cx: u16, dx: u16) -> Regs {
++        let mut r = Regs::from_cpu(cpu);
++        r.set_ax(ax); r.set_bx(bx); r.set_cx(cx); r.set_dx(dx);
++        m.int33(cpu, &mut r);
++        r
++    }
++
++    #[test]
++    fn hardware_events_use_the_int33_state_and_consumable_counters() {
++        let root = std::env::temp_dir().join(format!("cm-mouse-events-{}", std::process::id()));
++        let mut m = Machine::new(Vfs::new(root.join("iso"), root.join("run")));
++        let mut cpu = Cpu::new();
++        call(&mut m, &mut cpu, 4, 0, 80, 60);
++        m.mouse.hardware_event(100, 70, 1);
++        m.mouse.hardware_event(100, 70, 1);
++        let status = call(&mut m, &mut cpu, 3, 0, 0, 0);
++        assert_eq!((status.bx(), status.cx(), status.dx()), (1, 100, 70));
++        assert_eq!(call(&mut m, &mut cpu, 5, 0, 0, 0).bx(), 1);
++        assert_eq!(call(&mut m, &mut cpu, 5, 0, 0, 0).bx(), 0);
++        m.mouse.hardware_event(120, 80, 2);
++        assert_eq!(call(&mut m, &mut cpu, 6, 0, 0, 0).bx(), 1);
++        assert_eq!(call(&mut m, &mut cpu, 5, 1, 0, 0).bx(), 1);
++        let delta = call(&mut m, &mut cpu, 0x0b, 0, 0, 0);
++        assert_eq!((delta.cx(), delta.dx()), (40, 20));
++        let cleared = call(&mut m, &mut cpu, 0x0b, 0, 0, 0);
++        assert_eq!((cleared.cx(), cleared.dx()), (0, 0));
++        call(&mut m, &mut cpu, 4, 0, 300, 100);
++        m.mouse.hardware_event(304, 102, 0);
++        let warped = call(&mut m, &mut cpu, 0x0b, 0, 0, 0);
++        assert_eq!((warped.cx(), warped.dx()), (4, 2));
++        assert_eq!(call(&mut m, &mut cpu, 6, 1, 0, 0).bx(), 1);
++    }
++
++    #[test]
++    fn hardware_positions_obey_guest_programmed_driver_bounds() {
++        let root = std::env::temp_dir().join(format!("cm-mouse-bounds-{}", std::process::id()));
++        let mut m = Machine::new(Vfs::new(root.join("iso"), root.join("run")));
++        let mut cpu = Cpu::new();
++        call(&mut m, &mut cpu, 7, 0, 100, 200);
++        call(&mut m, &mut cpu, 8, 0, 50, 100);
++        call(&mut m, &mut cpu, 4, 0, 150, 75);
++        m.mouse.hardware_event(639, 239, 0);
++        let status = call(&mut m, &mut cpu, 3, 0, 0, 0);
++        assert_eq!((status.cx(), status.dx()), (200, 100));
++        let delta = call(&mut m, &mut cpu, 0x0b, 0, 0, 0);
++        assert_eq!((delta.cx(), delta.dx()), (50, 25));
++        m.mouse.hardware_event(0, 0, 0);
++        let delta = call(&mut m, &mut cpu, 0x0b, 0, 0, 0);
++        assert_eq!((delta.cx() as i16, delta.dx() as i16), (-100, -50));
++    }
++}
++
++#[cfg(test)]
++mod bios_keyboard_tests {
++    use super::*;
++
++    fn call(m: &mut Machine, cpu: &mut Cpu, vector: u8, ax: u16) -> Regs {
++        let mut r = Regs::from_cpu(cpu);
++        r.set_ax(ax);
++        if vector == 0x21 { m.int21(cpu, &mut r).unwrap(); }
++        else { m.bios_int(cpu, vector, &mut r); }
++        r
++    }
++
++    fn scan(m: &mut Machine, cpu: &mut Cpu, bytes: &[u8]) {
++        for &byte in bytes { m.port60 = byte; m.default_irq(cpu, 1); }
++    }
++
++    #[test]
++    fn bios_keyboard_modifiers_follow_make_break() {
++        let root = std::env::temp_dir().join(format!("cm-bios-mods-{}", std::process::id()));
++        let mut m = Machine::new(Vfs::new(root.join("iso"), root.join("run")));
++        let mut cpu = Cpu::new();
++        cpu.wr16(0x480, 0x1e); cpu.wr16(0x482, 0x3e);
++        cpu.wr16(0x41a, 0x1e); cpu.wr16(0x41c, 0x1e);
++        cpu.wr8(0x417, 0xf0); cpu.wr8(0x418, 0xf4); cpu.wr8(0x496, 0x10);
++        scan(&mut m, &mut cpu, &[0x2a, 0x2a]);
++        assert_eq!(cpu.rd8(0x417), 0xf2);
++        scan(&mut m, &mut cpu, &[0x36]);
++        assert_eq!(cpu.rd8(0x417), 0xf3);
++        scan(&mut m, &mut cpu, &[0xaa]);
++        assert_eq!(cpu.rd8(0x417), 0xf1);
++        scan(&mut m, &mut cpu, &[0xb6]);
++        assert_eq!(cpu.rd8(0x417), 0xf0);
++        scan(&mut m, &mut cpu, &[0x1d, 0xe0, 0x1d, 0x9d]);
++        assert_eq!(cpu.rd8(0x417), 0xf4); // Right Ctrl still owns aggregate Ctrl.
++        assert_eq!(cpu.rd8(0x418), 0xf4);
++        assert_eq!(cpu.rd8(0x496) & 0x0c, 4);
++        scan(&mut m, &mut cpu, &[0xe0, 0x9d]);
++        assert_eq!(cpu.rd8(0x417), 0xf0);
++        scan(&mut m, &mut cpu, &[0x38, 0xe0, 0x38, 0xb8]);
++        assert_eq!(cpu.rd8(0x417), 0xf8);
++        assert_eq!(cpu.rd8(0x418), 0xf4);
++        scan(&mut m, &mut cpu, &[0xe0, 0xb8, 0x1d, 0xe0, 0x38]);
++        assert_eq!(call(&mut m, &mut cpu, 0x16, 0x0200).al(), 0xfc);
++        assert_eq!(call(&mut m, &mut cpu, 0x16, 0x1200).ax(), 0xf9fc);
++        scan(&mut m, &mut cpu, &[0x9d, 0xe0, 0xb8, 0x2a, 0xe0, 0xaa]);
++        assert_eq!(cpu.rd8(0x417), 0xf2); // PrintScreen fake Shift break is ignored.
++        scan(&mut m, &mut cpu, &[0xaa, 0xe0, 0x2a]);
++        assert_eq!(cpu.rd8(0x417), 0xf0);
++        assert_eq!(cpu.rd8(0x418), 0xf4); // Preserve unrelated lock/system bits.
++        assert_eq!(cpu.rd16(0x41a), cpu.rd16(0x41c)); // No modifier enters BIOS queue.
++        std::fs::remove_dir_all(root).unwrap();
++    }
++
++    #[test]
++    fn bios_keyboard_ring_services_follow_guest_memory() {
++        let root = std::env::temp_dir().join(format!("cm-bios-keys-{}", std::process::id()));
++        let mut m = Machine::new(Vfs::new(root.join("iso"), root.join("run")));
++        let mut cpu = Cpu::new();
++        cpu.wr16(0x480, 0x1e); cpu.wr16(0x482, 0x3e);
++        cpu.wr16(0x41a, 0x1e); cpu.wr16(0x41c, 0x1e);
++        m.port60 = 0x1e; m.default_irq(&mut cpu, 1);
++        assert_eq!(cpu.rd16(0x41e), 0x1e61);
++        assert_eq!(cpu.rd16(0x41c), 0x20);
++        let r = call(&mut m, &mut cpu, 0x16, 0x0100);
++        assert_eq!(r.ax(), 0x1e61); assert_eq!(r.flags & ZF, 0);
++        assert_eq!(cpu.rd16(0x41a), 0x1e);
++        assert_eq!(call(&mut m, &mut cpu, 0x16, 0).ax(), 0x1e61);
++        m.port60 = 0x30; m.default_irq(&mut cpu, 1);
++        /* The original CM_ISR8 clears these guest BDA words itself. */
++        cpu.wr16(0x41a, cpu.rd16(0x480)); cpu.wr16(0x41c, cpu.rd16(0x480));
++        assert_eq!(call(&mut m, &mut cpu, 0x21, 0x0b00).al(), 0);
++
++        cpu.wr16(0x480, 0x90); cpu.wr16(0x482, 0x98);
++        cpu.wr16(0x41a, 0x90); cpu.wr16(0x41c, 0x90);
++        for scan in [0x1e, 0x30, 0x2e, 0x20] {
++            m.port60 = scan; m.default_irq(&mut cpu, 1);
++        }
++        for expected in [0x1e61, 0x3062, 0x2e63] {
++            assert_eq!(call(&mut m, &mut cpu, 0x16, 0x1000).ax(), expected);
++        }
++        assert_ne!(call(&mut m, &mut cpu, 0x16, 0x1100).flags & ZF, 0);
++        m.port60 = 0x4b; m.default_irq(&mut cpu, 1);
++        assert_eq!(call(&mut m, &mut cpu, 0x21, 0x0b00).al(), 0xff);
++        assert_eq!(call(&mut m, &mut cpu, 0x21, 0x0800).al(), 0);
++        assert_eq!(call(&mut m, &mut cpu, 0x21, 0x0b00).al(), 0xff);
++        assert_eq!(call(&mut m, &mut cpu, 0x21, 0x0800).al(), 0x4b);
++        assert_eq!(call(&mut m, &mut cpu, 0x21, 0x0b00).al(), 0);
++        m.port60 = 0x9e; m.default_irq(&mut cpu, 1);
++        assert_eq!(call(&mut m, &mut cpu, 0x21, 0x0b00).al(), 0);
++        cpu.cur_eip = 0x1234; cpu.eip = 0x1236;
++        assert_eq!(call(&mut m, &mut cpu, 0x21, 0x0800).ax(), 0x0800);
++        assert_eq!(cpu.eip, cpu.cur_eip);
++        cpu.wr16(0x41c, 0x91);
++        m.port60 = 0x1e; m.default_irq(&mut cpu, 1);
++        assert_eq!(cpu.rd16(0x41c), 0x91);
++        assert_eq!(call(&mut m, &mut cpu, 0x21, 0x0b00).al(), 0);
++        std::fs::remove_dir_all(root).unwrap();
++    }
++}
+diff --git a/crates/game/src/main.rs b/crates/game/src/main.rs
+index e9094e3..2b1d9fd 100644
+--- a/crates/game/src/main.rs
++++ b/crates/game/src/main.rs
+@@ -14,6 +14,7 @@ mod desktop;
+ mod display;
+ mod gamepad;
+ mod frontend;
++mod frame_trace;
+ mod tgv;
+ mod verify;
+ mod input;
+@@ -34,6 +35,30 @@ use machine::Machine;
+ use std::path::PathBuf;
+ use x86::{Cpu, Fault};
+ 
++pub struct RawMouseEvent {
++    time: f64,
++    x: i32,
++    y: i32,
++    buttons: u16,
++    order: usize,
++}
++
++impl RawMouseEvent {
++    fn parse(value: &str, order: usize) -> Result<Self, &'static str> {
++        let error = "--raw-mouse expects TIME:X:Y:BUTTONS, time >= 0, X 0..639, Y 0..239, buttons 0..3";
++        let mut fields = value.split(':');
++        let time: f64 = fields.next().and_then(|s| s.parse().ok()).ok_or(error)?;
++        let x: i32 = fields.next().and_then(|s| s.parse().ok()).ok_or(error)?;
++        let y: i32 = fields.next().and_then(|s| s.parse().ok()).ok_or(error)?;
++        let buttons: u16 = fields.next().and_then(|s| s.parse().ok()).ok_or(error)?;
++        if fields.next().is_some() || !time.is_finite() || time < 0.0 ||
++            !(0..640).contains(&x) || !(0..240).contains(&y) || buttons > 3 {
++            return Err(error);
++        }
++        Ok(Self { time, x, y, buttons, order })
++    }
++}
++
+ pub struct Config {
+     pub root: PathBuf,
+     pub headless: bool,
+@@ -50,6 +75,8 @@ pub struct Config {
+     /// Synthetic controller holds for reproducible headless input checks.
+     pub pads: Vec<(f64, f64, gamepad::Pad)>,
+     pub desktop: Vec<(f64,f64,desktop::Snapshot)>,
++    /// Host INT 33h device events, not native desktop/controller game hooks.
++    pub raw_mouse: Vec<RawMouseEvent>,
+ }
+ 
+ pub struct Emu {
+@@ -70,6 +97,7 @@ pub struct Emu {
+     pub vehicle_anywhere: Option<u32>,
+     /// Includes time spent presenting/sleeping between realtime slices.
+     pub realtime_last: Option<std::time::Instant>,
++    frame_trace: Option<frame_trace::FrameTrace>,
+ }
+ 
+ impl Emu {
+@@ -87,8 +115,17 @@ impl Emu {
+         if let Some(vulkan) = cfg.renderer { m.display.vulkan = vulkan; }
+         if m.verifier.is_some() { m.display.mode = 0; }
+         let exe = std::fs::read(game.join("CM_HI.EXE")).expect("CM_HI.EXE not found");
+-        m.load_program(&mut cpu, &exe, "").expect("load");
+-        native::install(&mut m, &mut cpu);
++        m.load_program(&mut cpu, &exe, if std::env::var_os("CM_ORIGINAL").is_some() { "-x" } else { "" }).expect("load");
++        if std::env::var_os("CM_ORIGINAL").is_some() {
++            assert!(m.verifier.is_none(), "original mode forbids verification hooks");
++            assert!(cfg.headless && !cfg.realtime && cfg.pads.is_empty() && cfg.desktop.is_empty());
++            assert!(std::env::var_os("CM_SCENE").is_none());
++            assert!(std::env::var_os("CM_VEHICLE").is_none());
++            assert!(m.hooks.is_empty());
++            eprintln!("ORACLE original-x86: native::install bypassed; hooks=0; asset patches=off; raw VGA");
++        } else {
++            native::install(&mut m, &mut cpu);
++        }
+         let watches = std::env::var("CM_WATCH")
+             .map(|v| {
+                 v.split(',')
+@@ -102,7 +139,8 @@ impl Emu {
+         let profile_start = std::env::var("CM_PROFILE_START").ok().and_then(|v| v.parse().ok()).unwrap_or(0.0);
+         let scene_override = std::env::var("CM_SCENE").ok().and_then(|v| v.parse().ok());
+         let vehicle_anywhere = std::env::var("CM_VEHICLE").ok().and_then(|v| v.parse().ok());
+-        Emu { cpu, m, ips: cfg.ips, cfg_trace: cfg.trace, watches, profile, counter, profile_start, scene_override, vehicle_anywhere, realtime_last: None }
++        let frame_trace = frame_trace::FrameTrace::open();
++        Emu { cpu, m, ips: cfg.ips, cfg_trace: cfg.trace, watches, profile, counter, profile_start, scene_override, vehicle_anywhere, realtime_last: None, frame_trace }
+     }
+ 
+     fn debug_overrides(&mut self) {
+@@ -140,6 +178,7 @@ impl Emu {
+             let start_ic = self.cpu.icount;
+             let mut res = Ok(());
+             for _ in 0..n {
++                if let Some(trace) = &mut self.frame_trace { trace.observe(&self.cpu, self.m.time, &self.m.mouse); }
+                 if let Err(e) = self.cpu.step(&mut self.m) {
+                     res = Err(e);
+                     break;
+@@ -286,7 +325,10 @@ impl Emu {
+ 
+     pub fn screenshot(&mut self, path: &std::path::Path) {
+         let mut buf = Vec::new();
+-        let (w, h) = display::render(&mut self.m, &self.cpu, &mut buf);
++        let (w, h) = if std::env::var_os("CM_ORIGINAL").is_some() {
++            assert!(self.m.hooks.is_empty(), "native hook installed during original run");
++            self.m.vga.render(&self.cpu, &mut buf)
++        } else { display::render(&mut self.m, &self.cpu, &mut buf) };
+         write_bmp(path, w, h, &buf);
+     }
+ }
+@@ -353,6 +395,7 @@ fn parse_args() -> Config {
+         renderer: None,
+         pads: Vec::new(),
+         desktop: Vec::new(),
++        raw_mouse: Vec::new(),
+     };
+     let args: Vec<String> = std::env::args().skip(1).collect();
+     let mut i = 0;
+@@ -413,6 +456,15 @@ fn parse_args() -> Config {
+                 let hold = args.get(i).ok_or_else(|| "--kb requires a desktop hold".to_string()).and_then(|s| desktop::parse_script(s));
+                 match hold {Ok(h) => cfg.desktop.push(h), Err(e) => {eprintln!("{e}"); std::process::exit(2);}}
+             }
++            "--raw-mouse" => {
++                i += 1;
++                let event = args.get(i).ok_or("--raw-mouse requires TIME:X:Y:BUTTONS")
++                    .and_then(|value| RawMouseEvent::parse(value, cfg.raw_mouse.len()));
++                match event {
++                    Ok(event) => cfg.raw_mouse.push(event),
++                    Err(error) => { eprintln!("{error}"); std::process::exit(2); }
++                }
++            }
+             "--hold" => {
+                 // --hold START:END:SCANCODE(hex, prefix e for extended)  e.g. 10:12:e48 = Up arrow
+                 i += 1;
+@@ -433,6 +485,11 @@ fn parse_args() -> Config {
+         }
+         i += 1;
+     }
++    if !cfg.headless && !cfg.raw_mouse.is_empty() {
++        eprintln!("--raw-mouse requires --headless");
++        std::process::exit(2);
++    }
++    cfg.raw_mouse.sort_unstable_by(|a, b| a.time.total_cmp(&b.time).then(a.order.cmp(&b.order)));
+     cfg
+ }
+ 
+@@ -442,6 +499,7 @@ fn headless(cfg: &Config) {
+     let step = 0.05;
+     let mut next_shot = cfg.screenshot_every;
+     let mut keys = cfg.keys.clone();
++    let mut mouse = cfg.raw_mouse.iter().peekable();
+     let mut holds: Vec<(f64, f64, u8, bool, u8)> = cfg.holds.iter().map(|&(a, b, s, e)| (a, b, s, e, 0)).collect();
+     let mut shot_n = 0;
+     let mut pad_keys = gamepad::Keys::default();
+@@ -472,11 +530,17 @@ fn headless(cfg: &Config) {
+             }
+             previous_pad = p;
+         }
+-        gamepad::controller_input(&emu.m,&mut emu.cpu);
++        if std::env::var_os("CM_ORIGINAL").is_some() {
++            assert!(cfg.pads.is_empty() && cfg.desktop.is_empty());
++            assert!(emu.m.hooks.is_empty(), "original headless input has native hooks");
++        } else {
++            gamepad::controller_input(&emu.m,&mut emu.cpu);
++        }
+         keys.retain(|&(kt, sc)| {
+             if kt <= t {
+                 let was_open = emu.m.display.options_open;
+-                if !display::settings_key(&mut emu.m.display,sc) {
++                if std::env::var_os("CM_ORIGINAL").is_some() ||
++                    !display::settings_key(&mut emu.m.display,sc) {
+                     emu.m.kbd_queue.push_back(sc);
+                     emu.m.kbd_queue.push_back(sc | 0x80);
+                 }
+@@ -503,6 +567,10 @@ fn headless(cfg: &Config) {
+                 h.4 = 2;
+             }
+         }
++        while mouse.peek().is_some_and(|event| event.time <= t) {
++            let event = mouse.next().unwrap();
++            emu.m.mouse.hardware_event(event.x, event.y, event.buttons);
++        }
+         let res = if emu.m.display.options_open || emu.m.display.help_open {
+             emu.realtime_last = None;
+             emu.m.audio.advance_music(step); // as the windowed frontend: no held notes
+@@ -695,6 +763,23 @@ fn benchmark(emu: &mut Emu, seconds: f64) {
+     #[cfg(windows)] if std::env::var_os("CM_VK_VALIDATION").is_some() { assert_eq!(vulkan::validation_errors(),0,"Vulkan validation errors"); }
+ }
+ 
++#[cfg(test)]
++mod raw_mouse_tests {
++    use super::RawMouseEvent;
++
++    #[test]
++    fn raw_mouse_arguments_are_bounded_hardware_values() {
++        let event = RawMouseEvent::parse("1.25:639:239:3", 7).unwrap();
++        assert_eq!((event.time, event.x, event.y, event.buttons, event.order),
++                   (1.25, 639, 239, 3, 7));
++        for value in ["NaN:0:0:0", "inf:0:0:0", "-0.1:0:0:0",
++                      "0:-1:0:0", "0:640:0:0", "0:0:-1:0", "0:0:240:0",
++                      "0:0:0:-1", "0:0:0:4", "0:0:0", "0:0:0:0:0"] {
++            assert!(RawMouseEvent::parse(value, 0).is_err(), "{value}");
++        }
++    }
++}
++
+ #[cfg(test)]
+ mod timing_tests {
+     use super::*;
+@@ -704,7 +789,7 @@ mod timing_tests {
+         let mut emu = Emu {
+             cpu: Cpu::new(), m: Machine::new(vfs::Vfs::new(path.clone(),path)),
+             ips: 1_000_000.0, cfg_trace: false, watches: Vec::new(), profile: None,
+-            counter: None, profile_start: 0.0, scene_override: None, vehicle_anywhere: None, realtime_last: None,
++            counter: None, profile_start: 0.0, scene_override: None, vehicle_anywhere: None, realtime_last: None, frame_trace: None,
+         };
+         emu.cpu.r[x86::ESP] = 0x30000;
+         // call flip; jmp back to call. A frame slice must not start a second flip.
+@@ -726,7 +811,7 @@ mod timing_tests {
+         let mut emu = Emu {
+             cpu: Cpu::new(), m: Machine::new(vfs::Vfs::new(path.clone(),path)),
+             ips: 1_000_000.0, cfg_trace: false, watches: Vec::new(), profile: None,
+-            counter: None, profile_start: 0.0, scene_override: None, vehicle_anywhere: None, realtime_last: None,
++            counter: None, profile_start: 0.0, scene_override: None, vehicle_anywhere: None, realtime_last: None, frame_trace: None,
+         };
+         // A halted CPU is sufficient: the game clock must still advance.
+         emu.cpu.wr8(0,0xF4);
+diff --git a/crates/game/src/vga.rs b/crates/game/src/vga.rs
+index cfdf063..d8fbaf4 100644
+--- a/crates/game/src/vga.rs
++++ b/crates/game/src/vga.rs
+@@ -204,9 +204,10 @@ impl Vga {
+     /// A full-screen native world only needs the DOS pixels marked as HUD.
+     /// An empty/wrong-size mask retains ordinary full-frame conversion.
+     pub fn render_masked(&mut self, cpu: &Cpu, out: &mut Vec<u32>, mask: &[bool]) -> (usize, usize) {
++        let original = std::env::var_os("CM_ORIGINAL").is_some();
+         let pal: [u32;256] = std::array::from_fn(|i| {
+             let c = self.dac[i];
+-            let e = |x: u8| ((x as u32) << 2) | ((x as u32) >> 4);
++            let e = |x: u8| ((x as u32) << 2) | if original { 0 } else { (x as u32) >> 4 };
+             (e(c[0]) << 16) | (e(c[1]) << 8) | e(c[2])
+         });
+         if self.mode == 3 {

@@ -19,7 +19,7 @@ MARKER = "ORACLE original-x86: native::install bypassed; hooks=0; asset patches=
 
 
 def scenario(path):
-    keys, holds, captures, states = [], [], [], []
+    keys, holds, mice, captures, states = [], [], [], [], []
     ips = 60_000_000
     for number, line in enumerate(path.read_text().splitlines(), 1):
         fields = line.split("#", 1)[0].split()
@@ -36,6 +36,12 @@ def scenario(path):
                 assert math.isfinite(start) and math.isfinite(end) and 0 <= start < end
                 assert 0 <= int(sc.removeprefix("e"), 16) < 128
                 holds += ["--hold", f"{start}:{end}:{sc}"]
+            elif command == "mouse" and len(args) == 4:
+                time = float(args[0])
+                x, y, buttons = int(args[1]), int(args[2]), int(args[3], 0)
+                assert math.isfinite(time) and time >= 0
+                assert 0 <= x < 640 and 0 <= y < 240 and 0 <= buttons <= 3
+                mice += ["--raw-mouse", f"{time}:{x}:{y}:{buttons}"]
             elif command == "capture" and len(args) == 1:
                 time = float(args[0])
                 assert math.isfinite(time) and time > 0
@@ -54,7 +60,7 @@ def scenario(path):
         raise ValueError(f"{path}: need distinct capture times")
     if len(states) > 1:
         raise ValueError(f"{path}: this backend supports one final memory span per capture")
-    return ips, keys + holds, sorted(captures), states
+    return ips, keys + holds + mice, sorted(captures), states
 
 
 def copy_saves(source, destination):
@@ -92,6 +98,27 @@ def copy_saves(source, destination):
         with target.open("rb") as stream:
             receipt[relative] = hashlib.file_digest(stream, "sha256").hexdigest()
     return receipt
+
+
+def copy_config(source, destination):
+    """Preserve original CMDATA.CNF bytes; never synthesize device settings."""
+    source, destination = Path(source), Path(destination)
+    if not source.is_dir() or source.resolve() == destination.resolve():
+        raise ValueError("configuration source must be a separate directory")
+    candidates = [path for path in source.iterdir()
+                  if path.name.upper() == "CMDATA.CNF"]
+    if len(candidates) != 1:
+        raise ValueError(f"need one original CMDATA.CNF in {source}")
+    path = candidates[0]
+    if path.is_symlink() or not path.is_file():
+        raise ValueError(f"configuration is not a regular file: {path}")
+    destination.mkdir(parents=True, exist_ok=True)
+    target = destination / "CMDATA.CNF"
+    if target.is_symlink():
+        raise ValueError(f"configuration destination is a symlink: {target}")
+    shutil.copyfile(path, target)
+    with target.open("rb") as stream:
+        return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
 def verified_sources(reference, patch):
@@ -173,6 +200,8 @@ def main():
                         help="seed each run with saves exported by a previous original run")
     parser.add_argument("--export-saves", type=Path, metavar="DIR",
                         help="copy original save files out of the final checkpoint")
+    parser.add_argument("--import-config", type=Path, metavar="DIR",
+                        help="seed original CMDATA.CNF captured from a previous run")
     args = parser.parse_args()
     if args.collision_object is not None and not 0 <= args.collision_object < 2842:
         raise ValueError("collision object outside original object pool")
@@ -209,11 +238,13 @@ def main():
         env["CM_WATCH"] = ",".join(f"{value:x}" for value in watches)
     if states:
         env["CM_DUMP"] = f"{states[0][0]:x}:{states[0][1]}"
-    imported_saves, exported_saves = {}, {}
+    imported_saves, exported_saves, imported_config = {}, {}, {}
+    config_sha256 = None
     for index, time in enumerate(captures):
         if args.frame_trace and index == len(captures) - 1:
             env["CM_FRAME_TRACE"] = str(destination / "frames.csv")
             env["CM_FRAME_RANGES"] = ",".join(args.trace_range)
+            env["CM_MOUSE_TRACE"] = str(destination / "mouse-input.csv")
             if args.snapshot:
                 env["CM_FRAME_SNAPSHOT"] = str(destination / "scene-start")
             if args.actor_trace:
@@ -239,6 +270,8 @@ def main():
             (root / "iso/CYBERMAG").symlink_to(assets, target_is_directory=True)
             if args.import_saves:
                 imported_saves[f"frame{index:06d}"] = copy_saves(args.import_saves, root / "run")
+            if args.import_config:
+                imported_config[f"frame{index:06d}"] = copy_config(args.import_config, root / "run")
             command = [str(binary), "--root", str(root), "--headless", "--seconds", str(time),
                        "--ips", str(ips), *events]
             logpath = destination / f"frame{index:06d}.log"
@@ -253,6 +286,12 @@ def main():
                 image.convert("RGB").save(destination / f"frame{index:06d}.png")
             if args.export_saves and index == len(captures) - 1:
                 exported_saves = copy_saves(root / "run", args.export_saves)
+            if index == len(captures) - 1:
+                run = root / "run"
+                if run.is_dir() and any(p.name.upper() == "CMDATA.CNF" for p in run.iterdir()):
+                    config_sha256 = copy_config(run, destination)
+                else:
+                    (destination / "CMDATA.CNF").unlink(missing_ok=True)
             print(f"{path.stem} t={time:g}: {destination / f'frame{index:06d}.png'}")
     metadata = {"mode": "original x86; DOS/DPMI/BIOS/VGA HLE; no native game hooks",
                 "reference": REVISION, "ips": ips, "capture_seconds": captures,
@@ -261,7 +300,14 @@ def main():
                 "export_saves_directory": str(args.export_saves.resolve()) if args.export_saves else None,
                 "imported_saves": imported_saves,
                 "exported_saves": exported_saves,
+                "import_config_directory": str(args.import_config.resolve()) if args.import_config else None,
+                "imported_config": imported_config,
+                "config_file": "CMDATA.CNF" if config_sha256 else None,
+                "config_sha256": config_sha256,
                 "frame_trace": "frames.csv" if args.frame_trace else None,
+                "draw_clock_trace": "draw-clocks.csv" if args.frame_trace else None,
+                "ui_action_trace": "ui-actions.csv" if args.frame_trace else None,
+                "mouse_trace": "mouse-input.csv" if args.frame_trace else None,
                 "trace_ranges": args.trace_range,
                 "actor_trace": "actors.csv" if args.actor_trace else None,
                 "actor_clock_trace": "actor-clocks.csv" if args.actor_trace else None,
