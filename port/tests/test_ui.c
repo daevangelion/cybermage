@@ -156,6 +156,21 @@ int main(int argc, char **argv)
     assert(ui_load_game(&save, &w, original.data, original.size, "orig/retail") == 0);
     assert(w.player_object == 936 && w.person_count == 152);
     {
+        const world *draw=&w;
+        unsigned textures=w.texture_count;
+        assert(ui_draw_prop_icon(draw,screen,120,120,16) == 0);
+        assert(w.texture_count==textures);
+        assert(ui_draw_shop_object(draw,screen,320,240,16) == 0);
+        assert(w.texture_count==textures);
+        assert(ui_draw_prop_icon(draw,screen,120,120,CM_PROP_ICONS) == -1);
+        {
+            world_span old=w.prop_icons[16].pixels;
+            w.prop_icons[16].pixels.data=NULL;
+            assert(ui_draw_prop_icon(draw,screen,120,120,16) == -1);
+            w.prop_icons[16].pixels=old;
+        }
+    }
+    {
         ui_view view;
         int32_t x=ui.ACarX[0], y=ui.ACarY[0];
         int32_t hp=w.persons[w.player_person].unk_0038;

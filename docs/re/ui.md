@@ -319,6 +319,13 @@ Failures identify `SAVE*.DAT` at `0x34F1D + person*192`. Negative object/type/
 compact-index and mismatched-player cases are rejected while the retail save
 still round-trips byte-for-byte.
 
+Selector/shop prop icons are now borrowed frame0 spans prepared during scene
+loading from SCENE.RSC item resource bytes. They use a separate fixed256-entry
+metadata cache, not renderer texture slots or copied bitmap data. All selector,
+shop and icon drawers take `const world *`; the lazy `world_prop_frame` loader
+was removed. Drawing resource16 (absent from scene1 placements) is tested without
+changing texture_count, and out-of-range/unprepared icons fail explicitly.
+
 - SetGammaBright5253C adds the signed brightness to each6-bit DAC component,
   clipping0..63. SetGammaContrast52598 averages the three already-brightened
   components; mean<32 subtracts contrast, otherwise adds it, clipping0..63.

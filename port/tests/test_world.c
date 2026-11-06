@@ -73,6 +73,7 @@ int main(int argc, char **argv)
             if (scene == 1) {
                 const world_texture *icon;
                 unsigned object = w.player_object, type = (unsigned)w.persons[0].type;
+                unsigned prop,base;
                 assert(world_set_person(&w,0,type,99,0x50000,0x60000,0,0x20000,0x1234) == 0);
                 bad_placement(2,24,0);
                 bad_placement(2,24,8);
@@ -109,7 +110,12 @@ int main(int argc, char **argv)
                 assert(w.objects[object].person == 0 && w.objects[object].active == 1);
                 assert(world_set_person(&w,0,type,99,0x7FFFFF00,0x60000,0,0x20000,0) == -1);
                 assert(world_set_person(&w,0,type,99,0x50000,0x60000,0,0x20000,0x1234) == 0);
-                assert(world_prop_frame(&w,12,31,&icon) == 0);
+                for(prop=1;prop<w.prop_definitions.size/1051;++prop)
+                    if(cm_u16(w.prop_definitions.data+prop*1051+28)==12) break;
+                assert(prop<w.prop_definitions.size/1051);
+                assert(world_prop_texture(&w,w.prop_definitions.data+prop*1051,&base) == 0);
+                assert(base+31<w.texture_count);
+                icon=&w.textures[base+31];
                 assert(icon->resource == 12 && icon->frame == 15 && icon->rotations == 32);
                 {
                     unsigned texture = w.fxo_textures[0], revision = w.textures[texture].revision;

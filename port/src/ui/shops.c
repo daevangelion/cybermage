@@ -251,7 +251,7 @@ static int shop_label(const cm_ui *ui, unsigned string, int32_t value,
     return 0;
 }
 
-int ui_shop_draw(cm_ui *ui, const events_state *e, world *w, uint8_t *dst)
+int ui_shop_draw(cm_ui *ui, const events_state *e, const world *w, uint8_t *dst)
 {
     unsigned x,y,i;
     char label[64];

@@ -37,12 +37,14 @@ int ui_draw_scon_bitmap(const cm_ui *ui, uint8_t *dst, int x, int y,
 
 /* DrawSCONObject0x56B3C: fit56x38, centre, mirrored column sampling.
  * Decoder consumes the same signed run representation as the software view. */
-static int prop_image(world *w, uint8_t *dst, int x, int y,
+static int prop_image(const world *w, uint8_t *dst, int x, int y,
                         unsigned resource, int shop)
 {
-    const world_texture *t;
+    const world_prop_icon *t;
     unsigned sw, sh, dw, dh, col, row;
-    if (world_prop_frame(w,resource,0,&t)) return -1;
+    if (!w->props.data || resource>=CM_PROP_ICONS || !w->prop_icons[resource].pixels.data)
+        return cm_fail("SCON object",resource,"icon was not loaded with the scene");
+    t=&w->prop_icons[resource];
     if (t->height <= 0 || t->height > 1024 || t->width <= 0 || t->width > 1024)
         return cm_fail("SCON object",resource,"invalid prop dimensions");
     sw = (unsigned)t->height*2; sh = (unsigned)t->width*2;
@@ -95,13 +97,13 @@ static int prop_image(world *w, uint8_t *dst, int x, int y,
     return 0;
 }
 
-int ui_draw_prop_icon(world *w, uint8_t *dst, int x, int y, unsigned resource)
+int ui_draw_prop_icon(const world *w, uint8_t *dst, int x, int y, unsigned resource)
 {
     return prop_image(w,dst,x,y,resource,0);
 }
 
 /* DrawShopObject2A734: original size, centred, mirrored columns. */
-int ui_draw_shop_object(world *w, uint8_t *dst, int x, int y, unsigned resource)
+int ui_draw_shop_object(const world *w, uint8_t *dst, int x, int y, unsigned resource)
 {
     return prop_image(w,dst,x,y,resource,1);
 }
@@ -119,7 +121,7 @@ static void outline(uint8_t *dst, int x, int y)
     }
 }
 
-int ui_draw_selector(const cm_ui *ui, world *w, const events_state *e, uint8_t *dst)
+int ui_draw_selector(const cm_ui *ui, const world *w, const events_state *e, uint8_t *dst)
 {
     unsigned i;
     if (e->selector_count > EVENTS_SELECTOR_MAX ||

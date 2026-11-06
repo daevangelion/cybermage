@@ -115,9 +115,9 @@ int ui_text_mode(uint8_t *dst, const cm_font *font, int x, int y,
                   uint8_t shadow, int mode);
 int ui_draw_scon_bitmap(const cm_ui *ui, uint8_t *dst, int x, int y,
                         unsigned icon, unsigned shade);
-int ui_draw_prop_icon(world *w, uint8_t *dst, int x, int y,
+int ui_draw_prop_icon(const world *w, uint8_t *dst, int x, int y,
                        unsigned resource);
-int ui_draw_shop_object(world *w, uint8_t *dst, int x, int y,
+int ui_draw_shop_object(const world *w, uint8_t *dst, int x, int y,
                          unsigned resource);
 struct events_state;
 int ui_gambling_open(cm_ui *ui, struct events_state *e, world *w);
@@ -126,9 +126,9 @@ int ui_gambling_step(cm_ui *ui, struct events_state *e, world *w,
 int ui_gambling_draw(cm_ui *ui, const struct events_state *e, uint8_t *dst);
 int ui_shop_step(cm_ui *ui, struct events_state *events, world *w,
                    const cm_input *input, uint32_t ticks);
-int ui_shop_draw(cm_ui *ui, const struct events_state *events, world *w,
+int ui_shop_draw(cm_ui *ui, const struct events_state *events, const world *w,
                    uint8_t *dst);
-int ui_draw_selector(const cm_ui *ui, world *w,
+int ui_draw_selector(const cm_ui *ui, const world *w,
                       const struct events_state *events, uint8_t *dst);
 int ui_render_bells_and_whistles(cm_ui *ui, uint8_t *pixels,
                                 const ui_hud *hud);

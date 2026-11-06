@@ -109,7 +109,8 @@ int world_load_scene(world *w, const char *dir, unsigned scene)
     environment(w);
     if (world_load_map(w, w->scene_sections[0].data, w->scene_sections[0].size) ||
         load_passages(w) || load_lights(w) || world_load_panels(w) ||
-        world_load_placements(w) || world_load_persons(w)) goto fail;
+        world_load_placements(w) || world_load_persons(w) ||
+        world_load_prop_icons(w)) goto fail;
     /* LoadScene 0x11F4E..0x11F7B overrides the player's animation origin. */
     w->objects[w->player_object].z = w->unk_5E7A8 ? 0x3800 : 0x5D55;
     if (world_make_omap(w)) goto fail;

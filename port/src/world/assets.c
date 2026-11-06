@@ -287,32 +287,6 @@ int world_prop_texture(world *w, const uint8_t *def, unsigned *base)
     return 0;
 }
 
-int world_prop_frame(world *w, unsigned resource, unsigned image,
-                      const world_texture **out)
-{
-    unsigned base, type;
-    if (!out) return cm_fail("world/PROP", resource, "missing frame output");
-    for (base = w->panel_count; base < w->texture_count; ++base)
-        if (w->textures[base].kind == WORLD_TEX_PROP &&
-            w->textures[base].resource == resource) break;
-    if (base == w->texture_count) {
-        for (type = 1; type < w->prop_definitions.size / 1051; ++type) {
-            const uint8_t *def = w->prop_definitions.data + type * 1051;
-            if (cm_u16(def + 28) != resource) continue;
-            if (world_prop_texture(w,def,&base)) return -1;
-            break;
-        }
-        if (type == w->prop_definitions.size / 1051)
-            return cm_fail("world/PROP", resource, "no definition for icon resource");
-    }
-    if (image >= w->texture_count - base ||
-        w->textures[base+image].kind != WORLD_TEX_PROP ||
-        w->textures[base+image].resource != resource)
-        return cm_fail("world/PROP", image, "frame outside prop resource");
-    *out = &w->textures[base+image];
-    return 0;
-}
-
 int world_anim_frame(world *w, unsigned object, unsigned gsx, unsigned image)
 {
     if (object >= CM_OBJECT_MAX || gsx >= 55 || image >= 80 || !w->gsx[gsx].loaded)
