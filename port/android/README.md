@@ -43,7 +43,14 @@ adb shell am start -n com.jshield.cybermage/.DataActivity
 
 On first launch a dialog displays the app-specific external folder and asks you
 to put the installed game there. No broad storage permission or bundled data is
-needed. For the standard emulator/device user0:
+needed. Two ways:
+
+- **Import folder** (no adb): copy the retail directory's files anywhere in shared
+  storage (e.g. `Download/CyberMage`, via Termux `ssh -p 8022`), choose it in the
+  system folder picker; its top-level files are copied into the app folder
+  (names keep their case, `.part` then rename). Verified on `box-api36`: 46 files
+  imported SHA-256-identical, game launched to the title and scene 1.
+- **adb** for the standard emulator/device user0:
 
 ```
 adb push orig/retail/. /sdcard/Android/data/com.jshield.cybermage/files/data/
