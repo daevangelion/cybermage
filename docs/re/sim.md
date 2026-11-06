@@ -551,3 +551,22 @@ pass the old coordinate; JumbleBound passes its already computed proposal.
 Five bounded regressions cover both axes' quarter0/3 snaps, preservation of
 the other axis and a free-origin negative control. Named e4a6fcb fails these
 assertions before the cutover (exit134).
+
+## Hand/selector physical dispatch
+
+The genuine `clear-regen-strafe` route first differs on player XY at frame47
+with every NPC and RNG checkpoint still matching. Frame46 opens F3's mode3
+selector while carrying momentum14. Original `01D44E` dispatches through
+table`01B9C0` to selector branch`01E445`, which rejoins`01E781` without
+calling MovePerson. The native unconditional MovePerson call instead advances
+the player by494/493, then keeps sliding while the selector is open.
+
+Momentum must still decay normally at`01C331`; it is not cleared or fitted.
+Original`01C3E9..01C3FC` also clears walking-bob activity for mode3 unless
+swimming. The frame reducer now preserves those earlier phases and limits
+physical movement to modes1/2/5/7. Mode2 has its separate original movement
+branch; modes0/4/6 also bypass physical movement. Enhanced aim retains its
+previous combat physics context rather than changing its existing opt-in
+behavior. The bounded regression checks stationary modes, retained inertia
+decay, cleared hand-mode bob and enhanced-aim jump gravity. Named b04e4f6
+fails before this producer/consumer cutover (assert134).

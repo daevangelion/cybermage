@@ -319,7 +319,7 @@ int sim_frame(sim_state *s, world *w, const cm_input *input, uint32_t timer_tick
 {
     world_object *o;
     world_person *p;
-    int jump, can_jump, running;
+    int jump, can_jump, running, mode;
     if (w->player_object >= w->object_count || w->player_person >= w->person_count)
         return cm_fail("simulation", w->player_object, "invalid player indices");
     sim_input(s, input);
@@ -417,6 +417,9 @@ int sim_frame(sim_state *s, world *w, const cm_input *input, uint32_t timer_tick
         } else s->pc_mode=s->previous_pc_mode;
     }
     momentum(s);
+    mode = s->modern_aim ? s->previous_pc_mode : s->pc_mode;
+    /* HNF01C3E9: hand mode stops walking bob, except while swimming. */
+    if (mode == 3 && !s->unk_144b50) s->unk_144afc = 0;
     if (flight(s, w, o)) return -1;
     if (s->ai) ai_pc_hand_bob(s->ai, s);
     if (s->unk_144b1c) jump_step(s);
@@ -445,6 +448,9 @@ int sim_frame(sim_state *s, world *w, const cm_input *input, uint32_t timer_tick
      * heading for JumbleBound, not this frame's subsequently applied yaw. */
     if (s->ai && s->ai->tables_loaded && s->ai->events &&
         ai_pc_prepare_motion(s->ai, s, w)) return -1;
+    /* HNF01D44E/01B9C0: selector/hand and inactive modes bypass MovePerson.
+     * Enhanced aim retains its previous combat physics context. */
+    if (mode != 1 && mode != 2 && mode != 5 && mode != 7) return 0;
     if (s->pc_mode == 7 && s->vehicle_type != 1) {
         if (s->unk_144aec) s->unk_144aec = s->unk_144aec / 2 + 4;
         if (s->unk_144af0 > 0) s->unk_144af0 = s->unk_144af0 / 4 + 4;
