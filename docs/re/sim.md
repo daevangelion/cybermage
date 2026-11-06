@@ -175,9 +175,10 @@ diverges: original NewMONBound enters with collision count/flags0/0, native1/2.
 CollObject `043863..0438C2` gives targetable2 props their own branch:
 PROP runtime+6 (disk placement+26, LoadPROPS0245AA) must be nonzero;
 player contact calls CollItem, NPC item kind16 is ignored, and other NPC
-contacts pass the candidate **object** to ObjNxNy. Only the generic branch
-`0438C4..0438D2` passes the chain index. Native formerly conflated that NPC
-pickup branch with generic collision. Both read-only observers matched all22
+contacts pass the candidate **object** to ObjNxNy. The generic branch
+`0438C4..0438D2` also passes the candidate object: its push at0438CB shifts
+the candidate saved at `[esp+4]` to `[esp+8]` before0438CE reads it.
+Both read-only observers matched all22
 entry fields at that call: proposal1000124,884972 and only node431→object877,
 a kind15 cash prop. The source-correct branch now uses the object, skips NPC
 kind16 contacts, and leaves aux0 decorations on the generic branch.
@@ -185,6 +186,14 @@ kind16 contacts, and leaves aux0 decorations on the generic branch.
 and subsequently passed its cash/kind16/decoration regressions.
 `sim_state.collision_observe/context` is a normally-null
 read-only diagnostic seam; it performs no core I/O or state substitution.
+
+The generic branch's former chain-index argument independently caused combat
+frame795: decoration918 clips X to944128-7680-7680-1=928767.
+The isolated exact-contact fixture failed before the candidate-object fix and
+passed afterward. The original1299-row combat replay then first diverged at
+frame885 (Y expected1061517, native1061226), rather than795. Target comparison
+still reports21 mismatches across1298 completed frames (13 original nonempty),
+first native917/original918, empty versus[1069]. This is not a target MATCH.
 
 ## Integrated verification (Integrator)
 

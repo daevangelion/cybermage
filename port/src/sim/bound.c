@@ -73,14 +73,12 @@ int sim_coll_object(sim_state *s, world *w, unsigned object, int32_t *x, int32_t
                             if (object == w->player_object) {
                                 if (events_coll_item(s->events, w, id, object)) return -1;
                             } else if (s->events->definitions[item].kind != 16) {
-                                /* NPC pickup contact 04389A..0438C2 uses the
-                                 * object, unlike the generic 0438CE branch. */
                                 sim_obj_nx_ny(s, w, object, id, x, y);
                             }
                         } else {
-                            if (node >= CM_OBJECT_MAX)
-                                return cm_fail("CollObject", node, "generic collision node exceeds object table");
-                            sim_obj_nx_ny(s, w, object, node, x, y);
+                            /* 0438CB pushes Y; [esp+8] at0438CE is the
+                             * candidate saved at the former [esp+4]. */
+                            sim_obj_nx_ny(s, w, object, id, x, y);
                         }
                     }
                 }
