@@ -87,6 +87,48 @@ static void soul_prop_pool(void)
     assert(w.objects[100].floor_z == 0x1000 && w.objects[100].active == 1);
 }
 
+static void death_waits_for_recoil_exit(void)
+{
+    world_person *p;
+    unsigned i;
+    memset(&w, 0, sizeof w);
+    memset(&a, 0, sizeof a);
+    sim_init(&simulation, 0);
+    simulation.ai = &a; simulation.bp_limit_flag = 1; simulation.frame_ticks = 1;
+    w.top_level = 3; w.object_count = 3; w.person_count = 2;
+    w.player_object = 1;
+    w.objects[1].person = 0; w.persons[0].object = 1;
+    w.objects[1].x = w.objects[1].y = 65536;
+    w.objects[2].person = 1; w.objects[2].active = 1;
+    w.objects[2].x = w.objects[2].y = 16 * 65536 + 32768;
+    w.objects[2].z = 0x3800; w.objects[2].height = w.objects[2].radius = 0x1000;
+    w.objects[2].unk_74AF0 = 0x1000;
+    p = &w.persons[1]; p->object = 2; p->status = 2; p->state = 8;
+    p->unk_0018 = 1; p->unk_00BC = 29;
+    p->unk_00A4 = -1; p->unk_00AC = 1024; p->unk_00B0 = 1;
+    p->unk_0084 = 0; p->unk_0088 = 40; p->unk_008C = 6;
+    a.tables_loaded = 1; a.monster_count = a.gsx_count = a.sequence_count = 1;
+    for (i = 0; i < CM_MAP_CELLS; ++i) w.cells[0][i].floor = 1;
+    world_trig_init(&w.trig);
+    assert(ai_init_soul_fire(&a, &w) == 0 && world_make_omap(&w) == 0);
+    assert(ai_update_objects(&a, &simulation, &w, 0, 0) == 0);
+    assert(p->unk_00A4 == 0 && p->unk_00B0 == 0);
+    /* Original036B98 samples recoil before MoveObject clears it. */
+    assert(p->unk_0054 == 0 && a.souls[0].active == 0);
+    assert(ai_update_objects(&a, &simulation, &w, 0, 0) == 0);
+    assert(p->unk_0054 == 1 && a.souls[0].active == 1);
+    /* The existing death attachment uses runtime PROP+4, not the FXO table. */
+    p->unk_00A0 = 1;
+    w.objects[4].active = 1; w.objects[4].x = w.objects[4].y = 2 * 65536;
+    w.object_count = 14; w.fxo_count = 2; w.fxo_objects[1] = 13;
+    w.objects[13].active = 1; w.objects[13].x = w.objects[13].y = 3 * 65536;
+    assert(world_make_omap(&w) == 0);
+    assert(ai_update_objects(&a, &simulation, &w, 0, 0) == 0);
+    assert(w.objects[4].x == w.objects[2].x && w.objects[4].y == w.objects[2].y);
+    assert(w.objects[4].floor_z == w.objects[2].floor_z + 0x1000);
+    assert(w.objects[13].x == 3 * 65536 && w.objects[13].y == 3 * 65536);
+}
+
 static void explicit_undefined_input(void)
 {
     uint8_t bytes[12 + 2 * 200] = {0};
@@ -388,6 +430,7 @@ int main(int argc, char **argv)
     explicit_undefined_input();
     soul_prop_pool();
     player_hit_response();
+    death_waits_for_recoil_exit();
     puts("AI data tests passed");
     return 0;
 }

@@ -426,22 +426,29 @@ static int actor_state(ai_state *a, sim_state *s, world *w, unsigned id,
         }
         if (m->flags & 2) o->rotations = 1;
         p->unk_00BC = 29;
+        /* 036B98..036BB0 tests recoil before MoveObject. Finishing recoil
+         * inside that call must not emit a soul until the next update. */
+        if (p->unk_00A4 || p->unk_00B0)
+            return ai_move_object(a, s, w, id, tick, 0);
         if (ai_move_object(a, s, w, id, tick, 0)) return -1;
-        if (p->unk_00A4 || p->unk_00B0 || !p->unk_0018) return 0;
+        if (!p->unk_0018) return 0;
         if (!p->unk_0054 && p->unk_008C > 0) {
             p->unk_0054 = 1;
             if (ai_make_soul_fire(a, w, (unsigned)p->object, p->unk_0084,
                                   p->unk_008C, p->unk_0088, p->water)) return -1;
         }
         if (p->unk_00A0 > 0) {
-            int fxo = world_fxo_object(w, (unsigned)p->unk_00A0);
-            if (fxo < 0) return -1;
-            if (!w->objects[fxo].active) p->unk_00A0 = 0;
+            unsigned prop = (unsigned)p->unk_00A0, drop_object;
+            /* 036C1B reads the runtime PROP descriptor table. */
+            if (prop >= w->prop_count || w->prop_objects[prop] >= w->object_count)
+                return cm_fail("UpdateObjects", prop, "invalid death attachment PROP");
+            drop_object = w->prop_objects[prop];
+            if (!w->objects[drop_object].active) p->unk_00A0 = 0;
             else {
-                world_object *drop = &w->objects[fxo];
+                world_object *drop = &w->objects[drop_object];
                 if (o->active) {
-                    world_omap_delete(w, (unsigned)fxo); drop->x = o->x; drop->y = o->y;
-                    world_omap_insert(w, (unsigned)fxo);
+                    world_omap_delete(w, drop_object); drop->x = o->x; drop->y = o->y;
+                    world_omap_insert(w, drop_object);
                 }
                 if (w->scene == 10 && id == 2) {
                     if (a->gem_count_down) {

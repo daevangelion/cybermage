@@ -15,6 +15,7 @@ executes original x86 AI states; it is not a complete native implementation.
 | UpdatePCObject | 0x034488 | hidden +0x5C decrements on animation tick; object flags byte2 bit1 cleared at zero; aura +0x74 decremented when nonzero |
 | UpdateObjects | 0x0348C4 | PERSONs 1..count; animation ticks when timer > deadline, then deadline=timer+4 (kind9: +3; kind17 every frame); player effects first; acquisition rotates PERSON index mod10 each call |
 | HandleNextFrame hit response | 0x01CF71..0x01D09E | nonzero PCFlash consumes RND4096, RND8192, RND2; vertical view kick, lateral JumbleBound at heading±quarter-turn; no bp gate |
+| RenderBells health/energy state | 0x01928B..0x0193B2 | PERSON0 low-HP chance RND(HP/2+2), actual sound3 check/volume RND8192 and shared PCSound; real running-hum gate; then energy recovery |
 
 ## Layout used by combat
 
@@ -29,8 +30,8 @@ water u16 +B6; animation state u8 +BC, cursor u8 +BD.
 
 ## Target visibility
 
-Rerun the existing1299-frame combat capture after fixing the frame795 movement
-divergence (do not inject oracle coordinates or target results):
+Reproduce the1299-row combat capture with its measured seed/clock sidecars and
+the explicit approved undefined-field input, never coordinates or target results:
 
 ```
 tools/run_capped.sh make -C port B=build/AimFix
@@ -86,6 +87,16 @@ Only descriptor+4 (object) and +6 (pickup item, initially0) are initialized.
 `MakeSoulFire` writes the short pickup item at PROP+6 while preserving the
 complete32-bit value in the SoulFire record. The native pools and strict save
 identity checks follow those associations; FXO mappings/count are unchanged.
+
+Death state8 samples recoil PERSON+A4/B0 **before** MoveObject
+(036B98..036BB0). A call that finishes recoil still exits that actor update;
+SoulFire may be emitted only on the following update. The genuine Training
+fight originally exposed a one-frame-early native soul: original1537 first
+active at checkpoint323 with lifetime40, native formerly active at322 with39.
+That caused an unintended early type46 pickup and extra RNG, not an item-dice
+exception. The corrected guard preserves the actual producer ordering.
+The existing corpse attachment PERSON+A0 also indexes the runtime PROP table
+at036C1B; it is not an FXO placement. Focused controls reject both old behaviors.
 
 ### Target-list checkpoint evidence
 
@@ -357,19 +368,28 @@ tools/run_capped.sh .venv/bin/python tools/compare_projectiles.py \
   captures/projectile-fire/frames.csv captures/projectile-fire/native
 ```
 
-Observed:155 frames, native player-state MATCH,616 projectile checkpoints
-compared,17 active checkpoints, types9 and10, **no field divergence**.
+Historical four-slot receipt:155 frames, native player-state MATCH,616 projectile
+checkpoints compared,17 active checkpoints, types9 and10, **no field divergence**.
 Original pre-frameN+1 is compared with native post-frameN; the terminal native
 frame has no next original checkpoint and is excluded. Active slot fields
 checked exactly: state/type/animation/lifetime/vertical/speed/target and
 XY/floor-Z/heading. Inactive slots compare active state only (stale payloads
 are not live game state). The geometry spans cover the12 original pool objects
-1088..1099; native state dumps currently expose the first4 slots.
+1088..1099. Current native dumps and the comparator require **all12** pool slots,
+including NPC-eligible slots0..3 and player allocations across0..11; old four-slot
+native directories fail closed. The616-checkpoint receipt is not retroactively
+twelve-slot evidence.
+
+New named8d59b10 runtime receipt:194 player-state rows MATCH;193 completed
+frames compare22 PC fields each and2,316 missile checkpoints across all12 slots
+(17 active), with no field differences. States are in
+`captures/pc-fire/Port-8d59b10`; source addresses, commands and limits are in
+`pc_fire.md`. This covers Starbolt9/impact10, not all52 dispatch types.
 
 This proves the captured spell-flight/impact path, not all52 dispatch types or
 full-firefight parity. The earlier actor trace above has no damaged NPCs and
-must not be presented as projectile verification. Broader firefights need
-all12 native missile records and PERSON HP/armor/RNG checkpoints.
+must not be presented as projectile verification. Broader firefights use the
+complete12-slot format together with PERSON HP/armor/RNG checkpoints.
 
 ### Lost-target melee range lifetime
 
@@ -414,8 +434,10 @@ no RNG call; negative/0/2 promotion is covered by the same retail-x86 fixture.
 
 ## Player input / hand checkpoint
 
-`pc_fire.c` now supplies real `ai_pc_input` (before world/NPC updates) and
-`ai_pc_hand2hand` (after NPC updates), plus the supplied-EXE PC table loader and
+`pc_fire.c` supplies `ai_pc_prepare_input` before acceleration/water,
+`ai_pc_prepare_motion` (hit response, aim, hand stance) before MovePerson,
+late `ai_pc_input` for actual firing before world/NPC updates, and
+`ai_pc_hand2hand` after NPC updates, plus the supplied-EXE PC table loader and
 ResetAim. It implements the original weapon0..9, spell0..15 and vehicle launch
 dispatch, ammo/item/energy costs, semi-auto release latch, cooldown/aim/muzzle
 state, scene3 linking spell, automatic sword sequences, swing matrices, blocking,
@@ -423,11 +445,23 @@ melee damage and attached impact missiles. Functions and fields are detailed in
 `pc_fire.md`; all numeric arrays come from the user's executable. The current
 shared tree linked cleanly with strict C99 through `make -C port B=build/Port`.
 
-The scene1 fire replay now matches193 completed frames:22 hand/weapon/energy fields
-per frame and772 missile checkpoints(17 active), with no field divergence.
+The historical scene1 fire replay matches193 completed frames:22 hand/weapon/energy
+fields per frame and772 four-slot missile checkpoints(17 active), with no field
+divergence. Current dumps/comparison require12 slots; the772 count remains the
+older four-slot receipt, not a new twelve-slot runtime verdict.
+The newer named8d59b10 receipt above supplies the actual2,316-checkpoint
+twelve-slot runtime verdict.
 Original-x86 differential fixtures additionally match17,280 hand frames,
 2,400 energy-recovery frames and7,040 hand-bob frames. Commands, source addresses,
 checked inputs and limitations are in `pc_fire.md`.
+
+`ai_pc_select` commits HandleNextFrame1E4A0..1E768 selection state immediately:
+EquipWeapon/EquipHHWeapon and ResetAim use the **new raw mode**, not the previous
+effective mode temporarily retained by modern aiming. It clears fire/cooldown/
+latch. EquipHHWeapon103A4 preserves the glove type; EquipWeapon10441 resets glow
+phase only when entering power mode5. Power-to-power selection changes the glow
+set while preserving its phase. Previous mode is the single original144810
+state, not an independent selector copy.
 
 Visual counters may advance after the read-only HUD; original low-HP respiration
 0x1928B..0x19340 and energy regeneration0x19340..0x193B2 run after StatusMonitor.
