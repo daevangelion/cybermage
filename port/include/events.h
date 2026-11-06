@@ -85,7 +85,7 @@ typedef struct events_state {
     int32_t selector_keys[EVENTS_SELECTOR_MAX];
     events_selector selectors[3];
     unsigned selector_kind, selector_request, selector_confirm, selector_joy_latch;
-    int32_t text_trigger, text_object, text_message;
+    int32_t text_trigger, text_object, text_message, text_scene;
     int text_skip_pending;
     uint32_t text_serial;
     int32_t text_switch1, text_switch0, text_event;
@@ -127,6 +127,8 @@ void events_reset_selectors(events_state *e);
 /* Input: -1 error, 0 proceed to world. Selectors do not stop MoveWorld. */
 int events_input(events_state *e, sim_state *s, struct ai_state *a, world *w);
 int events_move_world(events_state *e, sim_state *s, struct ai_state *a, world *w);
+/* LoadGame0514BC..0514F5: reload strings, retain saved counters and links. */
+int events_text_restore(events_state *e, world *w);
 /* RenderBellsAndWhistles019423/01942A, after actors and text presentation. */
 int events_text_finish(events_state *e, world *w);
 void events_scene_cosmetics(events_state *e, const world *w);

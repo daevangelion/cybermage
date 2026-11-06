@@ -75,6 +75,7 @@ static int start_text(events_state *e, world *w, unsigned scene,
                        int32_t message, int object, int trigger)
 {
     e->text_message=message;e->text_object=object;e->text_trigger=trigger;
+    e->text_scene=(int32_t)scene;
     e->text_switch1=e->text_switch0=e->text_event=0;
     if(snd_message(w,scene,(unsigned)message,object)) return -1;
     e->text_serial=snd_text()->revision;
@@ -105,15 +106,21 @@ static int dialogue_complete(events_state *e, world *w)
 
 static int dialogue_tick(events_state *e, world *w)
 {
-    const snd_dialogue *text=snd_text();
     if(!e->text_trigger) return 0;
     if(!e->text_serial) {
-        if(snd_message(w,e->text_trigger==10?9:w->scene,(unsigned)e->text_message,e->text_object)) return -1;
+        if(snd_message(w,(unsigned)e->text_scene,(unsigned)e->text_message,e->text_object)) return -1;
         e->text_serial=snd_text()->revision;
-        return 0;
     }
-    if(text->active) return 0;
-    return dialogue_complete(e,w);
+    return 0;
+}
+
+int events_text_restore(events_state *e, world *w)
+{
+    e->text_serial=0;e->text_skip_pending=0;
+    if(!e->text_trigger) return 0;
+    if(e->text_scene!=(int32_t)w->scene) { e->text_trigger=0;return 0; }
+    e->text_trigger=1;
+    return dialogue_tick(e,w);
 }
 
 static int talk_texture(events_state *e, sim_state *s, world *w, events_event *v,
@@ -527,6 +534,7 @@ static int dispatch(events_state *e, sim_state *s, ai_state *a, world *w, unsign
         if (v->state) break;
         if (p[1]) {
             e->text_message = p[0]; e->text_trigger = p[7]; e->text_object = 0;
+            e->text_scene=(int32_t)w->scene;
             e->text_switch1 = p[13]; e->text_switch0 = p[14]; e->text_event = p[15];
             if (p[2] > 0 && p[2] < CM_MAP_CELLS*CM_MAP_LEVELS) w->cells[p[2]/CM_MAP_CELLS][p[2]%CM_MAP_CELLS].light = (uint8_t)p[3];
             if (p[11]) {
@@ -1304,11 +1312,12 @@ int events_move_world(events_state *e, sim_state *s, ai_state *a, world *w)
 
 /* RenderBellsAndWhistles019423/01942A: after actors, before countdown.
  * Keyboard01309A marks text finished but must not release state3 NPCs during
- * the same frame's UpdateObjects. Natural completion retains its existing path. */
+ * the same frame's UpdateObjects. Natural completion also commits here, so a
+ * nested SaveGame Render serializes the completed caption and switch effects. */
 int events_text_finish(events_state *e, world *w)
 {
     if(!e || !w) return cm_fail("SpeechMessage",0,"missing dialogue state");
-    if(!e->text_skip_pending) return 0;
+    if(!e->text_skip_pending && !e->text_serial) return 0;
     e->text_skip_pending=0;
     if(!e->text_trigger || snd_text()->active) return 0;
     return dialogue_complete(e,w);

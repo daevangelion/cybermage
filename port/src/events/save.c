@@ -58,6 +58,8 @@ int events_save_import(events_state *e, const ui_save_state *save)
         if (e->switches[i].state>1) return cm_fail("SAVE*.DAT",0x34D89+i,"invalid saved switch state");
     }
     e->text_trigger=(int32_t)save->textTrigger; e->text_object=(int32_t)save->textObj; e->text_message=(int32_t)save->textMsgNum;
+    e->text_scene=(int32_t)save->textMsgScen;
+    e->text_serial=0;e->text_skip_pending=0;
     e->text_switch1=(int32_t)save->textSwitch1; e->text_switch0=(int32_t)save->textSwitch0; e->text_event=(int32_t)save->textEvent;
     e->unk_1443FC=(int32_t)save->unk_1443FC; e->unk_144400=(int32_t)save->unk_144400;
     memcpy(e->speechLog,save->speechLog,sizeof(e->speechLog));
@@ -97,6 +99,7 @@ int events_save_export(const events_state *e, ui_save_state *save)
         save->unk_142B78[i]=e->switches[i].state; save->unk_1428F8[i*2]=(uint8_t)e->switches[i].key; save->unk_1428F8[i*2+1]=(uint8_t)((uint16_t)e->switches[i].key>>8);
     }
     save->textTrigger=(uint32_t)e->text_trigger; save->textObj=(uint32_t)e->text_object; save->textMsgNum=(uint32_t)e->text_message;
+    save->textMsgScen=(uint32_t)e->text_scene;
     save->textSwitch1=(uint32_t)e->text_switch1; save->textSwitch0=(uint32_t)e->text_switch0; save->textEvent=(uint32_t)e->text_event;
     save->unk_1443FC=(uint32_t)e->unk_1443FC; save->unk_144400=(uint32_t)e->unk_144400;
     memcpy(save->speechLog,e->speechLog,sizeof(e->speechLog));

@@ -313,6 +313,7 @@ static int encode_save(uint32_t *size)
     save.FireTilePanel = (uint32_t)simulation.fire_tile_panel;
     save.FireTileArt = (uint32_t)simulation.fire_tile_art;
     ai_save_export(&actors, &save);
+    ui_text_export(&ui, &save);
     result = events_save_export(&events, &save) ||
         ui_save_game(&save, &game, save_data, sizeof save_data, size);
     if (ai_set_difficulty(&actors, &game, difficulty)) return -1;
@@ -400,7 +401,9 @@ static int load_game(const char *data, const char *user, unsigned slot, uint32_t
     if (result || import_sim()) return -2; /* Scene replaced: caller must not resume it. */
     actors.difficulty = 1;
     events.ticks = ticks;
-    if (ai_save_import(&actors, &game, &save) || events_save_import(&events, &save))
+    if (ai_save_import(&actors, &game, &save) || events_save_import(&events, &save) ||
+        events_text_restore(&events, &game) ||
+        ui_text_restore(&ui, &save, events.text_serial))
         return -2;
     actors.events = &events;
     if (!same_scene) ai_start_clock(&actors, ticks);
@@ -492,7 +495,9 @@ static int load_auto(const char *data, const char *user, unsigned slot)
     if (load_scene(data, scene) || encode_save(&size) ||
         sim_auto_unpack(save_data, size, file.data, file.size) || save_sim_check(save_data) ||
         ui_save_overlay(&save, &game, save_data, size) ||
-        events_save_import(&events, &save)) goto out;
+        events_save_import(&events, &save) ||
+        events_text_restore(&events, &game) ||
+        ui_text_restore(&ui, &save, events.text_serial)) goto out;
     actors.difficulty = 1;
     if (ai_set_difficulty(&actors, &game, (unsigned)ui.options[8])) goto out;
     ai_restore_pc_info(&events, &game);

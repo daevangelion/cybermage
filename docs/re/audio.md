@@ -289,7 +289,8 @@ during MoveWorld. RenderBellsAndWhistles019423/01942A calls SpeechMessage/TextMe
 **after UpdateObjects01E7E0**, before countdown01942F. The runtime calls
 `events_text_finish(e,w)` once in that late presentation phase: NPC state3 and
 linked switches still see the active message during the skip frame, then see
-completion next frame. Natural completion keeps its existing path.
+completion next frame. Natural completion commits in the same late phase,
+including the nested Render inside SaveGame, before its fields are serialized.
 
 Measured original `captures/Audio-water-dialogue`: frame1464/tick2478 has
 Backslash input2, textTrigger1 and NPC130 state3; frame1465/tick2480 has
@@ -300,6 +301,29 @@ completion merely to the end of MoveWorld was therefore one actor update early.
 (run capped) checks that phase, linked-switch timing, one-time completion and
 unregistered-message skip without restarting it. The fixture isolates movement,
 visibility and cosmetics; event reduction and the NPC state3 decision are real.
+
+LoadGame0510A5..0510E7 restores absolute `textCount`, `textLine`, `textAdd`
+and `textEnd`. At0514BC..0514F5 an active matching-scene message reloads its
+strings and becomes trigger1; a foreign-scene message clears its trigger.
+Neither operation restarts the saved page timer. TextMessage017FA6 uses a
+**signed, strict** timer comparison; even an already set textEnd cannot complete
+until that timer expires. UI imports/exports these four counters against the
+new audio revision; Events preserves textMsgScen and resets stale skip/revision
+state on load. A genuinely new message still starts with a fresh page.
+
+`captures/Audio-late-down-state` observes the frozen original with the exact
+canonical SOUTH-save/key inputs: msg9, scene11, trigger1, count2539, line1,
+add1, end1 remain unchanged through Down's frame145 (actor clock1021).
+Its actors, actor clocks and per-call RNG files are byte-identical to
+`Standing-original-bee11c5/original/scene11-training-fresh-tank-down-save`.
+The former native reconstruction dropped that future saved deadline and made
+one extra NPC dialogue RND4 at pre-words21042/25899/1659; the original's next
+call at those words is LaunchMissile02EEE4/RND4096.
+`check-text-load` exercises the actual main.c save/load handoff, strict timer
+equality, late completion, re-export and foreign-scene cancellation, plus
+`tools/text_load_original.py` against unmodified original gate instructions.
+The source comparison stops at the actual page-draw/completion branches; it
+does not claim pixel equivalence or generally correct directive rendering.
 
 snd_movie_begin/step/end in movie.c replace IntroEpilogue0x1F4EC. Original
 selector **1=intro,2=credits,other=ending**, with English/French/German filenames.

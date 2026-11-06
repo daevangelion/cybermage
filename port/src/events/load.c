@@ -15,7 +15,7 @@ int events_init(events_state *e, world *w)
     e->scene=w->scene;
     events_reset_selectors(e);
     e->selector_kind=e->selector_request=e->selector_confirm=e->selector_joy_latch=0;
-    e->text_trigger=e->text_object=e->text_message=0;
+    e->text_trigger=e->text_object=e->text_message=e->text_scene=0;
     e->text_skip_pending=0;
     e->text_serial=0;
     e->tank_flag=e->vehicle_person=e->vehicle_type=0;

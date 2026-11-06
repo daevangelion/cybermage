@@ -666,6 +666,7 @@ int ai_update_objects(ai_state *a, sim_state *s, world *w,
                 if ((unsigned)p->target == w->player_person || (w->scene == 2 && id == 57)) {
                     if (temporary) p->state = 3;
                     a->events->text_message = add(p->unk_0090, world_rnd(&w->rng, p->unk_0094));
+                    a->events->text_scene = (int32_t)w->scene;
                     a->events->text_object = p->object; a->events->text_trigger = 2;
                     snd_message(w, w->scene, (unsigned)a->events->text_message, p->object);
                     if (p->unk_0098) p->unk_009C = (int32_t)(timer_ticks + (uint32_t)p->unk_0098 * 40u);

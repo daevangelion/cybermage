@@ -83,7 +83,7 @@ typedef struct {
     int32_t flashcolor[7];
     int hand_tables_loaded;
     uint32_t text_revision, text_deadline;
-    unsigned text_line, text_add;
+    uint32_t text_line, text_add, text_end;
     uint8_t speechLog[63];
     uint8_t recorder_map[63];
     unsigned recorder_count;
@@ -224,6 +224,8 @@ typedef struct {
     int loaded;
 } ui_save_state;
 
+int ui_text_restore(cm_ui *ui, const ui_save_state *save, uint32_t revision);
+void ui_text_export(const cm_ui *ui, ui_save_state *save);
 int ui_save_scene(const uint8_t *data, uint32_t size, unsigned *scene);
 void ui_save_init(ui_save_state *save, const world *w);
 struct events_state;

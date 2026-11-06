@@ -308,7 +308,8 @@ static int load_saved_scene(const char *data,const char *user,unsigned slot,
     fire[2]=saved.FireTileArt;fire[3]=saved.FireDamage;
     e.ticks=ticks;ai_start_clock(&a,ticks);
     if(sim_save_fire_import(&s,fire) || ai_save_import(&a,&w,&saved) ||
-       events_save_import(&e,&saved)) goto out;
+       events_save_import(&e,&saved) || events_text_restore(&e,&w) ||
+       ui_text_restore(&names,&saved,e.text_serial)) goto out;
     a.difficulty=1; /* Original SAVE stores normalized PERSON difficulty. */
     if(ai_set_difficulty(&a,&w,(unsigned)names.config.difficulty)) goto out;
     s.input_device=names.config.in_device;

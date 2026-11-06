@@ -22,6 +22,29 @@ static void vline(uint8_t *dst, int x, int y0, int y1)
     for (y = y0; y <= y1; ++y) gfx_store(dst+y * CM_WIDTH + x,TEXT_COLOR);
 }
 
+/* LoadGame0510A5..0510E7 restores these absolute counters, not a fresh page.
+ * LoadTextMessage0514E2 reloads its strings without resetting the counters. */
+int ui_text_restore(cm_ui *ui, const ui_save_state *save, uint32_t revision)
+{
+    if (save->textTrigger && (save->textLine > TEXT_MESSAGE_LINES_MAX ||
+        save->textAdd > TEXT_MESSAGE_LINES_MAX || save->textEnd > 1))
+        return cm_fail("SAVE/text", 0, "invalid saved text cursor");
+    ui->text_revision = revision;
+    ui->text_deadline = save->textCount;
+    ui->text_line = save->textLine;
+    ui->text_add = save->textAdd;
+    ui->text_end = save->textEnd;
+    return 0;
+}
+
+void ui_text_export(const cm_ui *ui, ui_save_state *save)
+{
+    save->textCount = ui->text_deadline;
+    save->textLine = ui->text_line;
+    save->textAdd = ui->text_add;
+    save->textEnd = ui->text_end;
+}
+
 /* TextMessage0x17F88–0x1893B displays whole pages, not one character/tick.
  * Four lines/page; @ begins a new page. ^n/%n prefixes are control metadata.
  * Gameplay effects (#speaker, switches/video links) remain with Events/Audio.
@@ -41,11 +64,18 @@ int ui_text_message(cm_ui *ui, const world *w, uint8_t *dst,
     if (revision != ui->text_revision) {
         ui->text_revision = revision;
         ui->text_deadline = 0; ui->text_line = ui->text_add = 0;
+        ui->text_end = 0;
     }
-    if (ui->text_deadline && ui->ticks > ui->text_deadline) {
+    /* 017FA6 JGE is signed and strict. Even textEnd waits for textCount.
+     * Biasing both unsigned bit patterns preserves signed32 ordering. */
+    if ((ui->ticks ^ UINT32_C(0x80000000)) >
+        (ui->text_deadline ^ UINT32_C(0x80000000))) {
         ui->text_line += ui->text_add;
         ui->text_deadline = 0;
+        if (ui->text_line >= count) ui->text_end = 1;
+        if (ui->text_end) return 1;
     }
+    if (ui->text_end) return 0;
     while (ui->text_line + skipped < count && n < TEXT_PAGE_LINES) {
         const char *s = lines[ui->text_line + skipped];
         int line_width;
@@ -67,7 +97,7 @@ int ui_text_message(cm_ui *ui, const world *w, uint8_t *dst,
         page[n++] = s;
     }
     ui->text_add = skipped;
-    if (!n) return 1;
+    if (!n) return 0;
     if (object > 0) {
         const world_object *speaker = &w->objects[object];
         const world_object *player;
