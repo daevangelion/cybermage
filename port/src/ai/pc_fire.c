@@ -103,6 +103,30 @@ static int after(uint32_t tick, uint32_t deadline)
     return ai_signed32(tick) > ai_signed32(deadline);
 }
 
+/* HandleNextFrame 0x1C73F..0x1C873, after flight and before jump movement. */
+void ai_pc_hand_bob(ai_state *a, const sim_state *s)
+{
+    ai_pc_aim *q = &a->pc_aim;
+    int32_t phase = a->pc.bob_phase;
+    if (s->unk_144b1c || s->unk_144afc) {
+        int32_t speed = s->unk_144aec < 0 ? ai_sub32(0, s->unk_144aec) : s->unk_144aec;
+        int32_t scale = speed/32+1;
+        if (s->bp_limit_flag) phase = (phase+1)%14;
+        q->render_x = phase < 4 ? -phase : phase < 11 ? phase-7 : 14-phase;
+        q->render_y = phase < 4 ? phase-3 : phase < 7 ? 3-phase :
+                      phase < 10 ? phase-10 : 10-phase;
+        if (scale > 4) scale = 4;
+        q->render_x *= scale; q->render_y *= scale;
+    } else {
+        if (q->render_x < 0) ++q->render_x;
+        else if (q->render_x > 0) --q->render_x;
+        if (q->render_y < 0) ++q->render_y;
+        else if (q->render_y > 0) --q->render_y;
+        phase = 0;
+    }
+    a->pc.bob_phase = phase;
+}
+
 static void hand_axis(int32_t *axis, int direction)
 {
     if (direction > 0 && *axis < 64) *axis += 64;
@@ -410,7 +434,7 @@ static int linked_spell(ai_state *a, sim_state *s, world *w)
         object = w->persons[82].object; target = &w->objects[object];
         delta = signed16(cm_atan64k(pc->x, pc->y, target->x, target->y)-pc->heading);
         if (ai_add32(target->floor_z, target->z) < ai_add32(pc->floor_z, s->body_height) &&
-            ai_add32(target->floor_z, target->height*2) > pc->floor_z &&
+            ai_add32(target->floor_z, ai_add32(target->height, target->height)) > pc->floor_z &&
             cm_distance(pc->x, pc->y, target->x, target->y) < 0x8000 &&
             delta > -0x1800 && delta < 0x1800) {
             if (a->events->event_count <= 129)
@@ -675,6 +699,7 @@ int ai_pc_hand2hand(ai_state *a, sim_state *s, world *w)
     if (w->player_person >= w->person_count || !a->events)
         return cm_fail("Hand2Hand", w->player_person, "invalid player");
     a->pc_aim.render_x = a->pc_aim.render_y = 0;
+    a->pc.bob_phase = 0;
     p = &w->persons[w->player_person];
     current = low_word(p->unk_0040); previous = high_word(p->unk_0040);
     if (current < 0 || current >= 9 || previous < 0 || previous >= 9)

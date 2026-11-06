@@ -15,6 +15,11 @@ Retail CM_HI.EXE v1.01F LE link addresses. Gameplay only; UI consumes state.
   LoadScene0x12148/0x12155 before the first game frame.
 - AutoSwordSwing0x1A07C uses autoSPos11x4 signed bytes, autoSInitMode9x3,
   autoSInitPos11 and timer-gated3-tick steps. No pixels are involved.
+- Keyboard hand steering0x12E83/0x1365B..0x13C02/0x13E1F uses the previous
+  fire value, bounded64-unit grid steps and the original arrow/diagonal/Shift order.
+- Hand bob0x1C73F..0x1C873 runs after flight, before jump processing. Its14-step
+  waveform scales with signed forward momentum and decays toward zero while idle.
+  An active sword swing clears the phase and visual offsets at0x1E7FF..0x1E81B.
 - Hand2Hand0x1A298 uses SwingFrame9x21 i16, swingMode9x9 i32, MatIdx9x9 i32,
   PosMat6x8x8 bytes and SwingDamage21 i32. PERSON3C/3E are current/previous
   swing;40/42 current/previous hand grid;44/46 impact/stun counters;48/4A matrix
@@ -27,7 +32,7 @@ Retail CM_HI.EXE v1.01F LE link addresses. Gameplay only; UI consumes state.
   previous combat mode while the existing input machinery uses mode3.
 - RenderBells0x18BA4/0x18D73 advances positive/negative muzzle sequences after
   drawing; DrawACarMonitor0x157AC does the same for aircar positive sequences.
-  `ai_pc_draw_advance` runs after hand drawing but before HUD composition.
+  Call `ai_pc_draw_advance` after hand drawing but before HUD composition.
   Glow frame advances modulo4 at0x1BA49 when bp_limit_flag is nonzero.
 - RenderBells0x19340..0x193B2 recovers one energy when ticks is strictly greater
   than global spRegenTimer206834. The interval is max(6,65-signed16(max_energy)/10);
@@ -42,7 +47,33 @@ Table bytes are read from the user's CM_HI.EXE via shared exe.h; no original
 numeric-table blobs are bundled. Oracle verification uses frame-entry traces,
 so rowN+1 checks the result of rowN.
 
-Checkpoint: strict host linking and focused equipment/modern ResetAim/draw-counter/
-aircar-spread checks pass. The original hand differential and scene1 firing replay
-are still being completed; this is not a combat-parity claim. Manual hand/tank input
-and walking-bob producers are still under investigation.
+Verification:
+
+```
+tools/run_capped.sh make -C port B=build/Port pc-fire-check
+tools/oracle.sh pc-fire --frame-trace --actor-trace --rng-trace \
+  --trace-range x:1444f4:1524 --trace-range x:1313a8:112 \
+  --trace-range x:135ecc:576 --trace-range x:62518:48 \
+  --trace-range x:65180:48 --trace-range x:79e8c:48 \
+  --trace-range x:7eedc:24 --snapshot
+tools/run_capped.sh port/build/Port/cybermage --headless --data orig/retail \
+  --user out/Port-fire-user --bios-seed 44 --replay captures/pc-fire/frames.csv \
+  --state-dump captures/pc-fire/native
+.venv/bin/python tools/compare_pc_fire.py captures/pc-fire/frames.csv captures/pc-fire/native
+```
+
+Observed strict-build tests:17,280 original-x86 hand frames (four melee weapons,
+nine initial grids, manual/automatic, three RNG seeds, eight directions/Shift and
+press/hold/release);2,400 energy-recovery frames;7,040 hand-bob frames including
+signed speed extremes and idle decay. They execute unmodified original routines
+and inline basic blocks, not a second Python implementation of their rules.
+
+The genuine scene1 fire replay has193 completed frames,22 PC fields/frame and772
+missile checkpoints(17 active): no field divergence. It exercises Starbolt9/impact10,
+40→35 energy expenditure, timed recovery and the held-fire release latch. The
+terminal native frame has no next original entry and is excluded. Input replay
+provides clock/keys and measured BIOS seed, never recorded coordinates or hand state.
+
+This is not all-weapons/full-firefight parity. The direct hand fixtures have no NPC
+targets; genuine earned-weapon pickup/punch verification is separate. Legacy mouse/
+tank hand activity still needs its input bridge; bob and keyboard producers are live.

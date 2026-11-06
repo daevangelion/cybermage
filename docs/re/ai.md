@@ -319,12 +319,17 @@ melee damage and attached impact missiles. Functions and fields are detailed in
 `pc_fire.md`; all numeric arrays come from the user's executable. The current
 shared tree linked cleanly with strict C99 through `make -C port B=build/Port`.
 
-This is a compile-clean integration checkpoint, not a parity/completion claim.
-Remaining validation/work owned by Port: compare the newly captured
-`captures/pc-fire/frames.csv` (194 original frames) against native hand/weapon and
-missile state; verify punch/sword transitions against original execution; finish
-the original render-side visual counter advance as a separate post-presentation
-state step; wire underwater and vehicle spread state producers. The original
-fire trace has a genuine Space press/hold/release and one spell launch: energy
-40→35, held latch suppressing repeats until release. Do not claim full combat
-parity from the clean link or substitute recorded state for native state.
+The scene1 fire replay now matches193 completed frames:22 hand/weapon/energy fields
+per frame and772 missile checkpoints(17 active), with no field divergence.
+Original-x86 differential fixtures additionally match17,280 hand frames,
+2,400 energy-recovery frames and7,040 hand-bob frames. Commands, source addresses,
+checked inputs and limitations are in `pc_fire.md`.
+
+Visual counters advance after hand drawing; original energy regeneration
+0x19340..0x193B2 must run before HUD composition. Keyboard hand and walking-bob
+producers are live; underwater comes from Events action72 and aircar spread from
+the original A/D/S rules. This proves default Starbolt/release-latch/energy recovery,
+projectile flight/impact and direct hand-state mechanics, not all weapons or a
+full firefight. The direct hand fixtures have no NPC targets; genuine earned-weapon
+pickup/punch verification and the legacy mouse/tank hand-activity bridge remain
+separate. Recorded coordinates/hand state never initialize the port replay.

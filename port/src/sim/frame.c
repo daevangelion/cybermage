@@ -329,6 +329,7 @@ int sim_frame(sim_state *s, world *w, const cm_input *input, uint32_t timer_tick
     }
     momentum(s);
     if (flight(s, w, o)) return -1;
+    if (s->ai) ai_pc_hand_bob(s->ai, s);
     if (s->unk_144b1c) jump_step(s);
     else rise(s);
     if (sim_swim_step(s, w)) return -1;
