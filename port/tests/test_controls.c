@@ -106,6 +106,25 @@ int main(void)
     frame(&c, CONTROLS_VEHICLE, &in, &out);
     assert(out.fly == -1 && out.held[0x20] && out.pressed[0x1f]);
     controls_init(&c);
+    for (i=2;i<=57;++i) {
+        memset(&in,0,sizeof in);
+        frame(&c,CONTROLS_MENU,&in,&out);
+        in.held[i]=1;
+        frame(&c,CONTROLS_MENU,&in,&out);
+        assert(out.held[i] && out.pressed[i]);
+        if (i!=28) assert(!out.held[28]);
+        assert(!out.held[1]);
+    }
+    for (i=0;i<4;++i) {
+        static const unsigned coder[]={30,48,46,32};
+        memset(&in,0,sizeof in);
+        frame(&c,CONTROLS_SHOP,&in,&out);
+        in.held[coder[i]]=1;
+        frame(&c,CONTROLS_SHOP,&in,&out);
+        assert(out.pressed[coder[i]]);
+        assert(!out.pressed[75] && !out.pressed[77] && !out.pressed[28]);
+    }
+    controls_init(&c);
     assert(controls_parse(&c, (const uint8_t *)"foot.jump = key:999\n", 20));
     assert(controls_parse(&c, (const uint8_t *)"unknown = 1\n", 12));
     puts("controls: normalisation, fractional look, context ownership, focus/disconnect and bindings PASS");

@@ -88,7 +88,8 @@ void controls_frame(cm_controls *c, controls_context context,
     }
     for (i = 0; i < CM_CONTROL_COUNT; ++i) {
         for (j = 0; j < CONTROLS_BINDINGS; ++j)
-            if (binding_down(&c->bindings[context][i][j], keys, mouse, pad, in->mouse_wheel))
+            if ((gameplay || c->bindings[context][i][j].source!=CONTROLS_KEY) &&
+                binding_down(&c->bindings[context][i][j], keys, mouse, pad, in->mouse_wheel))
                 actions |= UINT64_C(1) << i;
         if (i < 32 && owned(&c->touch_owner[i], ((in->touch_buttons | in->touch_pressed) & (1u << i)) != 0, context))
             actions |= UINT64_C(1) << i;
@@ -187,11 +188,10 @@ void controls_frame(cm_controls *c, controls_context context,
     output_key(output, 1, EDGE(MENU) || EDGE(PAUSE));
     output_key(output, 0x0f, EDGE(MAP));
     output_key(output, 0x19, EDGE(PAUSE));
-    /* Text entry and confirmation retain literal keys, with context ownership. */
+    /* Modal keyboard input is literal: E/Space type text, not USE/JUMP→Enter.
+     * Controller/touch bindings above still provide menu navigation/actions. */
     if (!gameplay) {
-        static const uint8_t literal[] = {0x0e,0x15,0x31,0x1c,1};
-        for (i = 0; i < sizeof literal; ++i) output_key(output, literal[i], keys[literal[i]]);
-        for (i = 2; i <= 11; ++i) output_key(output, i, keys[i]);
+        for (i = 1; i < CM_KEY_COUNT; ++i) output_key(output,i,keys[i]);
     }
     for (i = 0; i < CM_KEY_COUNT; ++i) {
         output->pressed[i] = (uint8_t)(output->held[i] && !c->output_held[i]);

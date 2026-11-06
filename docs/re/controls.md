@@ -30,9 +30,14 @@ controls is rejected. The modern layer does not feed WASD through the DOS IRQ la
 Wheel and shoulder buttons cycle the last selected category, initially weapons.
 Weapon/power cycles select directly; item cycles show the item selector rather
 than consuming an item merely by cycling. Number keys use the original
-selector shortcut ordering. Menus/shops accept WASD/arrows or left stick/D-pad,
-A/Space/Enter to accept, B/right click to back out; right stick moves the pointer
+selector shortcut ordering. Menus/shops accept arrows or left stick/D-pad,
+Enter or controller A to accept, Escape/controller B/right click to back out; right stick moves the pointer
 and RT clicks. A mouse or touchscreen tap retains the original pointer path.
+Modal keyboard keys remain literal, including both Shift keys: save names,
+shop B/S/Space and coder A–D/1–4 are not translated through gameplay actions.
+In particular E and Space do not synthesize Enter while typing. Configurable
+controller, mouse and touch modal actions remain active; keyboard action
+bindings apply only during gameplay.
 
 Movement uses a radial 18% controller dead zone, rescaled to full throw. Combined
 keyboard/stick/touch motion is normalised, so diagonals are not faster. Walking
