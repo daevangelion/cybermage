@@ -197,7 +197,8 @@ four three-byte frames (29532..29554), not the former incorrect three-byte
 stride/limit4. The renderer does not advance animation state. Focused tests
 check the live power pose against the explicit pose4 and reject pose18.
 
-Commands run through `tools/run_capped.sh`; output directory `build/UI` is isolated.
+Commands run through `tools/run_capped.sh`; current output directory `build/UI2`
+is isolated from peer builds. Earlier checkpoint used `build/UI`.
 
 ```
 make -C port -f tests/ui.mk B=build/UI check
@@ -208,7 +209,13 @@ tools/oracle.sh ui-pause
 tools/oracle.sh ui-hud
 ```
 
-The strict C99 full link and focused probe exited0. Expected negative-test
+The earlier strict C99 full link and focused probe exited0. UI2's all-source
+focused test also exits0, including merchant purchases/sales, coder confirmation,
+overlay writes, malformed rows and completed-death-column detection. The latest
+full `make -C port B=build/UI2` compiled all objects cleanly but failed to link
+the concurrent Port symbols `ai_pc_input`/`ai_pc_hand2hand` and Render symbol
+`glr_common_fragment`; owners were notified. This is not a clean full-build claim.
+Expected negative-test
 diagnostics reject truncated GAMENAME, truncated PERSON tail, and undersized
 save output. The original retail SAVE010 scene1 loads into typed world state;
 player936,152 persons,x/heading and every246045 re-encoded bytes were checked.
@@ -236,7 +243,30 @@ matches exactly. Pause now matches exactly with the corrected cursor resource, d
 unpressed aim(63,133). Individual
 selector/message/death/weapon variants compile but lack oracle parity tests.
 
-Still open: shops/arena/slot/coder frontend and rules,routing; automap; tank/car
-monitors; exact live aim/bob/glow/muzzle animation; death-melt main-loop wiring;
-options remapping/calibration and all settings effects/config persistence;
+Still open: arena/slot frontend and rules; original shop/coder purchase/frame
+traces (current merchant/coder tests are source-grounded port-state tests, not
+original execution comparisons); automap (Controls owns its new implementation);
+tank/car monitors and secondary views; live aim/bob/glow/muzzle trace parity and
+draw-time animation advancement (Port); death-melt end-to-end scenario (Integrator);
+options settings effects/config persistence;
 full original-save gameplay validation; demo SAVE010 layout verification.
+
+## Remaining settings and arena source facts
+
+- SetGammaBright5253C adds the signed brightness to each6-bit DAC component,
+  clipping0..63. SetGammaContrast52598 averages the three already-brightened
+  components; mean<32 subtracts contrast, otherwise adds it, clipping0..63.
+  OptOptions543FF passes gamma slider bounds[-32,32], not the current UI's
+  incorrect[-320,320]. No palette-effect implementation is claimed yet.
+- Sound has `snd_volumes(digital,speech,midi)`; digital/speech maxima32767,
+  MIDI127. Audio owns correct rescaling of already-playing sample gains.
+  AI is adding `ai_set_difficulty(a,w,level)` so live NPC HP is rescaled as well
+  as future damage/spawns. `ui_text_message` already consumes options[9].
+- LoadArenaScreen4A3A2..4A41B does not open while an existing positive PCBet
+  fight is unresolved: person57 alive and any of58..60 alive.
+  Place-bet actions4B7ED/4B85B clamp requested bet to cash, requirepositive,
+  debit cash, and set PCBetPick0/1. The start-fight action4B579 resets persons
+  57..60 through SetPERSON: types20/5/4/5, state99, x1B2000/1BC000/1B8000/
+  1B4000, yE8000/AC000/A4000/AC000, other placement arguments0.
+  It also changes scene events (4B718..4B776); this cannot be replaced by a
+  random immediate payout without losing the actual arena fight.
