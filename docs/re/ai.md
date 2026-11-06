@@ -160,6 +160,10 @@ action ledgers are rejected explicitly. Full-game, saved-game, configuration
 and mouse cases use the canonical executable's `--state-dump`, not a second
 menu/save implementation inside the harness. Both consumers require the actual
 draw-clock ledger and use the shared StatusMonitor/PC draw-state rules.
+Fresh ledger-enabled `Standing-original-bee11c5/original/newgame` verifies this
+adapter:17,784 actor checkpoints/117 pre-frame states match, and all3,060 logical
+RNG calls through completed frame115 match. The callback consumes actual
+StatusMonitor16391 and PC19377/193A4 sites, with no frame-time substitution.
 
 `seed.csv` measures the BIOS source at RANDOM_SEED0x68ABF before its write,
 not a seed fitted from a later RNG checkpoint. The observed tick is44 at

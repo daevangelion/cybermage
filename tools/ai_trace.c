@@ -12,12 +12,20 @@ static world w;
 static ai_state a;
 static sim_state s;
 static events_state e;
+static cm_ui status;
 static const vis_view view = {120, 90, 400, 300}; /* Original default ConWinInfo. */
 static FILE *steering_file;
 static uint64_t steering_sequence;
 static int64_t observed_frame = -1;
 
 typedef struct { FILE *out; unsigned object; uint64_t sequence; } collision_trace;
+
+static int draw_time(void *context, uint32_t site, uint32_t *ticks)
+{
+    int result = replay_draw_clock(context, site, ticks);
+    if (!result) status.ticks = e.ticks = *ticks;
+    return result;
+}
 
 static void collision_row(collision_trace *t, const world *scene, unsigned object,
                            unsigned node, unsigned candidate, int32_t x, int32_t y)
@@ -114,6 +122,7 @@ int main(int argc, char **argv)
 {
     cm_replay replay = {0};
     cm_replay_frame f;
+    const cm_draw_clock clock = {&replay, draw_time};
     cm_input input = {0};
     unsigned id;
     unsigned long seed;
@@ -207,6 +216,14 @@ int main(int argc, char **argv)
         }
         rng.frame = f.values[CM_TRACE_FRAME];
         observed_frame = rng.frame;
+        {
+            cm_replay_ui action;
+            int result = replay_ui_next(&replay, (uint32_t)observed_frame, &action);
+            if (result < 0) return 1;
+            if (result)
+                return cm_fail(argv[2], (uint32_t)observed_frame,
+                    "UI/save actions require the canonical game --state-dump consumer") != 0;
+        }
         if (replay.actor_clocks.data && !f.has_actor_clocks) {
             fprintf(stderr, "No completed UpdateObjects clock pair for terminal frame %" PRId64 "\n",
                     observed_frame);
@@ -217,7 +234,7 @@ int main(int argc, char **argv)
         if (sim_frame(&s, &w, &input, (uint32_t)f.values[CM_TRACE_TICKS]) ||
             ai_pc_input(&a, &s, &w) || events_step(&e, &s, &a, &w) ||
             ai_update_objects(&a, &s, &w, f.normal_actor_ticks, f.fast_actor_ticks) ||
-            ai_pc_hand2hand(&a, &s, &w) || events_countdown(&e, &s, &a, &w)) return 1;
+            ai_pc_hand2hand(&a, &s, &w)) return 1;
         if (a.undefined_distance_person)
             fprintf(stderr, "ORIGINAL UNDEFINED: frame=%" PRId64 " PERSON=%u "
                     "UpdateObjects(348C4) cached-distance fallback=%" PRId32 "\n",
@@ -229,7 +246,16 @@ int main(int argc, char **argv)
             w.camera.angle = pc->heading;
         }
         if (target_query(&a.targets, &w, &w.camera, &view)) return 1;
-        if (ai_pc_draw_advance(&a, &s, &w)) return 1;
+        {
+            int result = replay_draw_begin(&replay, (uint32_t)observed_frame, CM_DRAW_NORMAL);
+            if (result < 0) return 1;
+            if (result) {
+                if (s.pc_mode != 7 && ui_status_advance(&status, &clock)) return 1;
+                if (ai_pc_draw_advance(&a, &s, &w, &clock) ||
+                    events_text_finish(&e, &w) || events_countdown(&e, &s, &a, &w) ||
+                    replay_draw_end(&replay)) return 1;
+            }
+        }
     }
     replay_close(&replay); world_close(&w);
     if (rng.out && fclose(rng.out)) return 1;
