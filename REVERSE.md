@@ -105,7 +105,7 @@ known gaps are deliberate; implementation is not full-game parity.
 | UI/HUD/shops | Integrated; scoped named pixel comparisons match | `tests/ui.mk` gate; title/options/HUD/composed-newgame/pause comparisons0 differences | Broader shop/vehicle/live-weapon/arena runtime comparisons ([UI](docs/re/ui.md)) |
 | timer/RNG/fixed math | Implemented integral semantics | World gate:6144 trig values,106 angle/distance,60 RNG,16 rotation vectors match; movement trace MATCH | Whole-game RNG call order still under comparison |
 | audio/speech/movies | Integrated native PCM/OPL/HMI/TGV | `make -C port -f tests/audio.mk check`:38 songs validate; first30 frames of three movies match FFmpeg | Not exact SOS driver/mixer/voice-allocation parity ([audio](docs/re/audio.md)) |
-| platform/Android | SDL desktop and full-engine dual-ABI APK verified | `port/android/build.sh` atc699ea4; API36:touch NEW→scene1→walking, no crash; current launch extra `--es renderer gl` is opt-in | New Android GL extra not rebuilt/runtime-verified here; physical-device/long-play acceptance ([APK evidence](port/android/README.md)) |
+| platform/Android | Full-engine APK and opt-in Android GL runtime verified | Frozen20117a3 x86_64 APK:API36/GLES3 `--es renderer gl` and SW title→NEW→scene1→modern touch walking, no crash; earlier dual-ABI gate atc699ea4 | Physical-device/long-play acceptance; no measured FPS logging ([APK/screenshots/logs](port/android/README.md)) |
 
 Named integrated gate: commit `7b427a9653aabaf88546f780189a9ee51d05ff99`,
 isolated `git archive` snapshot, strict build and complete `make -C port check`

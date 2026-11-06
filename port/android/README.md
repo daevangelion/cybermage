@@ -142,3 +142,49 @@ Evidence: `captures/Integrator-android/{title,scene-start,scene-walk}.png`,
 The emulator was stopped and the job-owned Android build tree plus three
 frozen source views were removed (144,219,432 bytes); the3.7MB APK, evidence
 and shared SDK/SDL/Gradle caches remain.
+
+## Android GL runtime smoke
+
+Commit `20117a3889b498f1281ee7584849d7c9cbe67b07` was frozen with
+`git archive ... port`. The canonical build script inside that snapshot built
+both the frozen Java activities and C sources with `ABIS=x86_64 KEEP_BUILD=1`;
+there was no live-worktree source mixing. Existing JDK21, NDK27.2.12479018,
+SDL2 release-2.30.10 and offline Gradle9.4.1/AGP8.13.2 caches were reused.
+Build succeeded in47 seconds (22 tasks executed,17 from cache).
+
+Retained APK: `port/android/out/cybermage-x86_64-gl-20117a3-debug.apk`,
+1,941,493 bytes, SHA256
+`467ab98272a436ea3fd7975f624a597d0273355d2eda8b0564698080f2df6e51`.
+Its only native libraries are x86_64 SDL2/main; no retail assets are packaged.
+
+On `box-api36`, emulator36.3.10.0/API36,2400×1080, SwiftShader:
+
+```
+adb -s emulator-5580 shell am start -S -n com.jshield.cybermage/.DataActivity --es renderer gl
+adb -s emulator-5580 shell input tap 755 860
+adb -s emulator-5580 shell input touchscreen swipe 240 910 240 800 2200
+```
+
+The actual GLES3 renderer reported
+`Android Emulator OpenGL ES Translator (Google SwiftShader) / OpenGL ES 3.0`.
+Touch NEW entered scene1, the default modern overlay appeared, and the stick
+gesture visibly moved toward the door. PID3560 remained alive. The same APK
+also passed title→NEW→scene1→walking with `--es renderer sw` (PID3695).
+All six title/start/walk screenshots were opened and inspected.
+
+Neither application log contained an engine ERROR, fatal exception/signal,
+shader/link failure or EGL/GL failure; the all-process graphics-error scan was
+also empty. Nonfatal platform diagnostics remain: HWUI10-bit-format fallback
+with EGL_SUCCESS, SDL hidapi's caught API36 receiver-export exception, OpenSLES
+buffer-queue timeout110 and ashmem pinning deprecation. These are not a claim
+of a completely warning-free Android log.
+
+**Measured rendering FPS is unavailable for both SW and GL:** the port does not
+log it. No profiler was added, and the40Hz simulation target is not reported as
+measured rendering FPS.
+
+Evidence: `captures/Integrator-android-gl/{gl,sw}-{title,scene-start,scene-walk}.png`,
+per-process/full logcats and `run.json`. The owned emulator exited cleanly.
+The frozen source/build tree was removed (782 files,45,566,938 logical bytes);
+the named APK, evidence and shared caches remain. Every adb command targeted
+`emulator-5580`; nothing was pushed to a phone.
