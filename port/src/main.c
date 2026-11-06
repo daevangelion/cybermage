@@ -419,6 +419,7 @@ static int load_game(const char *data, const char *user, unsigned slot, uint32_t
     ui.restart_game = (int32_t)slot;
     events_reset_selectors(&events); /* LoadGame0515F8..05162A, after import. */
     events.pc_dead_man = 0;
+    simulation.modern_aim = 0;
     return 0;
 }
 

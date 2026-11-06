@@ -189,7 +189,7 @@ void controls_frame(cm_controls *c, controls_context context,
         output->mouse_dy = c->pointer_y - old_y;
     }
     output_key(output, 1, EDGE(MENU) || EDGE(PAUSE));
-    output_key(output, 0x0f, EDGE(MAP));
+    if (!gameplay) output_key(output, 0x0f, EDGE(MAP));
     output_key(output, 0x19, EDGE(PAUSE));
     /* Modal keyboard input is literal: E/Space type text, not USE/JUMP→Enter.
      * Controller/touch bindings above still provide menu navigation/actions. */

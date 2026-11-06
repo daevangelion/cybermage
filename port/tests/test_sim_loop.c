@@ -94,6 +94,7 @@ void sim_loop_checks(void)
     assert(actors.difficulty == 2);
     events.cash = 0;
     events.energy = 0;
+    simulation.modern_aim = 1;
     simulation.kb_latch = 12;
     simulation.bios_shift = 3;
     actors.pc.sp_regen_timer = 123;
@@ -110,10 +111,21 @@ void sim_loop_checks(void)
     }
     selectors_reset();
     assert(simulation.kb_latch == 12 && simulation.bios_shift == 3);
+    assert(!simulation.modern_aim);
     assert(actors.pc.sp_regen_timer == 123);
     assert(ui.restart_game == 0);
     assert(events.cash == 123 && events.energy == 31);
     assert((uint16_t)game.persons[0].unk_0038 == 23);
+    {
+        uint32_t size;
+        simulation.previous_pc_mode = simulation.pc_mode;
+        simulation.pc_mode = 3;
+        simulation.modern_aim = 1;
+        assert(!encode_save(&size));
+        assert(cm_u32(save_data + 0x6d4) == (uint32_t)simulation.previous_pc_mode);
+        simulation.pc_mode = simulation.previous_pc_mode;
+        simulation.modern_aim = 0;
+    }
     {
         cm_input key={0};
         unsigned i;

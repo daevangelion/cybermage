@@ -29,6 +29,8 @@ controls is rejected. The modern layer does not feed WASD through the DOS IRQ la
 
 Vehicle exit uses F/D-pad right. The adapter emits the original Tab exit edge;
 it does not use Enter. Physical modern Tab remains the automap action.
+Weapon, power and item selection accepts only foot combat contexts (including
+held aim's underlying mode); vehicle input cannot open or confirm a selector.
 
 Wheel and shoulder buttons cycle the last selected category, initially weapons.
 Weapon/power cycles select directly; item cycles show the item selector rather
@@ -52,6 +54,8 @@ right-stick full throw requests 1024 heading units and 8 pitch units per frame.
 Fractional look is retained between frames; each sampled delta is consumed
 once. The adapter clamps pitch to [-224,224]. These are modern control choices,
 not claims of an original DOS mouse match.
+Held aim is transient: saves store the underlying combat mode and loads clear
+the hold. Cycling an empty category while aim is held does not leave hand aim.
 
 Digital sources and sticks acquire a context when first pressed/deflected and
 keep that context until released/centred. Holding fire while opening a menu

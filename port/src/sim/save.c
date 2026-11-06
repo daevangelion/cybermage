@@ -20,7 +20,7 @@ static int32_t signed_word(uint32_t value)
 
 void sim_save_export(const sim_state *s, uint32_t v[29])
 {
-    v[SAVE_MODE] = (uint32_t)s->pc_mode;
+    v[SAVE_MODE] = (uint32_t)(s->modern_aim ? s->previous_pc_mode : s->pc_mode);
     v[SAVE_PREVIOUS_MODE] = (uint32_t)s->previous_pc_mode;
     v[SAVE_VEHICLE] = (uint32_t)s->vehicle_type;
     v[SAVE_MOMENTUM] = (uint32_t)s->unk_144ae8;

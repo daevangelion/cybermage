@@ -287,6 +287,38 @@ int main(int argc, char **argv)
     in.look_pitch = -1000;
     assert(!sim_modern_input(&s, &w, &in));
     assert(!s.modern_aim && s.pc_mode == 5 && w.camera.pitch == -224);
+    in.aim = 1;
+    assert(!sim_modern_input(&s, &w, &in));
+    in.cycle = 1;
+    in.select_kind = 2;
+    memset(&e, 0, sizeof e);
+    assert(!sim_modern_input(&s, &w, &in));
+    assert(s.modern_aim && s.pc_mode == 3 && s.previous_pc_mode == 5);
+    in.aim = 0;
+    in.cycle = 0;
+    assert(!sim_modern_input(&s, &w, &in));
+    s.pc_mode = 7;
+    e.items[0].type = 4;
+    e.items[0].kind = 6;
+    e.items[1].type = 31;
+    e.items[1].kind = 6;
+    e.items[1].subtype = 1;
+    in.cycle = 1;
+    in.select_kind = 1;
+    assert(!sim_modern_input(&s, &w, &in));
+    assert(s.pc_mode == 7 && !e.selector_kind && !e.weapon);
+    in.cycle = 0;
+    in.select_open = 1;
+    assert(!sim_modern_input(&s, &w, &in));
+    assert(s.pc_mode == 7 && !e.selector_kind);
+    {
+        cm_controls c;
+        cm_input physical = {0}, output;
+        controls_init(&c);
+        physical.pressed[0x0f] = 1;
+        controls_frame(&c, CONTROLS_VEHICLE, &physical, &output);
+        assert(c.map_visible && !output.pressed[0x0f] && !output.held[0x0f]);
+    }
     {
         int32_t walk = speed(640, 0);
         int32_t half = speed(320, 0);

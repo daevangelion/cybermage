@@ -5,7 +5,10 @@ static int select_action(sim_state *s, world *w, const cm_input *in)
     events_state *e = s->events;
     events_selector *q;
     unsigned i, index = 0, kind;
+    int mode = s->modern_aim || (e && e->selector_kind) ?
+        s->previous_pc_mode : s->pc_mode;
     if (!e) return 0;
+    if (mode != 1 && mode != 2 && mode != 5) return 0;
     if (!in->cycle && !in->select_slot && !in->select_open) {
         if (e->selector_kind) {
             if (events_keyboard(e, s, s->ai, w)) return -1;
@@ -29,7 +32,7 @@ static int select_action(sim_state *s, world *w, const cm_input *in)
     }
     if (!q->count) {
         e->selector_kind = 0;
-        s->pc_mode = s->previous_pc_mode;
+        if (!s->modern_aim) s->pc_mode = s->previous_pc_mode;
         return 0;
     }
     if (in->select_open) { s->pc_mode = 3; s->modern_aim = 0; return 0; }
