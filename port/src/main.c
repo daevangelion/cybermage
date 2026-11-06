@@ -564,12 +564,12 @@ static int state_dump(const char *directory, unsigned frame)
             return cm_fail("state", frame, "combat state text overflow");
         n += add;
     }
-    for (i = 0; i < 4; ++i) {
+    for (i = 0; i < AI_MISSILE_MAX; ++i) {
         const ai_missile *m = &actors.missiles[i];
         const world_object *missile;
         int add;
         if (m->object < 0 || (unsigned)m->object >= game.object_count)
-            return cm_fail("state/missile", i, "invalid player missile object");
+            return cm_fail("state/missile", i, "invalid missile object");
         missile = &game.objects[m->object];
         add = snprintf(text+n, sizeof text-(size_t)n,
             "m%u_active=%" PRId32 " m%u_type=%" PRId32 " m%u_frame=%" PRId32
