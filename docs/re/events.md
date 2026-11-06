@@ -134,8 +134,8 @@ save round-trips and countdown rebasing from a different load clock.
 The added focused fixtures exercise all20 added dispatch types, signed actor
 height and invalid mapping, panel alias timing, coder alphabet and countdown
 threshold/expiry. These are source-grounded unit checks, not90-type runtime
-oracle parity. Genuine Training tank entry is now compared below; aircar/exit
-runtime parity is not claimed. The supplied retail SAVE010.DAT is the initial
+oracle parity. Genuine Training tank entry and exit are now compared below;
+aircar runtime parity is not claimed. The supplied retail SAVE010.DAT is the initial
 scene1 position, not a vehicle save. No vehicle-debug override, coordinate patch
 or fabricated save is used.
 
@@ -235,6 +235,35 @@ failed before the fix, then passed without changing comparator predicates.
 Captured producer SHA-256:
 binary `99bd75b209f15df150a4d83d8b739fabfc5a012d4e3d524f6faa8bbb26716bb1`,
 patch `411930364140c12023c77ff3dfbc026279d4f5bea98715356b8cfcae9110b4c3`.
+
+### Queued original Tab exit and modern F
+
+`tools/scenarios/scene11-training-tank-exit.keys` preserves the genuine LOWER
+load/entry/save prefix, adds ordinary Tab at48 seconds and captures at50.
+`captures/scene11-training-tank-exit/run.json` records the same exact LOWER hash
+and original producer hashes above, with all five ranges and MoveWorld inputs.
+
+```
+tools/run_capped.sh port/build/Events2/events_trace orig/retail \
+  captures/scene11-training-tank-exit/frames.csv \
+  captures/scene11-training-tank-exit/events-input.csv \
+  --replay-load-slot 0 --user captures/Integrator-training-tank/user
+```
+
+All639 checkpoints /22,009,716 independent bytes matched, including116 vehicle
+rows and638 observed result edges. Exit occurs at original MoveWorld606 and
+appears in pre-frame607: object1416/person41 returns to object1375/person0, mode5.
+As for the other reducer comparisons, Sim-owned position observations are inputs;
+this is not a full physical movement or ClearVehicle displacement parity claim.
+
+Classic Tab0F edge mask02 queues tankFlag-1 at0131CF..0131F5. The prior request is
+consumed before the following keyboard phase at01C201..01C23F; a dead vehicle
+also exits automatically only while the foot player's life is positive.
+Enter is not a vehicle exit alias. Enhanced F now synthesizes that same Tab
+edge in `sim/modern.c`; the physical enhanced Tab automap binding is unchanged.
+Fixtures cover held-vs-edge Tab, delayed exit, ignored Enter, modern F transport,
+and both foot-life branches of dead-vehicle handling. The Enter regression failed
+before the cutover; all fixtures and the strict complete desktop build passed.
 
 ## Review corrections
 

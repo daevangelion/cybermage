@@ -79,7 +79,7 @@ int sim_modern_input(sim_state *s, world *w, const cm_input *in)
         s->unk_144b3c = s->unk_144b3c == -1 ||
             s->unk_144b34 == (w->unk_5E7A8 ? -0x3000 : -0x4800) ? 1 : -1;
     if (in->pressed[0x21]) {
-        if (s->pc_mode == 7) s->kb_scan_status[0x1c] = 2;
+        if (s->pc_mode == 7) s->kb_scan_status[0x0f] = 2;
         else if (s->flight_mode) events_fly_landing(s, o);
     }
     s->kb_scan_status[0x11] = in->fly > 0;

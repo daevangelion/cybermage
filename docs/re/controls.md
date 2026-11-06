@@ -12,7 +12,7 @@ controls is rejected. The modern layer does not feed WASD through the DOS IRQ la
 | Run | Hold either Shift | Left-stick click |
 | Look | Relative mouse | Right stick |
 | Jump from rest or movement | Space | A |
-| Use, switches, vehicle entry/exit | E or Enter | X |
+| Use, switches, vehicle entry | E or Enter | X |
 | Fire/cast | Left mouse | RT |
 | Hold hand aim (stops on-foot motion) | Right mouse | LT |
 | Next/previous selection | Wheel down/up or `]`/`[` | RB/LB |
@@ -21,11 +21,14 @@ controls is rejected. The modern layer does not feed WASD through the DOS IRQ la
 | Crouch | Ctrl | B |
 | Centre look | R | Right-stick click |
 | Fly up/down | Page Up/Page Down | D-pad up/down |
-| Land | F | D-pad right |
+| Land / exit vehicle | F | D-pad right |
 | Aircar gun narrow/widen/centre | Z/C/V | Rebindable buttons |
 | Menu | Escape | Start |
 | Automap | Tab or M | Back |
 | Pause | P | Rebindable button |
+
+Vehicle exit uses F/D-pad right. The adapter emits the original Tab exit edge;
+it does not use Enter. Physical modern Tab remains the automap action.
 
 Wheel and shoulder buttons cycle the last selected category, initially weapons.
 Weapon/power cycles select directly; item cycles show the item selector rather

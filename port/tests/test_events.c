@@ -211,6 +211,29 @@ static void pending_vehicle(void)
     assert(!e.tank_flag && w.player_object==2 && w.player_person==55 && s.pc_mode==7);
 }
 
+static void queued_vehicle_exit(void)
+{
+    cm_input in={0};
+    pending_vehicle();world_trig_init(&w.trig);w.top_level=3;
+    w.objects[2].x=w.objects[2].y=0x18000;
+    s.kb_scan_status[0x1C]=2;
+    assert(events_input(&e,&s,&a,&w)==0 && s.pc_mode==7 && !e.tank_flag);
+    s.kb_scan_status[0x1C]=0;s.kb_scan_status[0x0F]=1;
+    assert(events_input(&e,&s,&a,&w)==0 && s.pc_mode==7 && !e.tank_flag);
+    s.kb_scan_status[0x0F]=0;s.events=&e;s.ai=&a;
+    in.modern=1;in.pressed[0x21]=1;
+    assert(sim_modern_input(&s,&w,&in)==0);
+    assert(s.kb_scan_status[0x0F]==2 && !s.kb_scan_status[0x1C]);
+    assert(events_input(&e,&s,&a,&w)==0 && s.pc_mode==7 && e.tank_flag==-1);
+    assert(events_input(&e,&s,&a,&w)==0 && s.pc_mode==5 && !e.tank_flag);
+    assert(w.player_object==1 && w.player_person==0);
+    assert(events_set_tank_mode(&e,&s,&w,1)==0);
+    w.persons[55].status=2;w.persons[0].unk_0038=100<<16;
+    assert(events_input(&e,&s,&a,&w)==0 && s.pc_mode==7);
+    w.persons[0].unk_0038|=100;
+    assert(events_input(&e,&s,&a,&w)==0 && s.pc_mode==5 && !e.tank_flag);
+}
+
 static void retail_cosmetics(const char *data)
 {
     unsigned scene,tick,i;
@@ -367,6 +390,7 @@ int main(int argc, char **argv)
     draining_feedback();
     crushing_feedback();
     pending_vehicle();
+    queued_vehicle_exit();
     event_setup(0);snd_enable(0,0);e.autoDestruct=4;e.autoDTime=16800;e.autoMSlot=-1;
     e.ticks=2400;
     assert(events_countdown(&e,&s,&a,&w)==0 && e.autoDestruct==4);
