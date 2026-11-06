@@ -209,6 +209,10 @@ sample. Older captures without the companion retain the frame-entry clock
 approximation, not measured actor-clock evidence. CMTRACE1 has no producer-version
 marker, so a deleted companion cannot be distinguished from an older capture.
 
+Replay preserves the entire measured BDA `bios_shift` byte. Keyboard movement
+tests Shift bits0/1 itself; replay must not discard Ctrl bit2 (the corrected
+movement fixture holds it on frames71..75).
+
 `--rng-trace` logs original RND/RANDOM caller addresses, frame, bound and RNG
 words; `--steering-trace` logs NewMONBound decision inputs at `0x46507`.
 `--collision-object N` logs CollObject entry (`0x435EC`) proposals, source

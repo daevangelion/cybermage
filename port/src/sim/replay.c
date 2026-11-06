@@ -255,7 +255,7 @@ void replay_input(sim_state *s, const cm_replay_frame *f)
 {
     memcpy(s->kb_scan_status, f->input_keys, SIM_SCAN_COUNT);
     s->kb_latch = (uint8_t)f->values[CM_TRACE_KB_LATCH];
-    s->bios_shift = (uint8_t)f->values[CM_TRACE_BIOS_SHIFT] & 3;
+    s->bios_shift = (uint8_t)f->values[CM_TRACE_BIOS_SHIFT];
     s->previous_ticks = (uint32_t)f->values[CM_TRACE_PREVIOUS];
     s->bp_limit_time = (uint32_t)f->values[CM_TRACE_LIMIT_TIME];
     s->replay_delta = (int32_t)f->values[CM_TRACE_DELTA];

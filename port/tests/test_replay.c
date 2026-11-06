@@ -51,6 +51,7 @@ int main(void)
 {
     cm_replay r;
     cm_replay_frame f;
+    sim_state s = {0};
     fixture();
     clock_input = "frame,fast_ticks,normal_ticks\n0,10,11\n";
     assert(!replay_open(&r, "frames.csv"));
@@ -120,5 +121,8 @@ int main(void)
     assert(replay_next(&r, &f) == 1 && !f.has_actor_clocks);
     assert(!replay_next(&r, &f));
     replay_close(&r);
+    f.values[CM_TRACE_BIOS_SHIFT] = 4; /* Original BDA Ctrl, not a Shift bit. */
+    replay_input(&s, &f);
+    assert(s.bios_shift == 4);
     return 0;
 }
