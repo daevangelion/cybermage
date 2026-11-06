@@ -356,10 +356,22 @@ The two-NPC fixture executes unmodified original UpdateObjects, attack decisions
 DamagePerson and RNG, intercepting visibility/movement/tracking/device boundaries
 identically on both sides. Before the fix, prior distance60000 gave original
 HP40/RNG1895,23161,4392 versus native HP37/RNG22354,16429,18877.
-After the fix, all4 comparisons match, including exact range boundary30720 and
-accepted30719/10000. If restored-target melee occurs before any admitted target
-has written the call-local distance, native fails closed: the original reads an
-uninitialized stack slot, for which no value is fabricated or imported.
+After the fix, all8 distance/flash comparisons match, including exact range
+boundary30720 and accepted30719/10000. The previous actor's PERSON distance is
+deliberately changed by the movement boundary after the original copies it,
+checking scalar lifetime rather than an alias to that record.
+
+If restored-target melee occurs before any admitted target has written the
+call-local distance, normal play uses that actor's own cached PERSON distance,
+without aborting or emulating the original stack. It records the first such
+NPC/value in `undefined_distance_person/value` for that call. This fallback does
+not set the original-distance-valid flag; later affected NPCs still use their
+own cache until a real035240 write. See `architecture_port.md` for the explicit
+undefined-memory deviation.
+
+The nonzero player-melee hit path also promotes signed PCFlash to at least3
+before DamagePerson, exactly035F02..035F26. It preserves values3 and4 and adds
+no RNG call; negative/0/2 promotion is covered by the same retail-x86 fixture.
 
 ## Player input / hand checkpoint
 

@@ -49,6 +49,29 @@ fields or calls are masked. A flagged replay is conditional equivalence under
 that explicit initial-state input, not proof that normal-play initialization
 matches the original's undefined heap contents.
 
+### Attack range before the first admitted target
+
+UpdateObjects035240 writes an admitted target's PERSON+0C distance into one
+call-local stack slot, reused by later actors. State4's lost-target restoration
+at035C18 does not refresh it. Native preserves this lifetime with a scalar copy:
+after an admitted target, a later restored-target melee attack uses that preceding
+distance, even if the preceding PERSON record subsequently changes.
+
+Before the first such write in a call, the original instead reads uninitialized
+stack bytes. Normal play does **not** emulate stack/heap history or abort:
+that melee attack uses its own actor's cached PERSON+0C distance. This is a
+deliberate deviation only for the undefined initial value, not permission to
+replace the defined cross-actor carry. The fallback does not mark the original
+slot initialized; further affected actors use their respective cached distance
+until a real admitted-target assignment.
+
+`ai_state.undefined_distance_person` is reset to0 at UpdateObjects entry;
+the first actual fallback read records its NPC ID and
+`undefined_distance_value`. NPC IDs start at1, so person0 means no fallback
+was observed in that call. These fields are diagnostics only. No HP, position,
+RNG or replay output is substituted. `check-melee-distance` checks the original
+defined-value cases, scalar copying, diagnostic reset and nonfatal fallback.
+
 ## Event reducers and ownership
 
 | CM_HI.EXE original | Native |

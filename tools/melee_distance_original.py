@@ -16,7 +16,7 @@ from world_original import Original, THIS
 PERSON, MONSTER = 0x610000, 0x600000
 
 
-def run(prior):
+def run(prior, flash=0):
     original = Original()
     cpu = original.cpu
 
@@ -27,7 +27,8 @@ def run(prior):
         cpu.mem_write(address, struct.pack('<H', value & 0xffff))
 
     for offset, value in [(0x130d04, 1), (0x130d08, 0), (0x130d24, 3),
-                          (0x130cec, 1), (0x14480c, 5), (0x13181c, MONSTER)]:
+                          (0x130cec, 1), (0x14480c, 5), (0x13181c, MONSTER),
+                          (0x1444e8, flash)]:
         u32(THIS+offset, value)
     for address, value in [(0x207473, 10), (0x1e3944, 1), (0x1e391c, 0),
                            (0x1e3924, 0), (0x925e8, 1)]:
@@ -65,6 +66,8 @@ def run(prior):
             return
         if address == 0x2a9b0 and c.reg_read(UC_X86_REG_EDX) == 2:
             u32(attack+8, -1)
+        if address == 0x33ed0 and c.reg_read(UC_X86_REG_EDX) == 1:
+            u32(PERSON+0xc0+0xc, -123)
         stack = c.reg_read(UC_X86_REG_ESP)
         target = struct.unpack('<I', c.mem_read(stack, 4))[0]
         c.reg_write(UC_X86_REG_EAX, 0)
@@ -79,22 +82,27 @@ def run(prior):
     state, cooldown = [struct.unpack('<h', cpu.mem_read(attack+offset, 2))[0] for offset in (0x1c, 0x1e)]
     stance = struct.unpack('<h', cpu.mem_read(attack+0x3c, 2))[0]
     player_stance = struct.unpack('<h', cpu.mem_read(PERSON+0x3c, 2))[0]
-    return hp, *rng, target, state, cooldown, stance, player_stance
+    flash = struct.unpack('<i', cpu.mem_read(THIS+0x1444e8, 4))[0]
+    return hp, *rng, target, state, cooldown, stance, player_stance, flash
 
 
 def main():
     native = Path(sys.argv[1]).resolve()
-    for prior in (60000, 30720, 30719, 10000):
-        wanted = run(prior)
-        actual = tuple(map(int, subprocess.check_output([str(native), str(prior)], text=True).split()))
-        if wanted != actual:
-            raise SystemExit(f'prior distance={prior}, stale own=15517: original={wanted}, native={actual}')
+    cases = [(prior, 0) for prior in (60000, 30720, 30719, 10000)]
+    cases += [(10000, flash) for flash in (-1, 2, 3, 4)]
+    for prior, flash in cases:
+        wanted = run(prior, flash)
+        actual = tuple(map(int, subprocess.check_output(
+            [str(native), str(prior), '--flash', str(flash)], text=True).split()))
+        if wanted != actual[:10] or actual[10] != 0:
+            raise SystemExit(f'prior distance={prior}, stale own=15517, flash={flash}: original={wanted}, native={actual}')
     missing = subprocess.run([str(native), '60000', '--no-prior-target'],
                              capture_output=True, text=True)
-    if missing.returncode or missing.stdout.strip() != 'undefined original melee distance rejected':
-        raise SystemExit(f'missing prior target must fail closed: {missing.stdout} {missing.stderr}')
-    print('Melee lost-target distance: 4 unmodified retail x86 comparisons matched')
-    print('Undefined first-distance read: rejected without player damage')
+    fallback = tuple(map(int, missing.stdout.split()))
+    if missing.returncode or fallback != (*run(15517), 2, 15517):
+        raise SystemExit(f'missing prior target must use own distance and report it: {missing.stdout} {missing.stderr}')
+    print('Melee distance/flash: 8 unmodified retail x86 comparisons matched')
+    print('Undefined first-distance read: own-distance fallback diagnosed without abort')
 
 
 if __name__ == '__main__':

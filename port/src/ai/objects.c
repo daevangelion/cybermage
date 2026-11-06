@@ -103,9 +103,16 @@ static int actor_attack(ai_state *a, sim_state *s, world *w, unsigned id,
     switch (p->unk_001A) {
     case 1: {
         int hit = 1;
+        int32_t fallback_distance;
         sound(w, p, m->sounds[3], 0x40000);
-        if (s->pc_mode != 7 && target && !distance)
-            return cm_fail("UpdateObjects", id, "melee reads undefined original distance");
+        if (s->pc_mode != 7 && target && !distance) {
+            fallback_distance = p->distance;
+            distance = &fallback_distance;
+            if (!a->undefined_distance_person) {
+                a->undefined_distance_person = id;
+                a->undefined_distance_value = fallback_distance;
+            }
+        }
         if (s->pc_mode != 7 && target && *distance < m->unk_0060) {
             hit = world_rnd(&w->rng, 2);
             if (overlap(o, &w->objects[target]) && (int16_t)p->unk_003C == 16) {
@@ -119,6 +126,7 @@ static int actor_attack(ai_state *a, sim_state *s, world *w, unsigned id,
                     int32_t damage = ai_do_dice(&w->rng, m->melee_damage);
                     if (damage) {
                         if ((unsigned)p->target == w->player_person) {
+                            if (a->pc_flash < 3) a->pc_flash = 3; /* Original035F02..035F0B. */
                             if (ai_damage_person(a, w, w->player_person, damage, 100, 100)) return -1;
                         } else if (ai_damage_monster(a, w, (unsigned)p->target, damage, p->object)) return -1;
                         hit = 1;
@@ -500,6 +508,7 @@ int ai_update_objects(ai_state *a, sim_state *s, world *w,
     int32_t distance;
     if (!a->tables_loaded)
         return cm_fail("UpdateObjects", 0, "combat tables not loaded");
+    a->undefined_distance_person = 0;
     a->timer_ticks = timer_ticks;
     if ((int32_t)fast_ticks > (int32_t)a->fast_animation_deadline) {
         fast = 1; a->fast_animation_deadline = fast_ticks + 3;
