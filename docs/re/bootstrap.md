@@ -48,6 +48,8 @@ checkout. It adds `CM_ORIGINAL`:
 - Screenshots use raw VGA presentation, not native world/UI composition.
 - Automatic startup keyboard-release injection is disabled; the scenario supplies
   its own explicit release event.
+- The headless controller-input writer and native settings-key interception are
+  bypassed too. `CM_ORIGINAL` asserts that no controller scripts or hooks exist.
 - The original EXE receives `-x`, its own no-sound option, so no sound-card driver
   emulation or replacement of Sounds methods is needed.
 
@@ -139,3 +141,72 @@ ordering, but this is not cycle-exact DOSBox timing. Asynchronous screenshots ca
 land mid-render; exact frame-boundary capture and repeated-run equality remain
 separate measurements, not assumptions. Changing IPS changes the seeded tick and
 work performed between timer events.
+
+## Frame traces
+
+```
+tools/oracle.sh newgame --frame-trace --trace-range x:e33e8:24 --snapshot
+tools/oracle.sh movement --frame-trace --trace-range x:144ae8:136
+port/build/cybermage --headless --data orig/retail --replay captures/movement/frames.csv
+```
+
+`--frame-trace` writes `captures/<scenario>/frames.csv` on the final checkpoint
+run. The observer checks original instruction addresses before executing them;
+it installs **no hooks**, patches no guest instructions, and changes no guest
+registers, memory, time or input. Entry is `CM_HI.EXE:01B9DC`
+(`Xox::HandleNextFrame`); state in row N is **before** frame N. Row N+1
+therefore checks frame N's result. The final row may represent a frame still in
+progress when the scenario stops; do not interpret it as a completed result.
+
+The first line is `CMTRACE1,<range-count>`; zero to eight lines follow:
+`range,x|l,<hex-address>,<decimal-length>`. `x` means offset from the actual
+Xox `this`; `l` means LE link address translated by the oracle loader.
+At most 65,536 range bytes may be recorded per frame. The next line names the
+columns; subsequent lines contain decimal integers then lowercase ASCII hex:
+
+| Columns | Meaning |
+|---|---|
+| frame,ticks,previous,delta | sequential frame index; entry `_CMTimerTicks`; Xox+144B68; actual clamped +144B6C sampled at 01BA1F |
+| limit_time,limit_flag | entry bp_LimitTime; computed elapsed >=2 gate |
+| object,person | player object/person indices |
+| x,y,z,heading,pitch,body | player +61418/+64080/+78D8C/+7E65C, +E33F8, +130D1C |
+| kblatch,bios_shift | ISR latch 97462 and BIOS flags 417, sampled with input |
+| object_z | player +66CE8 (shape/height parameter, distinct from floor_z) |
+| camera_u,camera_v,camera_z,camera_angle,horizon,scene | +E33E8/+E33EC/+E33F0/+E33F4/+E33FC/+130CEC |
+| keys,input_keys | 128-byte `_kbScanStatus` snapshots: frame entry and actual HandleKeyboardEvents entry (012DD4) |
+| remaining columns | raw memory spans, in the header's range order |
+
+The separate input sample matters: an IRQ can deliver a key after frame entry
+but before input processing. The replay consumes `input_keys`, not a fabricated
+make/break sequence reconstructed from held keys. Elapsed simulation ticks are
+replayed per render; do not turn the trace into a fixed-step catch-up loop.
+Replays compare the port's **unmodified computed** player state before each
+step and report the first divergent frame/field/expected/actual value. Recorded
+coordinates must never be copied over computed simulation results to obtain
+a passing comparison.
+
+`--snapshot` additionally writes `scene-start.xox` (0x144B80 bytes from the
+actual Xox) and `scene-start.persons` at the first frame entry. PERSON format:
+eight-byte `CMPERSON`, little-endian u32 count, then count records of u32 index,
+u32 runtime pointer, and 0xC0 original bytes. This is diagnostic evidence, not
+a native struct serialization or a replacement for loading the retail scene.
+All trace/snapshot files remain ignored under `captures/`.
+
+The wrapper verifies the complete source checkout before building: it accepts
+only pristine pinned HEAD (then applies the patch) or exactly HEAD plus the
+patch, including the new observer source. Staged changes, unrelated edits,
+untracked files, extra hunks in an allowed file, changed file types/modes and
+modified observer code are rejected. A temporary Git index constructs the
+expected patched tree without changing the reference's index.
+`tools/run_capped.sh .venv/bin/python tools/test_oracle.py` exercises pristine
+application, idempotency and the unrelated/untracked/observer/staged negatives
+(four tests passed).
+
+The initial observer captures were superseded after finding an unconditional
+headless `gamepad::controller_input` call outside `native::install`: it wrote
+Xox input-routing fields every 50 ms even with no native hooks installed.
+After gating that writer off, `newgame` and `movement` were re-captured from
+boot. Current traces contain 117 and 106 frame-entry records respectively.
+The movement trace includes changed x/y, heading C000→A800 and a jump with
+floor_z 131072..152319. These demonstrate original scenario coverage, not a
+claim that the C replay matches.

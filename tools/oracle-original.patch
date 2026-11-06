@@ -1,11 +1,54 @@
+diff --git a/crates/game/src/machine.rs b/crates/game/src/machine.rs
+index 5118211..a7b3ee4 100644
+--- a/crates/game/src/machine.rs
++++ b/crates/game/src/machine.rs
+@@ -742,7 +742,7 @@ impl Machine {
+             0x25 => {
+                 let n = r.al();
+                 self.pm_vec[n as usize] = (r.ds, r.edx);
+-                if n == 9 {
++                if n == 9 && std::env::var_os("CM_ORIGINAL").is_none() {
+                     // On real hardware the release of the Enter key used to start the
+                     // game arrives after CM_ISR9 is installed; it primes the ISR's
+                     // key-state latch (otherwise the first key press is swallowed).
+@@ -813,7 +813,9 @@ impl Machine {
+                 };
+                 match res {
+                     Some(mut f) => {
+-                        let patch = if mode == 0 { crate::rebrand::title_patch(&name, &mut f) } else { None };
++                        let patch = if mode == 0 && std::env::var_os("CM_ORIGINAL").is_none() {
++                            crate::rebrand::title_patch(&name, &mut f)
++                        } else { None };
+                         let h = self.alloc_handle(DosFile { f, name: name.clone(), patch });
+                         if self.trace_ints {
+                             eprintln!("[dos] open {} -> {}", name, h);
 diff --git a/crates/game/src/main.rs b/crates/game/src/main.rs
+index e9094e3..5e93c17 100644
 --- a/crates/game/src/main.rs
 +++ b/crates/game/src/main.rs
-@@ -90,7 +90,16 @@ impl Emu {
+@@ -14,6 +14,7 @@ mod desktop;
+ mod display;
+ mod gamepad;
+ mod frontend;
++mod frame_trace;
+ mod tgv;
+ mod verify;
+ mod input;
+@@ -70,6 +71,7 @@ pub struct Emu {
+     pub vehicle_anywhere: Option<u32>,
+     /// Includes time spent presenting/sleeping between realtime slices.
+     pub realtime_last: Option<std::time::Instant>,
++    frame_trace: Option<frame_trace::FrameTrace>,
+ }
+ 
+ impl Emu {
+@@ -87,8 +89,17 @@ impl Emu {
+         if let Some(vulkan) = cfg.renderer { m.display.vulkan = vulkan; }
+         if m.verifier.is_some() { m.display.mode = 0; }
          let exe = std::fs::read(game.join("CM_HI.EXE")).expect("CM_HI.EXE not found");
 -        m.load_program(&mut cpu, &exe, "").expect("load");
-+        m.load_program(&mut cpu, &exe, if std::env::var_os("CM_ORIGINAL").is_some() { "-x" } else { "" }).expect("load");
 -        native::install(&mut m, &mut cpu);
++        m.load_program(&mut cpu, &exe, if std::env::var_os("CM_ORIGINAL").is_some() { "-x" } else { "" }).expect("load");
 +        if std::env::var_os("CM_ORIGINAL").is_some() {
 +            assert!(m.verifier.is_none(), "original mode forbids verification hooks");
 +            assert!(cfg.headless && !cfg.realtime && cfg.pads.is_empty() && cfg.desktop.is_empty());
@@ -17,7 +60,28 @@ diff --git a/crates/game/src/main.rs b/crates/game/src/main.rs
 +            native::install(&mut m, &mut cpu);
 +        }
          let watches = std::env::var("CM_WATCH")
-@@ -287,7 +296,11 @@ impl Emu {
+             .map(|v| {
+                 v.split(',')
+@@ -102,7 +113,8 @@ impl Emu {
+         let profile_start = std::env::var("CM_PROFILE_START").ok().and_then(|v| v.parse().ok()).unwrap_or(0.0);
+         let scene_override = std::env::var("CM_SCENE").ok().and_then(|v| v.parse().ok());
+         let vehicle_anywhere = std::env::var("CM_VEHICLE").ok().and_then(|v| v.parse().ok());
+-        Emu { cpu, m, ips: cfg.ips, cfg_trace: cfg.trace, watches, profile, counter, profile_start, scene_override, vehicle_anywhere, realtime_last: None }
++        let frame_trace = frame_trace::FrameTrace::open();
++        Emu { cpu, m, ips: cfg.ips, cfg_trace: cfg.trace, watches, profile, counter, profile_start, scene_override, vehicle_anywhere, realtime_last: None, frame_trace }
+     }
+ 
+     fn debug_overrides(&mut self) {
+@@ -140,6 +152,7 @@ impl Emu {
+             let start_ic = self.cpu.icount;
+             let mut res = Ok(());
+             for _ in 0..n {
++                if let Some(trace) = &mut self.frame_trace { trace.observe(&self.cpu); }
+                 if let Err(e) = self.cpu.step(&mut self.m) {
+                     res = Err(e);
+                     break;
+@@ -286,7 +299,10 @@ impl Emu {
+ 
      pub fn screenshot(&mut self, path: &std::path::Path) {
          let mut buf = Vec::new();
 -        let (w, h) = display::render(&mut self.m, &self.cpu, &mut buf);
@@ -27,25 +91,34 @@ diff --git a/crates/game/src/main.rs b/crates/game/src/main.rs
 +        } else { display::render(&mut self.m, &self.cpu, &mut buf) };
          write_bmp(path, w, h, &buf);
      }
-diff --git a/crates/game/src/machine.rs b/crates/game/src/machine.rs
---- a/crates/game/src/machine.rs
-+++ b/crates/game/src/machine.rs
-@@ -742,7 +742,7 @@ impl Machine {
-                 self.pm_vec[n as usize] = (r.ds, r.edx);
--                if n == 9 {
-+                if n == 9 && std::env::var_os("CM_ORIGINAL").is_none() {
-                     // On real hardware the release of the Enter key used to start the
-@@ -813,7 +813,9 @@ impl Machine {
-                     Some(mut f) => {
--                        let patch = if mode == 0 { crate::rebrand::title_patch(&name, &mut f) } else { None };
-+                        let patch = if mode == 0 && std::env::var_os("CM_ORIGINAL").is_none() {
-+                            crate::rebrand::title_patch(&name, &mut f)
-+                        } else { None };
-                         let h = self.alloc_handle(DosFile { f, name: name.clone(), patch });
+ }
+@@ -472,11 +488,17 @@ fn headless(cfg: &Config) {
+             }
+             previous_pad = p;
+         }
+-        gamepad::controller_input(&emu.m,&mut emu.cpu);
++        if std::env::var_os("CM_ORIGINAL").is_some() {
++            assert!(cfg.pads.is_empty() && cfg.desktop.is_empty());
++            assert!(emu.m.hooks.is_empty(), "original headless input has native hooks");
++        } else {
++            gamepad::controller_input(&emu.m,&mut emu.cpu);
++        }
+         keys.retain(|&(kt, sc)| {
+             if kt <= t {
+                 let was_open = emu.m.display.options_open;
+-                if !display::settings_key(&mut emu.m.display,sc) {
++                if std::env::var_os("CM_ORIGINAL").is_some() ||
++                    !display::settings_key(&mut emu.m.display,sc) {
+                     emu.m.kbd_queue.push_back(sc);
+                     emu.m.kbd_queue.push_back(sc | 0x80);
+                 }
 diff --git a/crates/game/src/vga.rs b/crates/game/src/vga.rs
+index cfdf063..d8fbaf4 100644
 --- a/crates/game/src/vga.rs
 +++ b/crates/game/src/vga.rs
-@@ -206,8 +206,9 @@ impl Vga {
+@@ -204,9 +204,10 @@ impl Vga {
+     /// A full-screen native world only needs the DOS pixels marked as HUD.
+     /// An empty/wrong-size mask retains ordinary full-frame conversion.
      pub fn render_masked(&mut self, cpu: &Cpu, out: &mut Vec<u32>, mask: &[bool]) -> (usize, usize) {
 +        let original = std::env::var_os("CM_ORIGINAL").is_some();
          let pal: [u32;256] = std::array::from_fn(|i| {
@@ -53,3 +126,146 @@ diff --git a/crates/game/src/vga.rs b/crates/game/src/vga.rs
 -            let e = |x: u8| ((x as u32) << 2) | ((x as u32) >> 4);
 +            let e = |x: u8| ((x as u32) << 2) | if original { 0 } else { (x as u32) >> 4 };
              (e(c[0]) << 16) | (e(c[1]) << 8) | e(c[2])
+         });
+         if self.mode == 3 {
+diff --git a/crates/game/src/frame_trace.rs b/crates/game/src/frame_trace.rs
+new file mode 100644
+index 0000000..b462cc7
+--- /dev/null
++++ b/crates/game/src/frame_trace.rs
+@@ -0,0 +1,135 @@
++use std::io::{BufWriter, Write};
++use x86::{Cpu, EAX};
++use crate::le::rt;
++
++const FRAME_ENTRY: u32 = 0x01B9DC;
++const FRAME_DELTA_READY: u32 = 0x01BA1F;
++const KEYBOARD_ENTRY: u32 = 0x012DD4;
++const WORLD_BYTES: u32 = 0x144B74;
++const RANGE_MAX: usize = 8;
++const RANGE_BYTES_MAX: usize = 65536;
++
++struct Range { relative: bool, address: u32, length: usize }
++struct Pending {
++    words: [i64; 23], keys: [u8; 128], input_keys: [u8; 128],
++    ranges: Vec<Vec<u8>>,
++}
++
++/// Read-only observer: no guest opcode writes, hooks, registers or time changes.
++pub struct FrameTrace {
++    file: BufWriter<std::fs::File>, ranges: Vec<Range>,
++    pending: Option<Pending>, frame: u32, this: u32,
++}
++
++impl FrameTrace {
++    pub fn open() -> Option<Self> {
++        let path = std::env::var_os("CM_FRAME_TRACE")?;
++        assert!(std::env::var_os("CM_ORIGINAL").is_some(), "frame traces require original mode");
++        let spec = std::env::var("CM_FRAME_RANGES").unwrap_or_default();
++        let mut ranges = Vec::new();
++        let mut total = 0;
++        for text in spec.split(',').filter(|s| !s.is_empty()) {
++            let p: Vec<_> = text.split(':').collect();
++            assert!(p.len() == 3 && matches!(p[0], "x"|"l"), "range must be x|l:HEX:DECIMAL");
++            let address = u32::from_str_radix(p[1].trim_start_matches("0x"),16).expect("range address");
++            let length: usize = p[2].parse().expect("range length");
++            let relative = p[0] == "x";
++            assert!(length > 0 && address.checked_add(length as u32).is_some_and(|end|
++                end <= if relative { WORLD_BYTES } else { 0x20AB80 }), "range outside game image");
++            total += length;
++            assert!(ranges.len() < RANGE_MAX && total <= RANGE_BYTES_MAX, "too much trace memory");
++            ranges.push(Range { relative, address, length });
++        }
++        let mut file = BufWriter::new(std::fs::File::create(path).expect("create frame trace"));
++        writeln!(file,"CMTRACE1,{}",ranges.len()).expect("write trace");
++        for r in &ranges {
++            writeln!(file,"range,{},{:x},{}",if r.relative {'x'} else {'l'},r.address,r.length).expect("write trace");
++        }
++        writeln!(file,"frame,ticks,previous,delta,limit_time,limit_flag,object,person,x,y,z,heading,pitch,body,kblatch,bios_shift,object_z,camera_u,camera_v,camera_z,camera_angle,horizon,scene,keys,input_keys,ranges...").expect("write trace");
++        Some(Self { file, ranges, pending: None, frame: 0, this: 0 })
++    }
++
++    fn hex(file: &mut BufWriter<std::fs::File>, bytes: &[u8]) {
++        for b in bytes { write!(file,"{b:02x}").expect("write trace"); }
++    }
++
++    fn flush_pending(&mut self) {
++        if let Some(p) = self.pending.take() {
++            for (i,n) in p.words.iter().enumerate() {
++                write!(self.file,"{}{n}",if i == 0 {""} else {","}).expect("write trace");
++            }
++            write!(self.file,",").expect("write trace"); Self::hex(&mut self.file,&p.keys);
++            write!(self.file,",").expect("write trace"); Self::hex(&mut self.file,&p.input_keys);
++            for bytes in p.ranges { write!(self.file,",").expect("write trace"); Self::hex(&mut self.file,&bytes); }
++            writeln!(self.file).expect("write trace");
++            self.file.flush().expect("flush trace");
++        }
++    }
++
++    pub fn observe(&mut self, c: &Cpu) {
++        match c.eip {
++            p if p == rt(FRAME_ENTRY) => {
++                self.flush_pending();
++                self.this = c.r[EAX];
++                let x = self.this;
++                if self.frame == 0 {
++                    if let Some(prefix) = std::env::var_os("CM_FRAME_SNAPSHOT") {
++                        let mut path = std::path::PathBuf::from(&prefix);
++                        path.set_extension("xox");
++                        std::fs::write(&path,c.read_bytes(x,0x144B80)).expect("write Xox snapshot");
++                        path.set_extension("persons");
++                        let mut persons = BufWriter::new(std::fs::File::create(path).expect("create PERSON snapshot"));
++                        let count = c.rd32(x+0x130D24);
++                        assert!(count <= 2842,"invalid PERSON count");
++                        persons.write_all(b"CMPERSON").expect("write PERSON header");
++                        persons.write_all(&count.to_le_bytes()).expect("write PERSON count");
++                        for i in 0..count {
++                            let p = c.rd32(x+0x13141C+i*4);
++                            persons.write_all(&i.to_le_bytes()).expect("write PERSON index");
++                            persons.write_all(&p.to_le_bytes()).expect("write PERSON address");
++                            assert!(p != 0,"null PERSON in snapshot");
++                            persons.write_all(c.read_bytes(p,0xC0)).expect("write PERSON");
++                        }
++                        persons.flush().expect("flush PERSON snapshot");
++                    }
++                }
++                let obj = c.rd32(x+0x130D04);
++                assert!(obj < 2842, "invalid traced player object");
++                let ticks = c.rd32(rt(0x207473));
++                let previous = c.rd32(x+0x144B68);
++                let limit = c.rd32(rt(0x1E3948));
++                let signed = |off| c.rd32(x+off) as i32 as i64;
++                let keys: [u8;128] = c.read_bytes(rt(0x207C54),128).try_into().unwrap();
++                let words = [self.frame as i64,ticks as i64,previous as i64,
++                    ticks.wrapping_sub(previous).min(2) as i64,limit as i64,
++                    if ticks.wrapping_sub(limit)>=2 {ticks.wrapping_sub(limit) as i64} else {0},
++                    obj as i64,c.rd32(x+0x130D08) as i64,signed(0x61418+obj*4),signed(0x64080+obj*4),
++                    signed(0x78D8C+obj*4),c.rd16(x+0x7E65C+obj*2) as i64,signed(0xE33F8),signed(0x130D1C),
++                    c.rd8(rt(0x97462)) as i64,c.rd8(0x417) as i64,signed(0x66CE8+obj*4),
++                    signed(0xE33E8),signed(0xE33EC),signed(0xE33F0),c.rd16(x+0xE33F4) as i64,
++                    signed(0xE33FC),signed(0x130CEC)];
++                let ranges = self.ranges.iter().map(|r| c.read_bytes(
++                    if r.relative {x+r.address} else {rt(r.address)},r.length).to_vec()).collect();
++                self.pending = Some(Pending { words, keys, input_keys: keys, ranges });
++                self.frame += 1;
++            }
++            p if p == rt(FRAME_DELTA_READY) => {
++                if let Some(row) = &mut self.pending {
++                    row.words[3] = c.rd32(self.this+0x144B6C) as i32 as i64;
++                }
++            }
++            p if p == rt(KEYBOARD_ENTRY) => {
++                if let Some(row) = &mut self.pending {
++                    row.input_keys.copy_from_slice(c.read_bytes(rt(0x207C54),128));
++                    row.words[14] = c.rd8(rt(0x97462)) as i64;
++                    row.words[15] = c.rd8(0x417) as i64;
++                }
++            }
++            _ => {}
++        }
++    }
++}
++
++impl Drop for FrameTrace {
++    fn drop(&mut self) { self.flush_pending(); }
++}
