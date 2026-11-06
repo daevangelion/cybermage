@@ -83,6 +83,9 @@ needed. Two ways:
   renames. Activity recreation cannot operate the old dialog; only one worker
   runs at a time. `TestDataImport` covers failed reads, missing witnesses,
   complete replacement and interrupted-promotion recovery without Android APIs.
+  Old adb installations may contain SB16/SC55 subdirectories: backup cleanup is
+  recursive without following directory symlinks. Once promotion succeeds,
+  leftover-backup cleanup is best effort and cannot block a valid installation.
 - **adb** for the standard emulator/device user0:
 
 ```

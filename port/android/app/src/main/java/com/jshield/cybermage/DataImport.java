@@ -11,20 +11,33 @@ final class DataImport implements AutoCloseable {
     private final byte[] buffer = new byte[1 << 16];
 
     private static void clean(File directory) throws IOException {
-        if (!directory.exists()) return;
-        File[] files = directory.listFiles();
-        if (files == null) throw new IOException("cannot list " + directory);
-        for (File file : files) {
-            if (!file.isFile() || !file.delete()) throw new IOException("cannot remove " + file);
+        if (!directory.exists()) {
+            directory.delete(); // Also discard a dangling symlink, if present.
+            return;
+        }
+        File parent = directory.getAbsoluteFile().getParentFile();
+        File resolved = new File(parent.getCanonicalFile(), directory.getName());
+        if (directory.isDirectory() && directory.getCanonicalFile().equals(resolved)) {
+            File[] files = directory.listFiles();
+            if (files == null) throw new IOException("cannot list " + directory);
+            for (File file : files) clean(file);
         }
         if (!directory.delete()) throw new IOException("cannot remove " + directory);
+    }
+
+    private static void discardPrevious(File previous) {
+        try {
+            clean(previous);
+        } catch (IOException ignored) {
+            // A committed import stays usable; retry backup cleanup next launch.
+        }
     }
 
     static void recover(File data) throws IOException {
         File previous = new File(data.getPath() + ".previous");
         if (!data.exists() && previous.exists() && !previous.renameTo(data))
             throw new IOException("cannot restore previous import");
-        if (data.exists()) clean(previous);
+        if (data.exists()) discardPrevious(previous);
     }
 
     DataImport(File destination) throws IOException {
@@ -32,6 +45,7 @@ final class DataImport implements AutoCloseable {
         stage = new File(data.getPath() + ".import");
         previous = new File(data.getPath() + ".previous");
         recover(data);
+        if (previous.exists()) throw new IOException("cannot remove older import backup");
         clean(stage);
         if (!stage.mkdir()) throw new IOException("cannot create import folder");
     }
@@ -65,7 +79,7 @@ final class DataImport implements AutoCloseable {
             if (hadData && !previous.renameTo(data)) throw new IOException("cannot restore previous import");
             throw new IOException("cannot install imported folder");
         }
-        clean(previous);
+        discardPrevious(previous);
     }
 
     @Override public void close() throws IOException { clean(stage); }

@@ -13,6 +13,9 @@ public final class TestDataImport {
         File root = Files.createTempDirectory("cybermage-import-").toFile();
         File data = new File(root, "data");
         require(data.mkdir());
+        File sounds = new File(data, "SB16/nested");
+        require(sounds.mkdirs());
+        try (FileOutputStream out = new FileOutputStream(new File(sounds, "SOUND"))) { out.write(9); }
         try (FileOutputStream out = new FileOutputStream(new File(data, "OLD"))) { out.write(7); }
         try (DataImport copy = new DataImport(data)) {
             copy.copy("FIRST", new ByteArrayInputStream(new byte[] {1}));
@@ -26,6 +29,7 @@ public final class TestDataImport {
             require(!new File(root, "data.import/.BROKEN.part").exists());
         }
         require(new File(data, "OLD").isFile());
+        require(new File(sounds, "SOUND").isFile());
         require(!new File(data, "FIRST").exists());
         require(!new File(root, "data.import").exists());
         try (DataImport copy = new DataImport(data)) {
