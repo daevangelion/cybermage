@@ -157,6 +157,10 @@ Xox+61418/64080/66CE8 (0x245D3–0x24601), +0x14 s16 selects prop/resource,
 +0/+4/+8 similarly; s16 +0x18 selects FX resource (0x25DB4). Presence predicates
 are original signed words at prop+0x14 and FX+0x18; zero/nonpositive entries are
 skipped. These are disk records, not the larger runtime objects.
+LoadPROPS0245AA stores disk+0x1A as runtime PROP+6. CollObject043878 tests
+that copied word: zero follows generic collision0438C4; nonzero identifies an
+item and can call CollItem042700 (call site043893). Zero is valid scenery, not
+an item definition.
 
 ## PANELnn.DAT
 

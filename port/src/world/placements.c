@@ -120,6 +120,7 @@ static int load_props(world *w)
         if (type == 174) o->flags |= 0x400u;
         w->prop_objects[w->prop_count] = (uint16_t)w->object_count++;
         w->prop_placements[w->prop_count] = i;
+        w->prop_items[w->prop_count] = world_s16(p+26);
         w->prop_types[w->prop_count++] = (int16_t)type;
     }
     return 0;

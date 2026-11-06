@@ -228,20 +228,16 @@ static int grant_item(events_state *e, world *w, unsigned type, int object,
     return 0;
 }
 
-/* CollItem042700: targetable2 PROP auxiliary is the item definition id. */
+/* CollObject043878 gates CollItem on runtime PROP+6 (disk+26) being nonzero. */
 int events_coll_item(events_state *e, world *w, unsigned object, unsigned source)
 {
-    unsigned i,type,placement;
-    world_span props;
+    unsigned i,type;
     if(!e || !w || object>=w->object_count || source>=w->object_count)
         return cm_fail("CollItem",object,"invalid pickup object");
     if(source!=w->player_object || !w->objects[object].active || w->player_person!=e->foot_person) return 0;
-    props=w->scene_sections[1];
     for(i=0;i<w->prop_count;++i) if(w->prop_objects[i]==object) {
-        placement=w->prop_placements[i];
-        if(!props.data || props.size<30 || placement>=(props.size-30)/30)
-            return cm_fail("SCENE.RSC/PROP",placement,"truncated prop placement");
-        type=cm_u16(props.data+(placement+1)*30+26);
+        type=(unsigned)(uint16_t)w->prop_items[i];
+        if(!type) return 0;
         return grant_item(e,w,type,(int)object,0);
     }
     return cm_fail("CollItem",object,"pickup has no placement");

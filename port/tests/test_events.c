@@ -119,12 +119,14 @@ static void cosmetics(void)
 
 static void retail_cosmetics(const char *data)
 {
-    unsigned scene,tick;
+    unsigned scene,tick,i;
     memset(&w,0,sizeof(w));memset(&e,0,sizeof(e));sim_init(&s,0);
     for(scene=1;scene<=11;++scene) {
         assert(world_load_scene(&w,data,scene)==0);
         assert(ai_init(&a,&w)==0 && world_finalize_scene(&w)==0);
         assert(events_init(&e,&w)==0 && events_load_tables(&e,data)==0);
+        for(i=0;i<w.prop_count;++i)
+            assert((uint16_t)w.prop_items[i]==cm_u16(w.scene_sections[1].data+(w.prop_placements[i]+1)*30+26));
         for(tick=1;tick<=80;++tick) {
             e.ticks=(scene-1)*80+tick;
             assert(events_cosmetics(&e,&s,&a,&w)==0);
@@ -145,6 +147,7 @@ static void skipped_props(void)
     static uint8_t props[90],definitions[2102];
     event_setup(0);
     w.prop_count=1;w.prop_objects[0]=2;w.prop_types[0]=1;w.prop_placements[0]=1;
+    w.prop_items[0]=1;
     w.objects[2].active=1;
     w.scene_sections[1].data=props;w.scene_sections[1].size=sizeof(props);
     props[56]=2;props[86]=1; /* first disk slot skipped, second grants item1 */
@@ -158,6 +161,22 @@ static void skipped_props(void)
     w.prop_placements[0]=UINT32_MAX;
     assert(events_coll_item(&e,&w,2,1)==0); /* already collected; no disk read */
     assert(events_rescale_prop(&w,0,50)<0);
+}
+
+static void non_item_prop(void)
+{
+    static uint8_t props[60];
+    uint16_t rng[3];
+    event_setup(0);
+    w.prop_count=1;w.prop_objects[0]=2;w.objects[2].active=1;
+    w.scene_sections[1].data=props;w.scene_sections[1].size=sizeof(props);
+    e.definition_count=1;
+    memcpy(rng,w.rng.word,sizeof(rng));
+    assert(events_coll_item(&e,&w,2,1)==0);
+    assert(w.objects[2].active && !e.items[0].type && !e.item_up_type);
+    assert(!memcmp(rng,w.rng.word,sizeof(rng)));
+    w.prop_items[0]=2;
+    assert(events_coll_item(&e,&w,2,1)<0);
 }
 
 int main(int argc, char **argv)
@@ -263,6 +282,7 @@ int main(int argc, char **argv)
     saved.autoDestruct=0;saved.autoDTime=123456;restored.ticks=300;
     assert(events_save_import(&restored,&saved)==0 && restored.autoDTime==0);
     skipped_props();
+    non_item_prop();
     assert(world_add32(INT32_MAX,1)==INT32_MIN && world_sub32(0,INT32_MIN)==INT32_MIN);
     assert(world_mul32(INT32_MAX,2)==-2);
     event_setup(0);w.objects[1].floor_z=INT32_MAX;w.objects[1].z=INT32_MAX;

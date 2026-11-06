@@ -181,6 +181,7 @@ typedef struct world {
     uint16_t fxo_objects[2048], fxo_textures[2048], prop_objects[2048];
     int16_t fxo_types[2048], prop_types[2048];
     uint32_t prop_placements[2048]; /* disk record index before skipped PROP records */
+    int16_t prop_items[2048]; /* runtime PROP+6, disk+26; zero is scenery */
     world_trig trig;
     world_rng rng;
     rsc scenes, fxo, props, animations;

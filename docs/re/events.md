@@ -200,8 +200,9 @@ phase observation. Unused trailing observations also reject.
 
 ## Review corrections
 
-Compact runtime props now retain their source disk record index; CollItem and
-ReScaleProp use it rather than treating skipped disk records as runtime slots.
+Compact runtime props now retain their source disk record index and cached item
+auxiliary; CollItem uses the copied item value and ReScaleProp the disk index,
+rather than treating skipped disk records as runtime slots.
 Fixtures cover a skipped leading record, the correct item/shape z and stale
 record rejection. Inactive countdown save intervals are zero; active intervals
 remain relative to the supplied save/load clock (original05014D/051515).
@@ -209,6 +210,15 @@ Inventory/weapon/switch save errors name SAVE file offsets, not Xox addresses.
 Shared unsigned wrap helpers now cover event motion, plane/corner arithmetic,
 lighting, position/shape transforms, timer subtraction and vehicle tile/body
 calculations. Boundary fixtures cover INT32 wrapping and out-of-map rejection.
+
+CollObject043878 tests runtime PROP+6 before entering CollItem: zero takes the
+generic collision branch0438C4, not the item path. LoadPROPS0245AA copies this
+word from disk+26. `world.prop_items` retains it for both collision eligibility
+and item lookup. Calling the item adapter on scenery is a non-consuming no-op;
+malformed nonzero definitions and zero-valued bundle grants still reject.
+The zero-auxiliary regression failed with the reported CollItem0 error before
+the fix and asserts unchanged object activity, inventory, notification and RNG.
+All11 retail scene loads check cached auxiliary words against source records.
 
 Integration contracts: `events_init` now resets scene metadata, **preserving**
 player inventory/status. AI's `ai_init_pc` owns original boot/new-game
