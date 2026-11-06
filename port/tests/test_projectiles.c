@@ -39,6 +39,7 @@ static void setup(void)
     a.pc_aim.pistol_lr = 16; a.pc_aim.pistol_ud = 64;
     a.pc_aim.pistol_boffset = 20; a.pc_aim.pistol_falloffset = 20;
     a.pc_aim.pistol_fall = 1; a.pc_aim.grenade_aim_center = 20;
+    a.pc_aim.auto_enable = 0; /* This fixture exercises manual screen aim. */
     world_make_omap(&w); snd_enable(0,0);
 }
 
@@ -73,6 +74,10 @@ static void launches(void)
     assert(ai_pc_launch_missile(&a,&s,&w,4,2,0,(int16_t)0x8000) == 1);
     assert(a.missiles[1].target == 2 && a.missiles[1].vertical == 4);
     assert(w.objects[2401].heading == 0 && w.objects[2401].x == w.objects[2].x + 0x1000);
+    a.pc_aim.auto_enable = 1;
+    assert(ai_pc_launch_missile(&a,&s,&w,2,320,20,0) == 1);
+    assert(a.pc_aim.aim_y == a.pc_rules.center_aim_y[1]);
+    assert(a.missiles[2].vertical == a.pc_aim.aim_y - 20);
     for (i = 0; i < AI_MISSILE_MAX; ++i) a.missiles[i].active = 1;
     assert(ai_pc_launch_missile(&a,&s,&w,2,320,20,0) == 0);
 }
