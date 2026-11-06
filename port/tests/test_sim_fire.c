@@ -1,5 +1,7 @@
 #include "sim.h"
 #include "ai.h"
+#include <assert.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -12,7 +14,7 @@ int main(int argc, char **argv)
 {
     unsigned angle, panel, i;
     int result;
-    if (argc != 3) return 2;
+    if (argc != 3 && argc != 4) return 2;
     angle = (unsigned)strtoul(argv[1], NULL, 0);
     panel = (unsigned)strtoul(argv[2], NULL, 0);
     world_trig_init(&w.trig);
@@ -35,8 +37,16 @@ int main(int argc, char **argv)
     a.missiles[0].speed = 0x20000;
     a.missile_objects[0] = 2;
     a.missile_count = 1;
-    s.ai = &a; s.frame_ticks = 2;
+    s.ai = &a; s.frame_ticks = argc == 4 ? (int32_t)strtoul(argv[3], NULL, 0) : 2;
+    if (!s.frame_ticks) {
+        w.objects[2].x = w.objects[1].x;
+        w.objects[2].y = w.objects[1].y;
+    }
     result = sim_coll_fire(&s, &w, 0);
+    if (!s.frame_ticks) {
+        assert(result == 2);
+        assert(w.objects[1].floor_z == INT32_MIN + 0x7fff);
+    }
     printf("%d %d %d %d %u %d %d %d\n", result,w.objects[1].x,w.objects[1].y,
         w.objects[1].floor_z,(unsigned)w.objects[1].heading,a.missiles[0].target,
         a.missiles[0].vertical,a.missiles[0].ticks);

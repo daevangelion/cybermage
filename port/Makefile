@@ -20,7 +20,7 @@ $(B)/%.o: src/%.c
 	@mkdir -p $(@D)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -MMD -MP -c -o $@ $<
 
-check: $(B)/test_core $(B)/test_platform $(B)/test_touch $(B)/test_sim $(B)/test_exe $(B)/test_sim_loop $(B)/test_sim_fire
+check: $(B)/test_core $(B)/test_platform $(B)/test_touch $(B)/test_sim $(B)/test_exe $(B)/test_sim_loop $(B)/test_sim_fire $(B)/test_sim_fire_ubsan
 	$(B)/test_core
 	$(B)/test_platform $(B)/platform-keys.txt $(B)/platform-dump
 	$(B)/test_touch
@@ -29,6 +29,7 @@ check: $(B)/test_core $(B)/test_platform $(B)/test_touch $(B)/test_sim $(B)/test
 	$(B)/test_sim_loop $(B)/loop-user
 	$(MAKE) -f tests/controls.mk B=$(B) controls-check
 	$(abspath ../.venv/bin/python) ../tools/sim_fire_original.py $(B)/test_sim_fire
+	$(B)/test_sim_fire_ubsan 0 0 0
 	$(abspath ../.venv/bin/python) ../tools/test_rsc.py
 	$(MAKE) -f tests/audio.mk B=$(B)/audio check
 	$(MAKE) -f tests/world.mk B=$(B)/world check
@@ -60,6 +61,10 @@ $(B)/test_sim_loop: tests/test_sim_loop.c src/main.c $(filter-out $(B)/main.o,$(
 $(B)/test_sim_fire: tests/test_sim_fire.c $(filter-out $(B)/main.o,$(OBJECTS))
 	@mkdir -p $(@D)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+
+$(B)/test_sim_fire_ubsan: tests/test_sim_fire.c tests/media_error.c src/sim/fire.c src/sim/fire_flat.c src/sim/slide.c src/world/math.c src/world/sight.c
+	@mkdir -p $(@D)
+	$(CC) -Iinclude $(CFLAGS) -O1 -fsanitize=undefined -fno-sanitize-recover=undefined -ffunction-sections -fdata-sections -Wl,--gc-sections $(LDFLAGS) -o $@ $^ -lm
 
 $(B)/test_controls: tests/test_controls.c tests/media_error.c $(CONTROLS_CORE)
 	@mkdir -p $(@D)

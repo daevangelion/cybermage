@@ -168,6 +168,20 @@ Remaining fidelity limits include mouse/joystick **classic** translation.
 Neither a synthetic CollFire sweep nor
 the movement trace establishes full combat, shop, death or multi-scene parity.
 
+### NPC pickup-contact investigation
+
+The first actor steering comparison differs at frame20/object970 before RNG
+diverges: original NewMONBound enters with collision count/flags0/0, native1/2.
+CollObject `043863..0438C2` gives targetable2 props their own branch:
+PROP runtime+6 (disk placement+26, LoadPROPS0245AA) must be nonzero;
+player contact calls CollItem, NPC item kind16 is ignored, and other NPC
+contacts pass the candidate **object** to ObjNxNy. Only the generic branch
+`0438C4..0438D2` passes the chain index. Native currently conflates that NPC
+pickup branch with generic collision. Nearby object877 is a kind15 cash prop;
+exact same-call candidate/proposal observation is being collected before fixing
+the causal regression. `sim_state.collision_observe/context` is a normally-null
+read-only diagnostic seam; it performs no core I/O or state substitution.
+
 ## Integrated verification (Integrator)
 
 The strict full `make -C port B=build/Integrator`, followed by
@@ -203,3 +217,19 @@ objects and existing SDL/Python/original-asset inputs without downloads.
 Interactive desktop smoke was unavailable: both DISPLAY and WAYLAND_DISPLAY
 are unset. The headless SDL input/control tests are not described as an
 interactive desktop run.
+
+Review regressions: normal load preserves the ISR latch/BIOS Shift flags and
+updates restart_game only on success. RELOAD selects the validated restart slot
+(including hidden10), and a failed requested load retains its menu/selection.
+The real title-menu Training route selects scene11 (100HP/energy,60cash).
+`test_sim_loop` caught the latch loss and stale restart slot before their fixes;
+the extended lifecycle/menu tests subsequently passed, including missing-save
+retention and Training through scripted title-menu input.
+
+CollFire's zero-tick contact regression reproduced signed overflow at
+`fire.c:207` under UBSan (`INT32_MAX + 32768` from the original zero-divisor
+sentinel). Sweep position/height additions now use explicit unsigned32 wrap.
+The zero-tick inside-target test and all120 original-x86 sweep cases pass
+under UBSan with recovery disabled; `make check` includes the zero-tick
+sanitizer regression. This preserves the original wrapped result rather than
+silently skipping zero-tick simulation.

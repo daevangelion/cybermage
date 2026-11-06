@@ -49,8 +49,8 @@ static int opening(const world *w, int32_t x, int32_t y, int32_t z)
 
 static int vertical_hit(const world_object *f, int panel, int32_t z)
 {
-    int32_t top = f->z + (panel ? 0 : f->floor_z);
-    return top - f->unk_6F220 > z && top - f->unk_71E88 < z;
+    int32_t top = sim_add32(f->z, panel ? 0 : f->floor_z);
+    return sim_sub32(top, f->unk_6F220) > z && sim_sub32(top, f->unk_71E88) < z;
 }
 
 /* 040050..0417C0. Work is bounded by MakeMissileList's original object cap.
@@ -72,7 +72,7 @@ int sim_coll_fire(sim_state *s, world *w, unsigned missile)
         cm_fail("CollFire", missile, "invalid missile object or candidate count"); return SIM_COLL_ERROR;
     }
     o = &w->objects[m->object];
-    ox = o->x; oy = o->y; oz = o->floor_z; top = oz + o->z;
+    ox = o->x; oy = o->y; oz = o->floor_z; top = sim_add32(oz, o->z);
     angle = o->heading;
     distance = scale(m->speed, s->frame_ticks, 2);
     dz = scale(m->vertical, s->frame_ticks, 2);
@@ -80,17 +80,17 @@ int sim_coll_fire(sim_state *s, world *w, unsigned missile)
         cm_fail("CollFire", missile, "missile interpolation overflow"); return SIM_COLL_ERROR;
     }
     if (!(m->type == 38 || (m->type == 1 && m->ticks))) dz = -dz;
-    nz = oz + dz;
+    nz = sim_add32(oz, dz);
     nearest = distance;
     o->floor_z = nz;
     clipped = sim_coll_fire_flat(w, (unsigned)m->object, oz);
     if (clipped == -2) return SIM_COLL_ERROR;
     if (clipped) {
-        int32_t travel = scale(distance, o->floor_z - oz, dz);
+        int32_t travel = scale(distance, sim_sub32(o->floor_z, oz), dz);
         int32_t saved_x = o->x, saved_y = o->y, old_clip = o->floor_z;
         if (travel == INT32_MIN) return SIM_COLL_ERROR;
-        o->x += sim_mul16(travel, w->trig.cos[angle >> 5]);
-        o->y += sim_mul16(travel, w->trig.sin[angle >> 5]);
+        o->x = sim_add32(o->x, sim_mul16(travel, w->trig.cos[angle >> 5]));
+        o->y = sim_add32(o->y, sim_mul16(travel, w->trig.sin[angle >> 5]));
         o->floor_z = nz;
         clipped = sim_coll_fire_flat(w, (unsigned)m->object, old_clip);
         if (clipped == -2) return SIM_COLL_ERROR;
@@ -98,9 +98,9 @@ int sim_coll_fire(sim_state *s, world *w, unsigned missile)
         if (clipped) {
             if (m->type == 46) result = 0;
             else {
-                nearest = scale(distance, o->floor_z - oz, dz);
-                cx = saved_x + sim_mul16(nearest, w->trig.cos[angle >> 5]);
-                cy = saved_y + sim_mul16(nearest, w->trig.sin[angle >> 5]);
+                nearest = scale(distance, sim_sub32(o->floor_z, oz), dz);
+                cx = sim_add32(saved_x, sim_mul16(nearest, w->trig.cos[angle >> 5]));
+                cy = sim_add32(saved_y, sim_mul16(nearest, w->trig.sin[angle >> 5]));
             }
             nz = o->floor_z;
         }
@@ -128,7 +128,7 @@ int sim_coll_fire(sim_state *s, world *w, unsigned missile)
             travel = sim_mul16(dx, w->trig.cos[local_angle >> 5]) +
                      sim_mul16(ly, w->trig.sin[local_angle >> 5]);
             if (travel <= 0 || travel >= nearest) continue;
-            z = top + scale(dz, travel, distance);
+            z = sim_add32(top, scale(dz, travel, distance));
             if (!vertical_hit(f, 1, z)) continue;
             px = fx + (ox > fx ? FIRE_PANEL_CONTACT : -FIRE_PANEL_CONTACT);
             py = oy + ly;
@@ -169,7 +169,7 @@ int sim_coll_fire(sim_state *s, world *w, unsigned missile)
                 }
                 travel = cm_distance(ox, oy, px, py);
                 if (travel >= nearest) continue;
-                z = top + scale(dz, travel, distance);
+                z = sim_add32(top, scale(dz, travel, distance));
                 if (!vertical_hit(f, 0, z)) continue;
                 cx = px; cy = py; nearest = travel; result = (int)id;
             }
@@ -177,9 +177,9 @@ int sim_coll_fire(sim_state *s, world *w, unsigned missile)
     }
     if (nearest > 0) {
         int32_t hx, hy, hz, hd;
-        int32_t tx = ox + sim_mul16(nearest, w->trig.cos[angle >> 5]);
-        int32_t ty = oy + sim_mul16(nearest, w->trig.sin[angle >> 5]);
-        int32_t tz = oz + scale(dz, nearest, distance);
+        int32_t tx = sim_add32(ox, sim_mul16(nearest, w->trig.cos[angle >> 5]));
+        int32_t ty = sim_add32(oy, sim_mul16(nearest, w->trig.sin[angle >> 5]));
+        int32_t tz = sim_add32(oz, scale(dz, nearest, distance));
         int hit = world_ray_missile_xyz(w, ox, oy, oz, tx, ty, tz, (uint16_t)angle,
                                          nearest, &hx, &hy, &hz, &hd);
         if (hit == -1) {
@@ -188,8 +188,8 @@ int sim_coll_fire(sim_state *s, world *w, unsigned missile)
             else if (opening(w, hx, hy, hz)) hit = 0;
             if (hit) {
                 unsigned backward = (uint16_t)(angle + SIM_ANGLE_HALF) >> 5;
-                o->x = hx + sim_mul16(FIRE_WALL_CONTACT, w->trig.cos[backward]);
-                o->y = hy + sim_mul16(FIRE_WALL_CONTACT, w->trig.sin[backward]);
+                o->x = sim_add32(hx, sim_mul16(FIRE_WALL_CONTACT, w->trig.cos[backward]));
+                o->y = sim_add32(hy, sim_mul16(FIRE_WALL_CONTACT, w->trig.sin[backward]));
                 o->floor_z = hz; m->target = -1; return -1;
             }
         }
@@ -204,11 +204,11 @@ int sim_coll_fire(sim_state *s, world *w, unsigned missile)
         m->target = result;
         m->ticks = cm_distance(target->x, target->y, cx, cy);
         o->heading = cm_atan64k(target->x, target->y, cx, cy);
-        o->floor_z = oz + scale(dz, nearest, distance);
+        o->floor_z = sim_add32(oz, scale(dz, nearest, distance));
         return result;
     }
-    o->x = ox + sim_mul16(nearest, w->trig.cos[angle >> 5]);
-    o->y = oy + sim_mul16(nearest, w->trig.sin[angle >> 5]);
+    o->x = sim_add32(ox, sim_mul16(nearest, w->trig.cos[angle >> 5]));
+    o->y = sim_add32(oy, sim_mul16(nearest, w->trig.sin[angle >> 5]));
     o->floor_z = nz;
     return 0;
 }

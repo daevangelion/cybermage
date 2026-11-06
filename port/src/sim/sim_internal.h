@@ -2,6 +2,19 @@
 #define CM_SIM_INTERNAL_H
 #include "sim.h"
 
+static inline int32_t sim_wrap32(uint32_t value)
+{
+    return value <= INT32_MAX ? (int32_t)value : -1 - (int32_t)(UINT32_MAX - value);
+}
+static inline int32_t sim_add32(int32_t a, int32_t b)
+{
+    return sim_wrap32((uint32_t)a + (uint32_t)b);
+}
+static inline int32_t sim_sub32(int32_t a, int32_t b)
+{
+    return sim_wrap32((uint32_t)a - (uint32_t)b);
+}
+
 enum {
     SIM_TILE_UNIT = 65536,
     SIM_QUARTER_TILE = 0x4000,
