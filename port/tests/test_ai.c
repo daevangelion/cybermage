@@ -127,6 +127,15 @@ static void death_waits_for_recoil_exit(void)
     assert(w.objects[4].x == w.objects[2].x && w.objects[4].y == w.objects[2].y);
     assert(w.objects[4].floor_z == w.objects[2].floor_z + 0x1000);
     assert(w.objects[13].x == 3 * 65536 && w.objects[13].y == 3 * 65536);
+    world_omap_delete(&w, (unsigned)a.souls[0].object);
+    w.objects[a.souls[0].object].active = 0; a.souls[0].active = 0;
+    a.monsters[0].kind = 3;
+    p->unk_00A4 = -1; p->unk_00AC = 1024; p->unk_00B0 = 1;
+    assert(ai_update_objects(&a, &simulation, &w, 0, 0) == 0);
+    assert(w.objects[2].active == 1); /* Cleanup shares the pre-Move guard. */
+    assert(ai_update_objects(&a, &simulation, &w, 0, 0) == 0);
+    assert(w.objects[2].active == 0 && w.objects[2].x == 0x1F8000 &&
+           w.objects[2].y == 0x1F8000);
 }
 
 static void explicit_undefined_input(void)
