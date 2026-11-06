@@ -184,6 +184,20 @@ unchanged. The modern regression taps all twenty tile centres.
 tools/run_capped.sh make -C port -f tests/controls.mk B=build/Controls controls-check
 ```
 
+The named fresh-archive gate at
+`cda7722b9aba50afb57f7a62a43aad2659b2d1ea` includes the selector repair
+`95ea447`. Its strict application build, all six controls targets, phase checks
+and full check exit 0:
+`captures/Gate-cda7722/receipt.json` and
+`captures/Gate-cda7722/logs/controls-check.log`.
+The real modern game smoke reports
+`moved=1 looked=1 jumped=1 fired=1 mode=5`; the expanded simulation fixture,
+including modal confirmation, pointer tiles and context release, passes.
+The same named binary
+`bc63d6da5886226a2b15dfaa4e88cc2eada474ab01fdc4845277389f60613a0e`
+keeps the classic movement replay at **106/106 MATCH**, with the actor
+comparison also exiting 0. This certifies that named cohort, not later edits.
+
 The pure action unit test, SDL virtual GameController headless smoke, full
 `sim_frame` analog/jump fixture, live-map test, SDL dummy-video multi-touch test
 and integrated new-game synthetic-input smoke have run successfully under
