@@ -331,6 +331,16 @@ before the clamp. INT32_MAX+1 is tested against its explicitly clamped render.
 Muzzle offset additions/subtractions also wrap before raster bounds checks;
 malformed INT32_MAX/INT32_MIN Glv offsets are negative UBSan fixtures.
 
+Fresh original-only `ui-glow` observation records Xox1444F4..1444FF:
+frame115/tick540 enters glow frame3, frame116/tick542 enters frame0, set0.
+The native `captures/AimFix-hud/frame000115.ppm` matches
+`captures/AimFix-target-newgame/frame000000.png` at **0/307200** pixels;
+native frame116 differs at599 glove texels, exclusively three red glow colors.
+This is a presentation-boundary issue: the last original trace row is entered
+but not necessarily presented at capture time. Do not compare a screenshot
+blindly to the last replay row. No glow colors, raster constants or producer
+state were changed to obtain the completed-frame comparison.
+
 - SetGammaBright5253C adds the signed brightness to each6-bit DAC component,
   clipping0..63. SetGammaContrast52598 averages the three already-brightened
   components; mean<32 subtracts contrast, otherwise adds it, clipping0..63.
