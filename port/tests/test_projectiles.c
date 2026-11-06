@@ -80,7 +80,7 @@ static void launches(void)
      * copying a door's FX bit creates a phantom oriented missile blocker. */
     assert(w.objects[2400].flags == UINT32_C(0x21080000));
     assert(w.objects[2400].radius == 0x1400 && w.objects[2400].height == 0x2500);
-    assert(w.objects[2400].texture == 500 + a.missile_types[2].fxo * 4);
+    assert(w.objects[2400].texture == 500 + a.missile_types[2].prop * 4);
     assert(w.objects[2400].rotations == 3);
     assert(ai_pc_launch_missile(&a,&s,&w,4,2,0,(int16_t)0x8000) == 1);
     assert(a.missiles[1].target == 2 && a.missiles[1].vertical == 4);

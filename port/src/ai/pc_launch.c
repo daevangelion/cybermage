@@ -142,9 +142,9 @@ int ai_pc_launch_missile(ai_state *a, sim_state *s, world *w, unsigned type,
             else if (q->tank_aim_y > 47) q->tank_aim_step = ai_sub32(q->tank_aim_step,1);
         }
     } else {
-        unsigned fxo = type == 1 ? 3u : type == 38 ? 4u : (unsigned)d->fxo;
+        unsigned prop = type == 1 ? 3u : type == 38 ? 4u : (unsigned)d->prop;
         if (type != 1 && type != 38 && d->sound) snd_play((unsigned)d->sound,32767,32768);
-        if (ai_set_missile(w,(unsigned)m->object,fxo)) return -1;
+        if (ai_set_missile(w,(unsigned)m->object,prop)) return -1;
         o->heading = (uint16_t)(pc->heading + q->pistol_angoffset - multiply(ai_sub32(aim_x,q->pistol_xoffset),q->pistol_angle));
         if (type != 1 && type != 38) {
             if (type == 14) { m->frame = (int32_t)(slot % 3); o->texture = (uint16_t)(o->texture + m->frame * 16); }

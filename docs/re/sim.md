@@ -426,6 +426,7 @@ at01D437/01D62E/01D67B/01D707/01D743/01D792/01D825 apply this frame's yaw.
 Projectile art also participates in collision. SetMissile02DAD7 reads the
 PROP pointer table atXox+131BCC, then the descriptor object word at+4
 (`mov [descriptor+2]; sar16`). It does not use placed FXO indices.
+The decoded missile table's first word is therefore named `prop`, not `fxo`.
 The old native lookup copied scene doors into projectiles, including their
 oriented-collision flag. In the genuine `route-corridor-heal` capture,
 pre-frame22 should reach1554522,1954739. A watchpoint on named2c3e97f showed

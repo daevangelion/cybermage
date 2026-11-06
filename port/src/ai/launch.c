@@ -103,7 +103,7 @@ int ai_launch_missile(ai_state *a, sim_state *s, world *w, unsigned source,
         o->x = from->x; o->y = from->y; o->floor_z = from->floor_z; o->z = 0;
         m->ticks = 1; m->vertical = 0; m->frame = 0; m->radius = 0xA000;
     } else if (type == 36 || type == 52) {
-        if (ai_set_missile(w, (unsigned)m->object, type == 36 ? 7u : (unsigned)data->fxo)) return -1;
+        if (ai_set_missile(w, (unsigned)m->object, type == 36 ? 7u : (unsigned)data->prop)) return -1;
         o->flags |= UINT32_C(0x00008000); o->heading = from->heading;
         if (type == 52) position(w, o, from, from->heading, 0x2000);
         else { o->x = from->x; o->y = from->y; }
@@ -114,7 +114,7 @@ int ai_launch_missile(ai_state *a, sim_state *s, world *w, unsigned source,
         if (type == 36) type = 5;
     } else if (type == 33) {
         if (data->sound) snd_play((unsigned)data->sound, 0x7FFF, 0x8000);
-        if (ai_set_missile(w, (unsigned)m->object, (unsigned)data->fxo)) return -1;
+        if (ai_set_missile(w, (unsigned)m->object, (unsigned)data->prop)) return -1;
         m->target = (int32_t)target; m->source = 0; m->frame = (int32_t)(slot % 4);
         o->texture = (uint16_t)(o->texture + m->frame);
         if (target == w->player_object) {
@@ -126,7 +126,7 @@ int ai_launch_missile(ai_state *a, sim_state *s, world *w, unsigned source,
         m->vertical = 30; m->variant = 11; m->ticks = 1;
     } else if (type == 46 || type == 48) {
         uint16_t xangle, yangle;
-        if (ai_set_missile(w, (unsigned)m->object, (unsigned)data->fxo)) return -1;
+        if (ai_set_missile(w, (unsigned)m->object, (unsigned)data->prop)) return -1;
         m->target = (int32_t)target;
         if (type == 48 && w->person_count > 1) m->source = w->persons[1].object;
         if (type == 46) {
@@ -148,7 +148,7 @@ int ai_launch_missile(ai_state *a, sim_state *s, world *w, unsigned source,
         m->ticks = 0x40000 / m->speed + 1;
         if (type == 48) type = 46;
     } else {
-        if (ai_set_missile(w, (unsigned)m->object, (unsigned)data->fxo)) return -1;
+        if (ai_set_missile(w, (unsigned)m->object, (unsigned)data->prop)) return -1;
         if ((type >= 25 && type <= 27) || type == 39) o->flags |= UINT32_C(0x00008000);
         if (data->aim == 0) o->heading = (uint16_t)(cm_atan64k(from->x, from->y, to->x, to->y) + world_rnd(&w->rng, 0x1000) - 0x800);
         else if (data->aim == 1) o->heading = (uint16_t)(from->heading + world_rnd(&w->rng, 0x400) - 0x200);

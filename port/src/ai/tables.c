@@ -21,7 +21,8 @@ int ai_load_tables(ai_state *a, const char *asset_dir)
     for (i = 0; i < AI_MISSILE_TYPES; ++i) {
         ai_missile_data *m = &a->missile_types[i];
         if (cm_exe_table(&exe, 0x929F4 + i * 20, row, 5)) goto out;
-        m->fxo = row[0]; m->sound = row[1]; m->volume = row[2];
+        /* SetMissile02DAD7: row0 indexes runtime PROP descriptors. */
+        m->prop = row[0]; m->sound = row[1]; m->volume = row[2];
         m->aim = row[3]; m->speed = row[4];
     }
     if (cm_exe_table(&exe, 0x92EE0, a->fire_missile, 12) ||

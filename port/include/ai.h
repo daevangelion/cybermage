@@ -65,7 +65,7 @@ typedef struct {
     int32_t sound, speed, variant, radius; /* +20,+24,+28,+2C */
 } ai_missile;
 typedef struct {
-    int32_t fxo, sound, volume, aim, speed;
+    int32_t prop, sound, volume, aim, speed;
 } ai_missile_data;
 typedef struct {
     int32_t active, object, prop, type, value, lifetime, frame;

@@ -301,7 +301,7 @@ int main(int argc, char **argv)
         assert(platform_file_read(&file, path) == 0);
         assert(cm_exe_init(&exe, &file, path) == 0);
         assert(ai_load_tables(&a, argv[2]) == 0);
-        assert(a.tables_loaded && a.missile_types[1].fxo == 3);
+        assert(a.tables_loaded && a.missile_types[1].prop == 3);
         assert(a.missile_types[2].speed == 0x40000 && a.fire_missile[0] == 2);
         world_rng_init(&w.rng, 44);
         assert(ai_init_pc(&player, &simulation, &w.rng, &exe, 1, 0) == 0);
