@@ -239,6 +239,8 @@ HandleNextFrame0x1BED3..0x1BF57 advances that list when CheckSONG reports done;
 script events0x3ED0F..0x3ED65 replace the current song and looping flag.
 snd_song(number,loop) implements the explicit script replacement. snd_tick
 performs normal completion/playlist advance and repeats a scripted loop.
+snd_song_default(loop) selects the current playlist entry for event75's zero
+song-number fallback without advancing that playlist.
 Initialization0x10F59 sets index0/current=-1; the port omits the invalid -1
 resource request and reaches the same first valid playlist request18 on its
 first tick. Muting MIDI stops the song without advancing while muted.

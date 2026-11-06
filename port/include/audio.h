@@ -91,6 +91,7 @@ void snd_kill(struct world *w);
 int snd_kill_loops(struct world *w, int play_transition);
 void snd_snapshot(snd_slot out[AUDIO_SAMPLE_SLOTS]);
 int snd_song(int number, int loop);
+int snd_song_default(int loop);
 void snd_song_end(void);
 void snd_song_pause(int paused);
 int snd_tick(struct world *w);

@@ -344,6 +344,10 @@ int snd_song(int number, int loop)
     result = song_start(number); if (!result) song_loop = loop != 0;
     platform_audio_unlock(); return result;
 }
+int snd_song_default(int loop)
+{
+    return snd_song(playlists[playlist][music_index], loop);
+}
 void snd_song_end(void)
 {
     platform_audio_lock(); audio_song_stop(); music_loaded = 0; platform_audio_unlock();
