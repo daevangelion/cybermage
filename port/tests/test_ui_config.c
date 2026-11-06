@@ -46,6 +46,7 @@ void config_checks(void)
     for(i=1;i<8;++i)
         assert(ui.options[option[i]]==world_wrap32(cm_u32(expected_config+word[i]*4)));
     assert(actors.difficulty==(int)cm_u32(expected_config+8));
+    assert(actors.attack_difficulty==(int)cm_u32(expected_config+8));
     if(!launch) {
         cm_input key={0};
         ui.return_screen=UI_GAME;ui_open(&ui,UI_OPTIONS);

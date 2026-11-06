@@ -262,7 +262,8 @@ static int load_scene(const char *data, unsigned scene)
     uint32_t regen_timer=a.pc.sp_regen_timer;
     world_close(&w);
     s.input_device=names.config.in_device;
-    if(world_load_scene(&w,data,scene) || ai_init(&a,&w)) return -1;
+    if(world_load_scene(&w,data,scene) ||
+       ai_init(&a,&w,(unsigned)names.config.difficulty)) return -1;
     a.pc.sp_regen_timer=regen_timer;
     if(ai_set_difficulty(&a,&w,(unsigned)names.config.difficulty) ||
        ai_load_tables(&a,data) ||

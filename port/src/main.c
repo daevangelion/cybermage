@@ -265,7 +265,7 @@ static int load_scene(const char *data, unsigned scene)
     simulation.events = &events;
     simulation.input_device=ui.config.in_device;
     if (world_load_scene(&game, data, scene)) return -1;
-    result = ai_init(&actors, &game);
+    result = ai_init(&actors, &game, (unsigned)ui.options[8]);
     actors.pc.sp_regen_timer = regen_timer;
     if (result || ai_set_difficulty(&actors, &game, (unsigned)ui.options[8])) return -1;
     ai_restore_pc_info(&events, &game);
@@ -1027,8 +1027,10 @@ int main(int argc, char **argv)
         action = trace || shop_modal || death_phase == 1 || death_phase == 2 ?
             UI_NONE : menu_input(&input, ticks);
         if(action==UI_ERROR) goto out;
-        if (playing && actors.difficulty != ui.options[8] &&
-            ai_set_difficulty(&actors, &game, (unsigned)ui.options[8])) goto out;
+        if (playing && (actors.difficulty != ui.options[8] ||
+                        actors.attack_difficulty != ui.options[8]) &&
+            (ai_set_attack_difficulty(&actors, (unsigned)ui.options[8]) ||
+             ai_set_difficulty(&actors, &game, (unsigned)ui.options[8]))) goto out;
         if (!settings_applied ||
             memcmp(applied_settings, ui.options + 3, sizeof applied_settings)) {
             if (ui_apply_settings(&ui, palette, base_palette)) goto out;
