@@ -2,8 +2,10 @@
 #include "audio.h"
 
 #include <SDL.h>
+#include <ctype.h>
 #include <errno.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 
@@ -16,6 +18,7 @@ typedef struct {
 } key_event;
 
 static cm_error error;
+static char error_file[PATH_MAX_BYTES], error_message[512];
 static SDL_Window *window;
 static SDL_Surface *surface;
 static SDL_AudioDeviceID device;
@@ -23,12 +26,15 @@ static uint64_t start;
 static int is_headless;
 static key_event events[KEY_EVENTS_MAX];
 static unsigned event_count, event_next;
+static uint8_t extended_held[CM_KEY_COUNT];
 
 int cm_fail(const char *file, uint32_t offset, const char *message)
 {
-    error.file = file;
+    SDL_strlcpy(error_file, file, sizeof error_file);
+    SDL_strlcpy(error_message, message, sizeof error_message);
+    error.file = error_file;
     error.offset = offset;
-    error.message = message;
+    error.message = error_message;
     SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "%s:0x%x: %s", file, offset, message);
     return -1;
 }
@@ -145,6 +151,20 @@ void platform_shutdown(void)
     SDL_Quit();
 }
 
+static int input_number(const char **p, unsigned base, unsigned limit, unsigned *v)
+{
+    unsigned long n;
+    char *end;
+    while (isspace((unsigned char)**p)) ++*p;
+    if (!**p || **p == '-' || **p == '+') return -1;
+    errno = 0;
+    n = strtoul(*p, &end, (int)base);
+    if (end == *p || errno == ERANGE || n > limit) return -1;
+    *p = end;
+    *v = (unsigned)n;
+    return 0;
+}
+
 int platform_keys(const char *path)
 {
     cm_file file = {0};
@@ -153,31 +173,48 @@ int platform_keys(const char *path)
     if (platform_file_read(&file, path))
         return -1;
     while (at < file.size) {
-        char line[128], action[8];
+        char line[128];
+        const char *p;
         unsigned n = 0, frame, scan;
-        int used = 0;
+        int down;
         uint32_t offset = at;
         while (at < file.size && file.data[at] != '\n') {
-            if (n + 1 >= sizeof line) {
+            if (n + 1 >= sizeof line || !file.data[at]) {
                 platform_file_release(&file);
-                return cm_fail(path, offset, "input line too long");
+                return cm_fail(path, offset, "input line too long or contains NUL");
             }
             line[n++] = (char)file.data[at++];
         }
         if (at < file.size) ++at;
         line[n] = 0;
         if (!n || line[0] == '#') continue;
-        if (sscanf(line, "%u %7s %x %n", &frame, action, &scan, &used) != 3 ||
-            line[used] || scan == 0 || scan >= CM_KEY_COUNT ||
-            (strcmp(action, "down") && strcmp(action, "up")) ||
+        p = line;
+        if (input_number(&p, 10, 1000000, &frame) || !isspace((unsigned char)*p))
+            goto bad;
+        while (isspace((unsigned char)*p)) ++p;
+        if (!strncmp(p, "down", 4) && isspace((unsigned char)p[4])) {
+            down = 1;
+            p += 4;
+        } else if (!strncmp(p, "up", 2) && isspace((unsigned char)p[2])) {
+            down = 0;
+            p += 2;
+        } else if (!strncmp(p, "raw", 3) && isspace((unsigned char)p[3])) {
+            down = -1;
+            p += 3;
+        } else goto bad;
+        if (input_number(&p, 16, down < 0 ? 255 : 0xe07f, &scan)) goto bad;
+        while (isspace((unsigned char)*p)) ++p;
+        if (*p || (down >= 0 && (!scan ||
+             (scan >= 128 && (scan < 0xe001 || scan > 0xe07f)))) ||
             event_count == KEY_EVENTS_MAX ||
             (event_count && frame < events[event_count - 1].frame)) {
+bad:
             platform_file_release(&file);
-            return cm_fail(path, offset, "expected sorted: FRAME down|up HEX_SCAN");
+            return cm_fail(path, offset, "expected sorted: FRAME down|up HEX_SCAN or FRAME raw HEX_BYTE");
         }
         events[event_count].frame = frame;
         events[event_count].scan = scan;
-        events[event_count++].down = !strcmp(action, "down");
+        events[event_count++].down = down;
     }
     platform_file_release(&file);
     return 0;
@@ -225,6 +262,13 @@ static unsigned dos_scan(SDL_Scancode sc)
     if (sc == SDL_SCANCODE_RCTRL) return 29;
     if (sc == SDL_SCANCODE_RALT) return 56;
     if (sc == SDL_SCANCODE_KP_ENTER) return 28;
+    if (sc == SDL_SCANCODE_KP_DIVIDE) return 53;
+    if (sc >= SDL_SCANCODE_KP_1 && sc <= SDL_SCANCODE_KP_9) {
+        static const uint8_t keypad[9] = {79,80,81,75,76,77,71,72,73};
+        return keypad[sc - SDL_SCANCODE_KP_1];
+    }
+    if (sc == SDL_SCANCODE_KP_0) return 82;
+    if (sc == SDL_SCANCODE_KP_PERIOD) return 83;
     for (i = 1; i < CM_KEY_COUNT; ++i)
         if (map[i] == sc && sc != SDL_SCANCODE_UNKNOWN)
             return i;
@@ -240,18 +284,51 @@ static void key_set(cm_input *input, unsigned scan, int down)
     }
 }
 
+static int raw_scan(cm_input *input, unsigned scan)
+{
+    if (input->raw_count == CM_RAW_SCANS_MAX)
+        return cm_fail("input", 0, "raw scan queue overflow");
+    input->raw_scans[input->raw_count++] = (uint8_t)scan;
+    if (scan < 0xe0) /* CM_HI.EXE CM_ISR9 0x67B94: every >=E0 is a prefix */
+        key_set(input, scan & 127, !(scan & 128));
+    return 0;
+}
+
+static int emit_key(cm_input *input, unsigned code, int down)
+{
+    extended_held[code & 127] = (uint8_t)(down && code > 255);
+    if (code > 255 && raw_scan(input, 0xe0)) return -1;
+    return raw_scan(input, (code & 127) | (down ? 0 : 128));
+}
+
+static int extended_key(SDL_Scancode key)
+{
+    switch (key) {
+    case SDL_SCANCODE_HOME: case SDL_SCANCODE_UP: case SDL_SCANCODE_PAGEUP:
+    case SDL_SCANCODE_LEFT: case SDL_SCANCODE_RIGHT: case SDL_SCANCODE_END:
+    case SDL_SCANCODE_DOWN: case SDL_SCANCODE_PAGEDOWN: case SDL_SCANCODE_INSERT:
+    case SDL_SCANCODE_DELETE: case SDL_SCANCODE_RCTRL: case SDL_SCANCODE_RALT:
+    case SDL_SCANCODE_KP_ENTER: case SDL_SCANCODE_KP_DIVIDE: return 1;
+    default: return 0;
+    }
+}
+
 int platform_poll(cm_input *input, unsigned frame)
 {
     SDL_Event e;
     memset(input->pressed, 0, sizeof input->pressed);
     memset(input->released, 0, sizeof input->released);
+    input->raw_count = 0;
     input->mouse_dx = input->mouse_dy = 0;
     if (!is_headless) while (SDL_PollEvent(&e)) {
         switch (e.type) {
         case SDL_QUIT: input->quit = 1; break;
-        case SDL_KEYDOWN: case SDL_KEYUP:
-            key_set(input, dos_scan(e.key.keysym.scancode), e.type == SDL_KEYDOWN);
+        case SDL_KEYDOWN: case SDL_KEYUP: {
+            unsigned code = dos_scan(e.key.keysym.scancode);
+            if (code && extended_key(e.key.keysym.scancode)) code |= 0xe000;
+            if (code && emit_key(input, code, e.type == SDL_KEYDOWN)) return -1;
             break;
+        }
         case SDL_MOUSEMOTION: {
             int w, h;
             SDL_GetWindowSize(window, &w, &h);
@@ -268,7 +345,10 @@ int platform_poll(cm_input *input, unsigned frame)
         case SDL_WINDOWEVENT:
             if (e.window.event == SDL_WINDOWEVENT_FOCUS_LOST) {
                 unsigned i;
-                for (i = 1; i < CM_KEY_COUNT; ++i) key_set(input, i, 0);
+                for (i = 1; i < CM_KEY_COUNT; ++i)
+                    if (input->held[i] &&
+                        emit_key(input, i | (extended_held[i] ? 0xe000 : 0), 0))
+                        return -1;
                 input->mouse_buttons = 0;
             }
             break;
@@ -277,7 +357,9 @@ int platform_poll(cm_input *input, unsigned frame)
     }
     while (event_next < event_count && events[event_next].frame <= frame) {
         key_event *k = &events[event_next++];
-        key_set(input, k->scan, k->down);
+        if (k->down < 0) {
+            if (raw_scan(input, k->scan)) return -1;
+        } else if (emit_key(input, k->scan, k->down)) return -1;
     }
     return 0;
 }
@@ -323,16 +405,30 @@ static int make_directory(const char *path)
     return 0;
 }
 
-static int write_bytes(const char *path, const uint8_t *data, size_t size)
+int platform_file_write(const char *path, const uint8_t *data, uint32_t size)
 {
     SDL_RWops *rw = SDL_RWFromFile(path, "wb");
     if (!rw) return cm_fail(path, 0, SDL_GetError());
     if (SDL_RWwrite(rw, data, 1, size) != size) {
         SDL_RWclose(rw);
-        return cm_fail(path, 0, "short frame write");
+        return cm_fail(path, 0, "short file write");
     }
-    if (SDL_RWclose(rw)) return cm_fail(path, 0, "frame close failed");
+    if (SDL_RWclose(rw)) return cm_fail(path, 0, "file close failed");
     return 0;
+}
+
+int platform_state_dump(const char *directory, unsigned frame,
+                        const char *text, size_t length)
+{
+    char path[PATH_MAX_BYTES];
+    int n;
+    if (length > UINT32_MAX)
+        return cm_fail(directory, 0, "state dump too large");
+    if (make_directory(directory)) return -1;
+    n = snprintf(path, sizeof path, "%s/frame%06u.state", directory, frame);
+    if (n < 0 || (size_t)n >= sizeof path)
+        return cm_fail(directory, 0, "state path too long");
+    return platform_file_write(path, (const uint8_t *)text, (uint32_t)length);
 }
 
 int platform_dump(const char *directory, unsigned frame,
@@ -347,18 +443,23 @@ int platform_dump(const char *directory, unsigned frame,
     n = snprintf(path, sizeof path, "%s/frame%06u.idx", directory, frame);
     if (n < 0 || (size_t)n >= sizeof path)
         return cm_fail(directory, 0, "frame path too long");
-    if (write_bytes(path, pixels, CM_WIDTH * CM_HEIGHT)) return -1;
+    if (platform_file_write(path, pixels, CM_WIDTH * CM_HEIGHT)) return -1;
     n = snprintf(path, sizeof path, "%s/frame%06u.pal", directory, frame);
     if (n < 0 || (size_t)n >= sizeof path)
         return cm_fail(directory, 0, "frame path too long");
-    if (write_bytes(path, palette, 768)) return -1;
+    if (platform_file_write(path, palette, 768)) return -1;
     memcpy(ppm, header, sizeof header - 1);
     for (i = 0; i < CM_WIDTH * CM_HEIGHT; ++i)
         memcpy(ppm + sizeof header - 1 + i * 3, palette + pixels[i] * 3, 3);
     n = snprintf(path, sizeof path, "%s/frame%06u.ppm", directory, frame);
     if (n < 0 || (size_t)n >= sizeof path)
         return cm_fail(directory, 0, "frame path too long");
-    return write_bytes(path, ppm, sizeof header - 1 + CM_WIDTH * CM_HEIGHT * 3);
+    return platform_file_write(path, ppm, sizeof header - 1 + CM_WIDTH * CM_HEIGHT * 3);
+}
+
+uint32_t platform_ticks(unsigned frame)
+{
+    return is_headless ? frame : (uint32_t)((SDL_GetTicks64() - start) * CM_TICK_HZ / 1000);
 }
 
 void platform_wait(unsigned frame)

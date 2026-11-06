@@ -1,0 +1,5 @@
+module,addr,name,comment,size
+CM_HI.EXE,0x02178F,hipak_directory_read,"OpenGLOBALFILES: u32 capacity64,count then64 offsets and64 explicit sizes; docs/re/formats.md",
+CM_HI.EXE,0x0555BA,title_draw_option,"TitleMenu inclusive box translation bright2/shadow22 then centered font1 text; titleOpX/Y titleBoxX/Y; docs/re/formats.md",
+CM_HI.EXE,0x023D12,gsx_frame_extents,"LoadGSX: half dimensions times scale; offsets from ANIMOBJ +270/+450; docs/re/formats.md",
+CM_HI.EXE,0x024FBA,prop_frame_extents,"LoadPROPOBJ: half dimensions and disk per-frame +43/+47 offsets times percent*512/100; docs/re/formats.md",

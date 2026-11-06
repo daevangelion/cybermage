@@ -9,5 +9,9 @@ esac
 shift
 B=${B:-build/Port}
 tools/run_capped.sh make -C port "B=$B"
-exec tools/run_capped.sh "port/$B/cybermage" --headless --frames 1 \
+case "$B" in
+    /*) BIN=$B/cybermage ;;
+    *) BIN=port/$B/cybermage ;;
+esac
+exec tools/run_capped.sh "$BIN" --headless --frames 1 \
     --data "${CM_DATA:-orig/retail}" --dump "${CM_DUMP:-out/port/title}" "$@"
