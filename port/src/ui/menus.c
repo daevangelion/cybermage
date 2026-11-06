@@ -78,6 +78,14 @@ int ui_init(cm_ui *ui, rsc *hipak, const cm_file *strings)
     if (count != UI_CONSOLE_BITMAPS)
         return cm_fail(hipak->path, 20, "wrong console bitmap count");
     memcpy(ui->console, bank, sizeof ui->console);
+    if (ui_bitmap_bank(hipak,23,ui->acar,20,&ui->acar_count)) return -1;
+    if (ui->acar_count != 11)
+        return cm_fail(hipak->path,23,"wrong aircar bitmap count");
+    for (i=0;i<3;++i) {
+        if (rsc_entry(hipak,i+1,&ui->backscreen[i],&size)) return -1;
+        if (size != 320u*240u)
+            return cm_fail(hipak->path,i+1,"invalid gameplay backdrop");
+    }
     for (i = 0; i < 4; ++i) {
         static const unsigned backgrounds[4] = {4,5,6,50};
         static const unsigned widgets[4] = {19,21,24,51};
@@ -106,6 +114,8 @@ int ui_init(cm_ui *ui, rsc *hipak, const cm_file *strings)
     ui->options[4] = 100;
     ui->options[8] = 1;
     ui->options[9] = 120;
+    ui->con_size = 2;
+    ui->vdu = 1;
     ui->restart_game = ui->restart_auto = -1;
     for (i = 0; i < UI_SAVE_SLOTS; ++i) ui->auto_ptr[i] = -1;
     ui_open(ui, UI_TITLE);
@@ -183,6 +193,9 @@ ui_action ui_input(cm_ui *ui, const cm_input *in, uint32_t ticks)
         return UI_NONE;
     }
     if (ui->screen == UI_GAME) {
+        if (in->pressed[26] && ui->con_size<4) ++ui->con_size;
+        if (in->pressed[27] && ui->con_size) --ui->con_size;
+        if (in->pressed[16]) ui->vdu=(ui->vdu+1)%3;
         if (in->pressed[1]) ui_open(ui, UI_PAUSE);
         else if (in->pressed[59]) ui_open(ui, UI_HELP);
         else if (in->pressed[63] || in->pressed[65]) {
@@ -225,11 +238,11 @@ ui_action ui_input(cm_ui *ui, const cm_input *in, uint32_t ticks)
     if (ui->screen == UI_OPTIONS) {
         int delta = (in->pressed[77] != 0) - (in->pressed[75] != 0);
         int *v = &ui->options[ui->selected];
-        int minimum = ui->selected == 6 || ui->selected == 7 ? -320 : 0;
+        int minimum = ui->selected == 6 || ui->selected == 7 ? -32 : 0;
         int maximum = ui->selected == 0 || ui->selected == 8 ? 2 :
-            ui->selected == 6 || ui->selected == 7 ? 320 :
+            ui->selected == 6 || ui->selected == 7 ? 32 :
             ui->selected == 9 ? 980 : 100;
-        int step = ui->selected == 6 || ui->selected == 7 ? 32 :
+        int step = ui->selected == 6 || ui->selected == 7 ? 3 :
             ui->selected == 9 ? 49 : ui->selected >= 3 && ui->selected <= 5 ? 5 : 1;
         if (delta && ui->selected != 1 && ui->selected != 2) {
             *v += delta * step;
@@ -404,7 +417,7 @@ int ui_draw(cm_ui *ui, uint8_t dst[CM_WIDTH * CM_HEIGHT])
                     x += width + 8;
                 }
             } else if (i >= 3) {
-                int x = i == 6 || i == 7 ? 468 + (ui->options[i] * 10 / 32) * 6 :
+                int x = i == 6 || i == 7 ? 468 + ui->options[i] * 60 / 32 :
                     408 + ui->options[i] / (i == 9 ? 49 : 5) * 6;
                 int row;
                 for (row = 0; row < 14; ++row)

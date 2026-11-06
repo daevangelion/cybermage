@@ -40,6 +40,13 @@ typedef struct {
     uint32_t blink_timer;
     int blink;
     int options[10];
+    int applied_volumes[3], volumes_applied;
+    unsigned con_size, vdu;
+    int32_t view_info[8][4], ACarX[11], ACarY[11];
+    uint8_t TankBar[128], slot_symbols[28];
+    const uint8_t *backscreen[3];
+    ui_bitmap acar[UI_BITMAPS_MAX];
+    unsigned acar_count;
     const char *strings[UI_STRING_COUNT];
     cm_font fonts[UI_FONT_COUNT];
     const uint8_t *title, *options_screen, *help_screen, *recorder_screen;
@@ -78,6 +85,11 @@ typedef struct {
     int32_t coder_x[12], coder_y[12];
     char shop_code[5];
     unsigned shop_button;
+    int32_t bet_amount, bet_payout;
+    int slot_spinning, slot_result;
+    unsigned slot_reel[3], slot_steps[3], slot_message;
+    uint32_t gambling_next;
+    int32_t arena_x[14], arena_y[14], slot_x[24], slot_y[24];
     int shop_success;
     uint32_t shop_button_until;
 } cm_ui;
@@ -108,6 +120,10 @@ int ui_draw_prop_icon(world *w, uint8_t *dst, int x, int y,
 int ui_draw_shop_object(world *w, uint8_t *dst, int x, int y,
                          unsigned resource);
 struct events_state;
+int ui_gambling_open(cm_ui *ui, struct events_state *e, world *w);
+int ui_gambling_step(cm_ui *ui, struct events_state *e, world *w,
+                       const cm_input *input);
+int ui_gambling_draw(cm_ui *ui, const struct events_state *e, uint8_t *dst);
 int ui_shop_step(cm_ui *ui, struct events_state *events, world *w,
                    const cm_input *input, uint32_t ticks);
 int ui_shop_draw(cm_ui *ui, const struct events_state *events, world *w,
@@ -125,6 +141,12 @@ typedef struct {
     int sword, tank, muzzle;
 } ui_hand;
 typedef struct { int x, y, width, height; } ui_view;
+int ui_apply_settings(cm_ui *ui, uint8_t palette[768], const uint8_t base_rgb[768]);
+int ui_game_view(const cm_ui *ui, int mode, int vehicle_type, ui_view *view);
+int ui_draw_backdrop(const cm_ui *ui, uint8_t *dst, int mode,
+                       int vehicle_type, ui_view view);
+int ui_draw_vehicle(const cm_ui *ui, const world *w, uint8_t *dst,
+                      int vehicle_type, int speed, int altitude);
 int ui_text_message(cm_ui *ui, const world *w, uint8_t *dst,
                     const char *const *lines, unsigned count,
                     uint32_t revision, int object, ui_view view);

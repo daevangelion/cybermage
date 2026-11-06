@@ -19,6 +19,16 @@ int ui_load_hand_tables(cm_ui *ui, const char *asset_dir)
         return cm_fail(asset_dir, 0, "hand table path too long");
     if (platform_file_read(&f, path)) return -1;
     if (cm_exe_init(&p, &f, path)) goto out;
+    for (i=0;i<8;++i)
+        if (cm_exe_table(&p,0x95A68+i*16,ui->view_info[i],4)) goto out;
+    if (cm_exe_table(&p,0x95AE8,ui->ACarX,11) ||
+        cm_exe_table(&p,0x95B14,ui->ACarY,11) ||
+        cm_exe_bytes(&p,0x95B40,ui->TankBar,sizeof ui->TankBar) ||
+        cm_exe_bytes(&p,0x96404,ui->slot_symbols,sizeof ui->slot_symbols)) goto out;
+    if (cm_exe_table(&p,0x9610C,ui->arena_x,14) ||
+        cm_exe_table(&p,0x96144,ui->arena_y,14) ||
+        cm_exe_table(&p,0x961E4,ui->slot_x,24) ||
+        cm_exe_table(&p,0x96244,ui->slot_y,24)) goto out;
     if (cm_exe_table(&p, 0x96008, ui->shop_stock[0], 16) ||
         cm_exe_table(&p, 0x96058, ui->shop_stock[1], 16) ||
         cm_exe_table(&p, 0x960A8, ui->shop_stock[2], 3) ||

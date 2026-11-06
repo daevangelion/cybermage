@@ -19,6 +19,7 @@ int ui_hud_from_world(ui_hud *hud, const world *w,
     hud->max_energy = e->max_energy;
     hud->cash = e->cash;
     hud->hp_count = phase;
+    hud->status = hand_mode;
     for (i = 0; i < 6; ++i) {
         hud->armor[i] = e->armor[i];
         hud->max_armor[i] = e->max_armor[i];
@@ -109,19 +110,21 @@ int ui_render_bells_and_whistles(cm_ui *ui, uint8_t *dst,
 {
     /* Constructor0x1026A–0x10333: monitors(10,436),(424,436). */
     unsigned phase = hud->hp_count;
-    ui_draw_monitor(dst, 10, 436, &ui->console[0]);
-    ui_draw_monitor(dst, 424, 436, &ui->console[1]);
+    int y = ui->vdu == 2 ? 10 : 436;
+    if (!ui->vdu || hud->status == 7) return 0;
+    ui_draw_monitor(dst, 10, y, &ui->console[0]);
+    ui_draw_monitor(dst, 424, y, &ui->console[1]);
     if (phase == 0)
-        gfx_blit(dst, 26, 440, ui->console[4].pixels,
+        gfx_blit(dst, 26, y+4, ui->console[4].pixels,
                  ui->console[4].width, ui->console[4].height);
     if (phase <= 2)
-        gfx_blit(dst, 42, 442, ui->console[6 + phase].pixels,
+        gfx_blit(dst, 42, y+6, ui->console[6 + phase].pixels,
                  ui->console[6 + phase].width, ui->console[6 + phase].height);
     if (phase > 0 && phase < 6 &&
-        (bar(ui, dst, 10, 446, hud->hp, hud->max_hp, phase) ||
-         bar(ui, dst, 11, 458, hud->energy, hud->max_energy, phase))) return -1;
-    if (number(ui, dst, 176, 440, hud->hp, 3, 0, 117) ||
-        number(ui, dst, 176, 456, hud->energy, 3, 49, 137)) return -1;
+        (bar(ui, dst, 10, y+10, hud->hp, hud->max_hp, phase) ||
+         bar(ui, dst, 11, y+22, hud->energy, hud->max_energy, phase))) return -1;
+    if (number(ui, dst, 176, y+4, hud->hp, 3, 0, 117) ||
+        number(ui, dst, 176, y+20, hud->energy, 3, 49, 137)) return -1;
     /* StatusMonitor0x16227–0x16376; tables hp_X/hp_Y0x95BC0, armorColor0x962AC. */
     {
         static const int hp_x[6] = {64,42,20,172,150,128};
@@ -137,7 +140,7 @@ int ui_render_bells_and_whistles(cm_ui *ui, uint8_t *dst,
                     return cm_fail("HUD", col, "armor maximum must be positive");
                 level = (unsigned)(hud->armor[col] * 3 / hud->max_armor[col]) + 1;
                 if (level > 3) level = 3;
-                if (number(ui, dst, 424 + hp_x[col], 436 + hp_y[col],
+                if (number(ui, dst, 424 + hp_x[col], y + hp_y[col],
                            hud->armor[col], 2, -28, 255)) return -1;
             }
             colors[col] = armor_color[level];
@@ -146,14 +149,14 @@ int ui_render_bells_and_whistles(cm_ui *ui, uint8_t *dst,
             for (col = 0; col < b->width; ++col) {
                 uint8_t c = b->pixels[row * b->width + col];
                 if (c >= 128 && c < 134) c = colors[c-128];
-                gfx_store(dst+(440 + row) * CM_WIDTH + 518 + col,c);
+                gfx_store(dst+(y+4 + row) * CM_WIDTH + 518 + col,c);
             }
     }
     if (hud->weapon) {
-        ui_draw_monitor(dst, 264, 448, &ui->console[2]);
-        gfx_blit(dst, 276, 452, ui->console[9].pixels,
+        ui_draw_monitor(dst, 264, y+12, &ui->console[2]);
+        gfx_blit(dst, 276, y+16, ui->console[9].pixels,
                  ui->console[9].width, ui->console[9].height);
-        if (number(ui, dst, 294, 454, hud->ammo, 3, 59, 174)) return -1;
+        if (number(ui, dst, 294, y+18, hud->ammo, 3, 59, 174)) return -1;
     }
     if (ui->ticks > ui->blip_time) {
         ui->hp_count = (ui->hp_count + 1) % 8;

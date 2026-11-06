@@ -51,6 +51,27 @@ int main(int argc, char **argv)
     assert(rsc_entry(&hipak, 31, &pal, &size) == 0);
     assert(gfx_palette(palette, pal, size, hipak.path) == 0);
     {
+        uint8_t base[768], adjusted[768];
+        ui_view view;
+        memset(base,80,sizeof base);
+        assert(ui_game_view(&ui,7,0,&view) == 0);
+        assert(view.x == 80 && view.y == 32 && view.width == 480 && view.height == 256);
+        assert(ui_game_view(&ui,7,1,&view) == 0);
+        assert(view.x == 0 && view.y == 16 && view.width == 640 && view.height == 276);
+        assert(ui_game_view(&ui,5,0,&view) == 0);
+        assert(view.x == 120 && view.y == 90 && view.width == 400 && view.height == 300);
+        ui.options[6] = 10; ui.options[7] = 5;
+        assert(ui_apply_settings(&ui,adjusted,base) == 0 && adjusted[0] == 100);
+        ui.options[6] = 32; ui.options[7] = 32;
+        assert(ui_apply_settings(&ui,adjusted,base) == 0 && adjusted[0] == 252);
+        ui.options[6] = -32; ui.options[7] = 32;
+        assert(ui_apply_settings(&ui,adjusted,base) == 0 && adjusted[0] == 0);
+        ui.options[6] = 33;
+        assert(ui_apply_settings(&ui,adjusted,base) == -1);
+        ui.options[6] = ui.options[7] = 0;
+        assert(ui_game_view(&ui,7,2,&view) == -1);
+    }
+    {
         uint8_t monitor[3] = {0,255,1};
         uint8_t packed[16] = {8,0,0,0,12,0,0,0,2,0,0,255,2,0,1,2};
         ui_bitmap bitmap = {monitor,3,1};
@@ -111,6 +132,31 @@ int main(int argc, char **argv)
     assert(ui_save_scene(original.data, original.size-1, &scene) == -1);
     assert(ui_load_game(&save, &w, original.data, original.size, "orig/retail") == 0);
     assert(w.player_object == 936 && w.person_count == 152);
+    {
+        ui_view view;
+        int32_t x=ui.ACarX[0], y=ui.ACarY[0];
+        int32_t hp=w.persons[w.player_person].unk_0038;
+        assert(ui_game_view(&ui,7,0,&view) == 0);
+        assert(ui_draw_backdrop(&ui,screen,7,0,view) == 0);
+        assert(ui_draw_vehicle(&ui,&w,screen,0,0,0) == 0);
+        assert(platform_dump(argv[1],7,screen,palette) == 0);
+        assert(ui_game_view(&ui,7,1,&view) == 0);
+        assert(ui_draw_backdrop(&ui,screen,7,1,view) == 0);
+        assert(ui_draw_vehicle(&ui,&w,screen,1,10,6550) == 0);
+        assert(platform_dump(argv[1],8,screen,palette) == 0);
+        ui.ACarX[0]=-1;
+        assert(ui_draw_vehicle(&ui,&w,screen,1,0,0) == -1);
+        ui.ACarX[0]=INT32_MIN;
+        assert(ui_draw_vehicle(&ui,&w,screen,1,0,0) == -1);
+        ui.ACarX[0]=CM_WIDTH;
+        assert(ui_draw_vehicle(&ui,&w,screen,1,0,0) == -1);
+        ui.ACarX[0]=x; ui.ACarY[0]=INT32_MAX;
+        assert(ui_draw_vehicle(&ui,&w,screen,1,0,0) == -1);
+        ui.ACarY[0]=y;
+        w.persons[w.player_person].unk_0038=0;
+        assert(ui_draw_vehicle(&ui,&w,screen,0,0,0) == -1);
+        w.persons[w.player_person].unk_0038=hp;
+    }
     assert(w.objects[936].x == (int32_t)cm_u32(original.data + 0x4C87 + 936 * 4));
     assert(w.objects[936].heading == cm_u16(original.data + 0x10941 + 936 * 2));
     assert(ui_save_game(&save, &w, encoded, sizeof encoded, &encoded_size) == 0);
@@ -205,6 +251,48 @@ int main(int argc, char **argv)
         assert(platform_dump(argv[1],6,screen,palette) == 0);
         memset(&input,0,sizeof input); input.pressed[1] = 1;
         assert(ui_shop_step(&ui,&events,&w,&input,13) == 1 && !ui.shop_kind);
+        events.shop_requested.kind = 4;
+        memset(&input,0,sizeof input);
+        events.SlotVisitTime=10000;events.JackPot=500;
+        assert(ui_shop_step(&ui,&events,&w,&input,14) == 1 && ui.shop_kind == 4);
+        assert(events.JackPot==500);
+        input.pressed[2] = 1;
+        assert(ui_shop_step(&ui,&events,&w,&input,25) == 1);
+        assert(ui.bet_amount == 1);
+        memset(&input,0,sizeof input); input.pressed[28] = 1;
+        cash=events.cash;
+        assert(ui_shop_step(&ui,&events,&w,&input,36) == 1);
+        assert(events.cash == cash-1 && ui.slot_spinning);
+        memset(&input,0,sizeof input);
+        for(i=0;i<110;++i) assert(ui_shop_step(&ui,&events,&w,&input,47+i) == 1);
+        assert(!ui.slot_spinning);
+        {
+            static const unsigned combos[7][3]={{3,3,2},{3,3,3},{2,2,2},
+                {0,0,2},{1,1,1},{0,0,0},{0,1,2}};
+            static const int profit[7]={30,50,100,200,-1,500,0};
+            unsigned test,reel,symbol;
+            for(test=0;test<7;++test) {
+                ui.bet_amount=10;ui.slot_spinning=1;events.JackPot=500;
+                cash=events.cash;
+                for(reel=0;reel<3;++reel) {
+                    for(symbol=0;symbol<14;++symbol)
+                        if(cm_u16(ui.slot_symbols+symbol*2)==combos[test][reel]) break;
+                    assert(symbol<14);
+                    ui.slot_reel[reel]=(symbol+13)%14;ui.slot_steps[reel]=1;
+                }
+                assert(ui_shop_step(&ui,&events,&w,&input,160+test) == 1);
+                assert(!ui.slot_spinning);
+                if(profit[test]>0) assert(events.cash==cash+10+profit[test]);
+                else if(profit[test]<0)
+                    assert(events.cash>=cash+220 && events.cash<=cash+510);
+                else assert(events.cash==cash && events.JackPot==508);
+                if(test==5) assert(events.JackPot==1727);
+            }
+        }
+        assert(ui_shop_draw(&ui,&events,&w,screen) == 0);
+        assert(platform_dump(argv[1],9,screen,palette) == 0);
+        input.pressed[1] = 1;
+        assert(ui_shop_step(&ui,&events,&w,&input,200) == 1 && !ui.shop_kind);
     }
     {
         const uint8_t *background;
@@ -261,8 +349,37 @@ int main(int argc, char **argv)
             platform_file_release(&rendered);
         }
     }
-    printf("UI menus/transitions, malformed inputs, GAMENAME288-byte and SAVE010 %u-byte exact roundtrips; player936/persons152 verified\n",original.size);
     world_close(&w);
+    {
+        cm_input input={0};
+        int cash;
+        assert(world_load_scene(&w,"orig/retail",2) == 0);
+        assert(ai_init(&actors,&w) == 0);
+        assert(events_init(&events,&w) == 0);
+        events.actors=&actors;events.cash=10000;events.PCBetOdds=3;
+        events.shop_requested.kind=2;events.PCBet=0;events.PCBetPick=-1;
+        assert(ui_shop_step(&ui,&events,&w,&input,201) == 1 && ui.shop_kind == 2);
+        assert(ui_shop_draw(&ui,&events,&w,screen) == 0);
+        assert(platform_dump(argv[1],10,screen,palette) == 0);
+        input.pressed[2]=1;
+        assert(ui_shop_step(&ui,&events,&w,&input,212) == 1 && ui.bet_amount == 1);
+        memset(&input,0,sizeof input);input.pressed[48]=1;cash=events.cash;
+        assert(ui_shop_step(&ui,&events,&w,&input,223) == 1);
+        assert(events.PCBet==1 && events.PCBetPick==0 && events.cash==cash-1 && !ui.shop_kind);
+        assert(w.persons[57].type==20 && w.persons[57].state==2 &&
+               w.persons[57].unk_00BC==1 && w.persons[57].unk_001E==10);
+        assert(w.objects[w.persons[57].object].x==0x1B2000);
+        assert(events.events[28].value[3]==59 && events.events[243].value[1]==0);
+        memset(&input,0,sizeof input);events.shop_requested.kind=2;
+        assert(ui_shop_step(&ui,&events,&w,&input,245) == 0 && !ui.shop_kind);
+        w.persons[57].status=2;events.shop_requested.kind=2;
+        assert(ui_shop_step(&ui,&events,&w,&input,256) == 1);
+        assert(events.cash==cash-1+3 && events.PCBet==0 && events.PCBetPick==-1);
+        assert(events_arena_start(NULL,&w) == -1);
+        assert(events_arena_start(&events,NULL) == -1);
+        world_close(&w);
+    }
+    printf("UI menus, settings, vehicle layouts, retail slots/arena, malformed inputs; GAMENAME288 and SAVE010 %u-byte exact roundtrips verified\n",original.size);
     platform_file_release(&original); platform_file_release(&names);
     platform_file_release(&strings); rsc_close(&hipak);
     platform_shutdown();

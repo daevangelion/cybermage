@@ -151,13 +151,16 @@ int ui_shop_step(cm_ui *ui, events_state *e, world *w,
     if (e->shop_requested.kind) {
         if (ui->shop_kind)
             return cm_fail("shop", 0, "overlapping shop requests");
-        if (e->shop_requested.kind != 1 && e->shop_requested.kind != 3 &&
-            e->shop_requested.kind != 5 && e->shop_requested.kind != 6)
+        if (e->shop_requested.kind < 1 || e->shop_requested.kind > 6)
             return cm_fail("shop", (uint32_t)e->shop_requested.kind, "unsupported shop kind");
         ui->shop_kind = e->shop_requested.kind;
         ui->shop_switch = e->shop_requested.switch_index;
         ui->shop_screen = e->shop_requested.screen;
         ui->shop_arg = e->shop_requested.arg;
+        if (ui->shop_kind == 2 || ui->shop_kind == 4) {
+            e->shop_requested.kind=0;
+            return ui_gambling_open(ui,e,w);
+        }
         if (ui->shop_kind == 3) {
             if (ui->shop_screen < 0 || ui->shop_screen >= 3 ||
                 ui->shop_arg < 0 || (unsigned)ui->shop_arg > e->event_count)
@@ -175,6 +178,8 @@ int ui_shop_step(cm_ui *ui, events_state *e, world *w,
         return 1;
     }
     if (!ui->shop_kind) return 0;
+    if (ui->shop_kind == 2 || ui->shop_kind == 4)
+        return ui_gambling_step(ui,e,w,in);
     if (in->pressed[1]) { ui->shop_kind = 0; return 1; }
     if (ui->shop_kind == 3) return coder_step(ui,e,in);
     if (ui->shop_count) {
@@ -252,6 +257,8 @@ int ui_shop_draw(cm_ui *ui, const events_state *e, world *w, uint8_t *dst)
     char label[64];
     int width;
     if (!ui->shop_kind) return 0;
+    if (ui->shop_kind == 2 || ui->shop_kind == 4)
+        return ui_gambling_draw(ui,e,dst);
     for (y=0;y<CM_HEIGHT;++y) for (x=0;x<CM_WIDTH;++x)
         gfx_store(dst+y*CM_WIDTH+x,ui->shop_background[ui->shop_kind == 3 ? 2 : 0][y/2*320+x/2]);
     if (ui->shop_kind == 3) {

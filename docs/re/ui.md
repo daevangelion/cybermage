@@ -144,8 +144,7 @@ printf format string. Merchant props use DrawShopObject's unscaled dimensions.
 Coder kind3 now accepts A..D/1..4, clear, confirm and exit, with HIPAK24 widgets.
 Success4DEB6..4DEEE clears target-event state, XORs payload word1 bit0, and sets
 payload word11=-1. Tests enter AB12, confirm against Events' supplied code row,
-and verify all three target mutations. Arena/slot requests still fail explicitly
-rather than becoming merchants; their rules/frontend remain unimplemented.
+and verify all three target mutations. UI3 adds arena/slot modal rules below.
 
 - HandleNextFrame0x1BF7D–0x1BFE2: ShopFlag1/5/6→LoadShopScreen(HIPAK4);
   2→arena(HIPAK5);3→coder(HIPAK6);4→slot machine(HIPAK50).
@@ -244,21 +243,55 @@ matches exactly. Pause now matches exactly with the corrected cursor resource, d
 unpressed aim(63,133). Individual
 selector/message/death/weapon variants compile but lack oracle parity tests.
 
-Still open: arena/slot frontend and rules; original shop/coder purchase/frame
+Still open: original shop/coder purchase/frame
 traces (current merchant/coder tests are source-grounded port-state tests, not
 original execution comparisons); automap (Controls owns its new implementation);
-tank/car monitors and secondary views; live aim/bob/glow/muzzle trace parity and
+vehicle oracle parity and live muzzle integration; live aim/bob/glow/muzzle trace parity and
 draw-time animation advancement (Port); death-melt end-to-end scenario (Integrator);
-options settings effects/config persistence;
+options config persistence;
 full original-save gameplay validation; demo SAVE010 layout verification.
 
 ## Remaining settings and arena source facts
+
+### UI3 implementation checkpoint
+
+`ui_game_view` reads all five ConWinInfo rectangles plus TankWinInfo and
+CarWinInfo from the supplied executable. Backdrops HIPAK1/2/3 are doubled
+outside the live view. TankMonitor1566C draws the 120-pixel maximum health
+bar from TankBar95B40 at262,6 and percentage410,4. ACarMonitor157AC draws
+HIPAK23's five static transparent/doubled components at ACarX/Y95AE8/95B14,
+plus armor percentage, speed and altitude text. VDU13A7F cycles hidden,
+bottom436 and top10;191B5 suppresses the on-foot monitors inside vehicles.
+
+`ui_apply_settings` applies brightness then contrast in six-bit DAC space
+and calls Audio's independent digital/speech/MIDI masters only when changed.
+Integrator wires its output into live presentation; difficulty already routes
+to AI, and message delay is consumed by `ui_text_message`.
+
+Arena uses retail scene2, not scene1: SCENE.RSC's scene2 has310 events and
+types68/69 at65/63. `events_arena_start` initializes the four real combatants
+through AI, enables the original event links and applies the odds-dependent
+HP bonus. Selecting either bet debits cash and starts that fight immediately.
+Reopening refuses an unresolved fight; resolved fights pay PCBet×PCBetOdds
+only for the winning side. Slot reels use slotcomb96404,50..99 advancing
+frames per reel, the six original winning combinations, stake return on wins,
+1727 jackpot reset,80% losing-stake contribution and signed elapsed-minute
+jackpot growth. UI modal routes2/4 no longer fall through to merchants.
+
+Vehicle oracle acceptance is **blocked, not matched**: Events' genuine
+`vehicle-north` route reaches scene1 around12.6,14.75,floor2 but has not entered
+the tank at26.5,5.5,floor0. Earthmother/lab/Mung access-card progression remains
+between that route and the tank. No genuine shop purchase or coder route has
+yet been reached either. No guest state injection or oracle-image backdrop
+is used to claim coverage. The UI probe dumps static tank/aircar layouts and
+tests both branches plus malformed coordinates/health, settings values,
+retail slot combinations and the real scene2 arena spawn/settlement.
 
 - SetGammaBright5253C adds the signed brightness to each6-bit DAC component,
   clipping0..63. SetGammaContrast52598 averages the three already-brightened
   components; mean<32 subtracts contrast, otherwise adds it, clipping0..63.
   OptOptions543FF passes gamma slider bounds[-32,32], not the current UI's
-  incorrect[-320,320]. No palette-effect implementation is claimed yet.
+  incorrect[-320,320], corrected by UI3.
 - Sound has `snd_volumes(digital,speech,midi)`; digital/speech maxima32767,
   MIDI127. Audio owns correct rescaling of already-playing sample gains.
   AI is adding `ai_set_difficulty(a,w,level)` so live NPC HP is rescaled as well
