@@ -96,22 +96,24 @@ known gaps are deliberate; implementation is not full-game parity.
 | target | Original combat order MATCH, conditional input scope below | `tools/compare_targets.py`:1298 completed checkpoints, all13 original nonempty, zero mismatches | Broader scenes/combat routes ([AI](docs/re/ai.md)) |
 | render_sw | Implemented; scoped complete newgame frame exact | Render gate and `tools/compare_frames.py`:completed newgame frame115 differs0/307200; renderer-only views exact outside hand footprints | Moving props, other scenes, painter ties/extreme pitch ([render](docs/re/render.md)) |
 | render_gl | Opt-in enhanced backend integrated | `tests/render_gl.mk check check-gl check-gl-es scene scene-es`; real640/1920 app replays MATCH; title/HUD exact against SW | Not DOS-raster-exact; broader scene/device acceptance ([render](docs/re/render.md)) |
-| classic input/Sim | Integrated; movement/combat/water routes MATCH | Named gate below:both106-row movement traces,1299 combat,2033 water/127 wet;2400-frame keyed smoke exits0 | Classic mouse/joystick; broader flight/vehicle/multi-scene routes ([Sim](docs/re/sim.md)) |
+| classic input/Sim | Scoped movement/combat MATCH; water and wider routes diverge | Named76-scenario gate below:33 scoped/full matches,42 player matches; both106-row movement traces and1299 combat MATCH | Water NPC130 frame1466;10 Easy traces lack original config input; classic mouse/joystick and broader flight/multi-scene routes ([Sim](docs/re/sim.md)) |
 | modern controls | Desktop opt-in; Android default action/touch/controller layer | `make -C port -f tests/controls.mk B=build/Controls controls-check`; Android virtual-stick walking verified | Physical-controller/long-play usability ([controls](docs/re/controls.md)) |
 | save/load | Codec, live bridges and genuine saved-start replay integrated | Retail SAVE010246045 bytes/GAMENAME288 round-trip; `--replay-load-slot 0`:earned Training94 and water94 player records MATCH | Full original-save playthrough and demo format ([UI](docs/re/ui.md),[Sim](docs/re/sim.md)) |
 | Events/inventory/vehicles | All90 dispatches; genuine tank entry/exit reducer MATCH | `tests/events.mk`; saved-start `events_trace`:Training639 frames/22,009,716 event bytes/116 vehicle rows MATCH; water94/3,237,736 bytes | Reducer consumes measured Sim phase inputs; full vehicle/multi-scene gameplay not established ([Events](docs/re/events.md)) |
-| AI/NPC combat | Conditional combat checkpoint parity | `tools/compare_actors.py --native-post-frame`:197296 actor checkpoints, zero actor/checkpoint-RNG divergence in named gate | Normal PERSON+24 defined-zero deviation; broader genuine saved fights/full game ([AI](docs/re/ai.md)) |
+| AI/NPC combat | Conditional combat and genuine saved-fight parity | Named gate:197296 combat actor checkpoints and62550 earned Training stair-fight checkpoints; zero actor/RNG divergence | Normal PERSON+24 defined-zero deviation; other Training NPC-first divergences and broader full game ([AI](docs/re/ai.md)) |
 | player fire/projectiles | Integrated; scoped original weapon/draw/respiration parity | `tests/pcfire.mk`, `tests/projectiles.mk`;193 fire frames/772 missile checkpoints and5040 respiration draws match; CollFire120 original sweeps | Broader integrated selector/firearm/vehicle and missile-path coverage ([AI](docs/re/ai.md),[PC fire](docs/re/pc_fire.md)) |
 | UI/HUD/shops | Integrated; scoped named pixel comparisons match | `tests/ui.mk` gate; title/options/HUD/composed-newgame/pause comparisons0 differences | Broader shop/vehicle/live-weapon/arena runtime comparisons ([UI](docs/re/ui.md)) |
 | timer/RNG/fixed math | Implemented integral semantics | World gate:6144 trig values,106 angle/distance,60 RNG,16 rotation vectors match; movement trace MATCH | Whole-game RNG call order still under comparison |
 | audio/speech/movies | Integrated native PCM/OPL/HMI/TGV | `make -C port -f tests/audio.mk check`:38 songs validate; first30 frames of three movies match FFmpeg | Not exact SOS driver/mixer/voice-allocation parity ([audio](docs/re/audio.md)) |
 | platform/Android | Full-engine APK and opt-in Android GL runtime verified | Frozen20117a3 x86_64 APK:API36/GLES3 `--es renderer gl` and SW title→NEW→scene1→modern touch walking, no crash; earlier dual-ABI gate atc699ea4 | Physical-device/long-play acceptance; no measured FPS logging ([APK/screenshots/logs](port/android/README.md)) |
 
-Named integrated gate: commit `7b427a9653aabaf88546f780189a9ee51d05ff99`,
+Named integrated gate: commit `5bc4fdec385db4ebefa14d8374eb1aaefa4d7c30`,
 isolated `git archive` snapshot, strict build and complete `make -C port check`
-exit0. Receipt `captures/Sim2-gate-7b427a9.json` pins binary SHA256
-`d68735198d408283d0c351de68bcfdd7aee7eab3a882ff5d9c99191530caedbb`
-and commands/results. Combat/water import only the explicitly approved original
+exit0. Receipt [gate-5bc4fde.json](docs/re/gate-5bc4fde.json) pins binary SHA256
+`8ab2bb6ecc860082db89cd6489d34b24c0d9a383625668ba4c8f79476cfb3d98`
+and all76 scenario commands/results:33 MATCH,33 DIVERGED,10 prerequisite failures;
+42/66 exercised scenarios match every player record. A MATCH on a player-only
+capture is not actor/RNG evidence. Combat/water import only the explicitly approved original
 undefined PERSON+24 word and measured input/actor clocks; no coordinates, HP,
 RNG, deadlines or target outputs are installed. Corrected movement inputs retain
 all106 measured BDA bytes, including Ctrl=4 on frames71..75. This named receipt
