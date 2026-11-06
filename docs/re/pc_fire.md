@@ -71,7 +71,10 @@ Retail CM_HI.EXE v1.01F LE link addresses. Gameplay only; UI consumes state.
   SaveGame0500B7 invokes the same render/HUD pipeline once before encoding;
   it is not an artificial extra RNG request. `draw-clocks.csv` and actual
   slot/name `ui-actions.csv` inputs drive replay; missing timing inputs fail
-  closed. See `bootstrap.md` for the frame286 save fixture.
+  closed at the actual timer read, with the frame and missing filename.
+  Declaring a draw phase does not require clock files when that consumer
+  performs no clock-dependent operation. No timestamp is fabricated.
+  See `bootstrap.md` for the frame286 save fixture.
 - Low-HP respiration0x1928B..0x19340 reads PERSON0, including while driving.
   Positive HP below signed maxHP/2 and the real SwordHum gate consume
   RND(HP/2+2) before CheckSound(PCSound,3). A zero chance result and completed

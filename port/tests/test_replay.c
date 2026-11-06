@@ -78,10 +78,14 @@ static void draw_controls(void)
     assert(replay_ui_next(&r, 0, &action) == 1 && action.slot == 0 &&
            action.ticks == 10 && !strcmp((char *)action.name, "AB"));
     assert(!replay_ui_next(&r, 0, &action));
+    assert(replay_draw_begin(&r, 0, CM_DRAW_NORMAL) == 1);
+    assert(!replay_draw_end(&r)); /* No clock read: no observed ordinal consumed. */
     assert(replay_draw_begin(&r, 0, CM_DRAW_SAVE) == 1);
     assert(!replay_draw_clock(&r, 0x16391, &ticks) && ticks == 10);
     assert(!replay_draw_clock(&r, 0x19377, &ticks) && ticks == 11);
     assert(!replay_draw_clock(&r, 0x193a4, &ticks) && ticks == 12);
+    assert(!replay_draw_end(&r));
+    assert(replay_draw_begin(&r, 0, CM_DRAW_LOAD) == 1);
     assert(!replay_draw_end(&r));
     assert(replay_draw_begin(&r, 0, CM_DRAW_NORMAL) == 1);
     assert(!replay_draw_clock(&r, 0x19377, &ticks) && ticks == 13);
@@ -106,7 +110,9 @@ static void draw_controls(void)
     draw_input = "frame,draw,phase,pc,ticks\n0,0,0,19377,10\n";
     ui_input = ui_header;
     assert(!replay_open(&r, "frames.csv") && replay_next(&r, &frame) == 1);
-    assert(replay_draw_begin(&r, 0, CM_DRAW_SAVE) == -1);
+    assert(replay_draw_begin(&r, 0, CM_DRAW_SAVE) == 1);
+    assert(replay_draw_clock(&r, 0x19377, &ticks) == -1);
+    assert(strstr(cm_last_error()->message, "frame=0"));
     replay_close(&r);
     fixture();
     ui_input = "frame,ticks,action,slot,name_hex24\n"
@@ -116,7 +122,16 @@ static void draw_controls(void)
     replay_close(&r);
     fixture();
     assert(!replay_open(&r, "frames.csv") && replay_next(&r, &frame) == 1);
-    assert(replay_draw_begin(&r, 0, CM_DRAW_NORMAL) == -1);
+    /* Old data is valid for consumers which perform no clock-dependent draw. */
+    assert(replay_draw_begin(&r, 0, CM_DRAW_NORMAL) == 1);
+    assert(!replay_draw_end(&r));
+    assert(replay_next(&r, &frame) == 1);
+    assert(replay_draw_begin(&r, 1, CM_DRAW_SAVE) == 1);
+    /* The first actual clock use must fail, identifying both frame and file. */
+    assert(replay_draw_clock(&r, 0x19377, &ticks) == -1);
+    assert(!strcmp(cm_last_error()->file, "draw-clocks.csv"));
+    assert(strstr(cm_last_error()->message, "frame=1"));
+    assert(strstr(cm_last_error()->message, "missing measured draw clock file"));
     replay_close(&r);
 }
 

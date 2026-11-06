@@ -1,6 +1,7 @@
 #include "replay.h"
 #include <errno.h>
 #include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -224,35 +225,40 @@ bad:
 
 int replay_draw_begin(cm_replay *r, uint32_t frame, unsigned phase)
 {
-    uint32_t index = r->has_draw_frame && r->draw_frame == frame ? r->draw_index + 1 : 0;
-    int n;
     if (r->draw_active || phase > CM_DRAW_LOAD)
         return cm_fail(r->draw_clock_path, r->draw_clock_next, "overlapping draw phase");
     /* No next original checkpoint exists for the last native frame. Do not
      * invent its conditional timer inputs or claim its draw as verified. */
     if (r->next == r->file.size) return 0;
-    if (!r->draw_clocks.data)
-        return cm_fail(r->draw_clock_path, 0, "missing measured draw clocks; recapture original");
-    n = draw_peek(r);
-    if (n < 0) return -1;
-    if (!n || r->draw_pending.frame != frame || r->draw_pending.draw != index ||
-        r->draw_pending.phase != phase)
-        return cm_fail(r->draw_clock_path, r->draw_clock_next, "missing or wrong draw phase");
-    r->draw_frame = frame; r->draw_index = index; r->draw_phase = phase;
-    r->draw_active = r->has_draw_frame = 1;
+    if (r->draw_frame != frame) r->has_draw_frame = 0;
+    r->draw_index = r->has_draw_frame ? r->draw_index + 1 : 0;
+    r->draw_frame = frame; r->draw_phase = phase;
+    r->draw_active = 1; r->draw_reads = 0;
     return 1;
+}
+
+static int draw_failure(cm_replay *r, const char *reason)
+{
+    /* Diagnostics already have process-global lifetime through cm_last_error. */
+    static char message[160];
+    snprintf(message, sizeof message, "frame=%u: %s", (unsigned)r->draw_frame, reason);
+    return cm_fail(r->draw_clock_path, r->draw_frame, message);
 }
 
 int replay_draw_clock(cm_replay *r, uint32_t site, uint32_t *ticks)
 {
-    int n = draw_peek(r);
+    int n;
+    if (!r->draw_clocks.data)
+        return draw_failure(r, "missing measured draw clock file");
+    n = draw_peek(r);
     if (n < 0) return -1;
     if (!r->draw_active || !n || r->draw_pending.frame != r->draw_frame ||
         r->draw_pending.draw != r->draw_index || r->draw_pending.phase != r->draw_phase ||
         r->draw_pending.site != site)
-        return cm_fail(r->draw_clock_path, r->draw_clock_next, "missing or wrong timer read");
+        return draw_failure(r, "missing or wrong measured timer read");
     *ticks = r->draw_pending.ticks;
     r->has_draw_pending = 0;
+    ++r->draw_reads;
     return 0;
 }
 
@@ -262,8 +268,11 @@ int replay_draw_end(cm_replay *r)
     if (!r->draw_active) return cm_fail(r->draw_clock_path, 0, "draw was not started");
     n = draw_peek(r);
     if (n < 0) return -1;
-    if (n && r->draw_pending.frame == r->draw_frame && r->draw_pending.draw == r->draw_index)
-        return cm_fail(r->draw_clock_path, r->draw_clock_next, "unconsumed timer read");
+    if (n && r->draw_pending.frame == r->draw_frame &&
+        r->draw_pending.draw == r->draw_index && r->draw_pending.phase == r->draw_phase)
+        return draw_failure(r, "unconsumed timer read");
+    if (r->draw_reads) r->has_draw_frame = 1;
+    else if (r->has_draw_frame) --r->draw_index;
     r->draw_active = 0;
     return 0;
 }
@@ -318,10 +327,6 @@ int replay_open(cm_replay *r, const char *path)
                       &r->ui_action_next, "ui-actions.csv", ui_header)) {
         replay_close(r);
         return -1;
-    }
-    if (r->draw_clocks.data && !r->ui_actions.data) {
-        replay_close(r);
-        return cm_fail(path, 0, "draw clocks require companion UI action inputs");
     }
     return 0;
 bad:

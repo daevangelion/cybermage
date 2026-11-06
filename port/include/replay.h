@@ -25,7 +25,7 @@ typedef struct {
     cm_replay_draw draw_pending;
     cm_replay_ui ui_pending;
     uint32_t draw_frame, draw_index, draw_phase;
-    int has_draw_pending, has_ui_pending, draw_active, has_draw_frame;
+    int has_draw_pending, has_ui_pending, draw_active, has_draw_frame, draw_reads;
     unsigned range_count;
     uint16_t bios_seed;
     int has_bios_seed;
