@@ -443,24 +443,34 @@ already lives in an immutable observer cohort rather than `captures/ROUTE`.
 ### Draw clocks and menu actions
 
 Every new `--frame-trace` also writes `draw-clocks.csv`:
-`frame,draw,phase,pc,ticks`. Draw ordinals start at0 per frame; phases0/1/2
-identify the ordinary primary HUD, SaveGame render, or LoadGame render.
+`frame,draw,phase,pc,ticks`. Draw ordinals start at0 per frame; phases0/1/2/3
+identify ordinary primary HUD, SaveGame, LoadGame, or PCDeath wait renders.
 The observer reads the timer at the actual executed instructions:
 StatusMonitor016391 (one sample reused for its deadline), energy compare019377,
 and conditional energy deadline0193A4. It never fabricates a second read.
 Replay consumes the same ordered stream through `replay_draw_begin/clock/end`;
 missing, wrong-phase or unconsumed reads fail closed. The unmatched terminal
 native draw is not executed or claimed as verified. Old clockless datasets
-must be recaptured for integrated draw replay.
+remain valid until an actual consumer needs a measured clock; that first use
+fails with the frame and missing filename, not a fabricated timestamp.
 
 `ui-actions.csv` contains `frame,ticks,action,slot,name_hex24`. Read-only
 SaveGame05007C/LoadGame050AD4 entry observations are limited to the actual
-HandleNextFrame menu callers; slot is EDX and the name is the user's24-byte
-gameName input (slot10 has no name). This is separate from the later selector
+HandleNextFrame menu callers, including death returns15605/1561A. Actions1/2/3
+mean Save/Load/Restart; Restart is derived from the engine's real last-save slot
+and the observed EDX slot must agree. The name is the user's24-byte gameName
+input (slot10 has no name). This is separate from the later selector
 reset marker: SaveGame0500B7 calls Image1::Render **before** serialization.
 The port uses the same world/HUD pipeline for that draw and an ordinary draw,
 including actual status, breathing, regeneration, dialogue and countdown effects.
 No RNG words, positions, inventory or deadlines are installed from observations.
+
+`death-inputs.csv` is optional `frame,pc,value`: actual PCDeath timer reads
+153FD/15403/1543F and the raw Escape byte at1555A, in execution order. It is
+required only on actual death paths and fails closed for missing/wrong-order
+inputs. Phase3 draws run the complete world/HUD pipeline; melt makes480
+RND(640) calls per pass before consuming its Escape input and Load/Restart.
+The menu backdrop callback1559E is vPlaneErase15050, not another world render.
 
 The paired `Port-save-clock` fixture has317 frame entries. Frame286 selects
 slot0 at tick1056, draws the save HUD at1058, then the ordinary HUD at1060.

@@ -3,8 +3,8 @@
 #include <stdio.h>
 #include <string.h>
 
-static char trace[4096], clocks[512], draw_data[2048], ui_data[512], mouse_data[4096];
-static const char *clock_input, *draw_input, *ui_input, *mouse_input;
+static char trace[4096], clocks[512], draw_data[2048], ui_data[512], mouse_data[4096], death_data[512];
+static const char *clock_input, *draw_input, *ui_input, *mouse_input, *death_input;
 
 int platform_file_exists(const char *path)
 {
@@ -12,6 +12,7 @@ int platform_file_exists(const char *path)
     if (strstr(path, "draw-clocks.csv")) return draw_input != NULL;
     if (strstr(path, "ui-actions.csv")) return ui_input != NULL;
     if (strstr(path, "mouse-input.csv")) return mouse_input != NULL;
+    if (strstr(path, "death-inputs.csv")) return death_input != NULL;
     return 0;
 }
 
@@ -37,6 +38,11 @@ int platform_file_read(cm_file *file, const char *path)
         memcpy(mouse_data, mouse_input, strlen(mouse_input) + 1);
         file->data = (uint8_t *)mouse_data;
         file->size = (uint32_t)strlen(mouse_data);
+    } else if (strstr(path, "death-inputs.csv")) {
+        if (!death_input) return -1;
+        memcpy(death_data, death_input, strlen(death_input) + 1);
+        file->data = (uint8_t *)death_data;
+        file->size = (uint32_t)strlen(death_data);
     } else {
         file->data = (uint8_t *)trace;
         file->size = (uint32_t)strlen(trace);
@@ -49,7 +55,7 @@ static void fixture(void)
 {
     unsigned frame, column;
     size_t at;
-    draw_input = ui_input = mouse_input = NULL;
+    draw_input = ui_input = mouse_input = death_input = NULL;
     memset(trace, 0, sizeof trace);
     at = (size_t)snprintf(trace, sizeof trace,
         "CMTRACE1,0\nframe,ticks,previous,delta,limit_time,limit_flag,object,person,"
@@ -79,10 +85,14 @@ static void draw_controls(void)
         "0,0,1,16391,10\n0,0,1,19377,11\n0,0,1,193a4,12\n"
         "0,1,0,19377,13\n1,0,0,19377,14\n";
     ui_input = "frame,ticks,action,slot,name_hex24\n"
-        "0,10,1,0,414200000000000000000000000000000000000000000000\n";
+        "0,10,1,0,414200000000000000000000000000000000000000000000\n"
+        "0,11,2,2,000000000000000000000000000000000000000000000000\n"
+        "0,12,3,10,000000000000000000000000000000000000000000000000\n";
     assert(!replay_open(&r, "frames.csv") && replay_next(&r, &frame) == 1);
     assert(replay_ui_next(&r, 0, &action) == 1 && action.slot == 0 &&
            action.ticks == 10 && !strcmp((char *)action.name, "AB"));
+    assert(replay_ui_next(&r, 0, &action) == 1 && action.action == 2 && action.slot == 2);
+    assert(replay_ui_next(&r, 0, &action) == 1 && action.action == 3 && action.slot == 10);
     assert(!replay_ui_next(&r, 0, &action));
     assert(replay_draw_begin(&r, 0, CM_DRAW_NORMAL) == 1);
     assert(!replay_draw_end(&r)); /* No clock read: no observed ordinal consumed. */
@@ -123,6 +133,12 @@ static void draw_controls(void)
     fixture();
     ui_input = "frame,ticks,action,slot,name_hex24\n"
         "0,10,1,11,000000000000000000000000000000000000000000000000\n";
+    assert(!replay_open(&r, "frames.csv") && replay_next(&r, &frame) == 1);
+    assert(replay_ui_next(&r, 0, &action) == -1);
+    replay_close(&r);
+    fixture();
+    ui_input = "frame,ticks,action,slot,name_hex24\n"
+        "0,10,4,0,000000000000000000000000000000000000000000000000\n";
     assert(!replay_open(&r, "frames.csv") && replay_next(&r, &frame) == 1);
     assert(replay_ui_next(&r, 0, &action) == -1);
     replay_close(&r);
@@ -190,6 +206,36 @@ static void mouse_controls(void)
     assert(!replay_mouse_input(&r, 0, 1, &input));
     assert(input.mouse_mickey_x == INT16_MIN && input.mouse_mickey_y == -1);
     assert(replay_mouse_poll(&r, 0, &input) == -1);
+    replay_close(&r);
+}
+
+static void death_controls(void)
+{
+    cm_replay r;
+    cm_replay_frame frame;
+    uint32_t value;
+    fixture(); clock_input = NULL;
+    death_input = "frame,pc,value\n0,153fd,10\n0,15403,11\n0,1543f,72\n0,1555a,3\n";
+    assert(!replay_open(&r, "frames.csv") && replay_next(&r, &frame) == 1);
+    assert(!replay_death_read(&r, 0, 0x153fd, &value) && value == 10);
+    assert(!replay_death_read(&r, 0, 0x15403, &value) && value == 11);
+    assert(!replay_death_read(&r, 0, 0x1543f, &value) && value == 72);
+    assert(!replay_death_read(&r, 0, 0x1555a, &value) && value == 3);
+    replay_close(&r);
+    fixture();
+    assert(!replay_open(&r, "frames.csv") && replay_next(&r, &frame) == 1);
+    assert(replay_death_read(&r, 0, 0x153fd, &value) == -1);
+    assert(!strcmp(cm_last_error()->file, "death-inputs.csv"));
+    replay_close(&r);
+    fixture();
+    death_input = "frame,pc,value\n0,153fd,10\n";
+    assert(!replay_open(&r, "frames.csv") && replay_next(&r, &frame) == 1);
+    assert(replay_death_read(&r, 0, 0x15403, &value) == -1);
+    replay_close(&r);
+    fixture();
+    death_input = "frame,pc,value\n0,1555a,256\n";
+    assert(!replay_open(&r, "frames.csv") && replay_next(&r, &frame) == 1);
+    assert(replay_death_read(&r, 0, 0x1555a, &value) == -1);
     replay_close(&r);
 }
 
@@ -272,5 +318,6 @@ int main(void)
     assert(s.bios_shift == 4);
     draw_controls();
     mouse_controls();
+    death_controls();
     return 0;
 }

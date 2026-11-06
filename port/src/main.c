@@ -31,7 +31,7 @@ static unsigned death_columns[CM_WIDTH];
 static uint32_t death_deadline, death_wait_time;
 static int32_t death_frame_ticks;
 static int death_phase;
-static int gl_enabled, gl_recording, gl_overlay_valid, gl_death_prepared;
+static int gl_enabled, gl_recording, gl_overlay_valid;
 static unsigned gl_width, gl_height;
 static cm_overlay gl_overlay;
 static world game;
@@ -281,7 +281,6 @@ static int load_scene(const char *data, unsigned scene)
     events.ticks = simulation.timer_ticks;
     ui.shop_kind = 0;
     death_phase = 0;
-    gl_death_prepared = 0;
     ui_save_init(&save, &game);
     ui_open(&ui, UI_GAME);
     return 0;
@@ -366,6 +365,7 @@ static int load_game(const char *data, const char *user, unsigned slot, uint32_t
     char name[24];
     cm_file file = {0};
     int result, saved_auto;
+    int same_scene;
     unsigned scene;
     if (slot > UI_SAVE_SLOTS) return cm_fail("LoadGame", slot, "invalid save slot");
     saved_auto = slot == UI_SAVE_SLOTS ? ui.restart_auto : ui.auto_ptr[slot];
@@ -379,11 +379,23 @@ static int load_game(const char *data, const char *user, unsigned slot, uint32_t
         return -1;
     }
     auto_save = saved_auto;
-    sim_init(&simulation, ticks);
-    simulation.kb_latch = latch;
-    simulation.bios_shift = modifiers;
-    result = load_scene(data, scene) ||
-        ui_save_overlay(&save, &game, file.data, file.size);
+    /* LoadGame050CC9..050D05 skips LoadScene when its resources are already
+     * resident. Reconstructing that scene would consume its initialization RNG
+     * again before overlaying the save, changing every later random decision. */
+    same_scene = game.scenes.data && game.scene == scene;
+    if (!same_scene) {
+        sim_init(&simulation, ticks);
+        simulation.kb_latch = latch;
+        simulation.bios_shift = modifiers;
+        result = load_scene(data, scene);
+    } else {
+        snd_kill(&game); /* Original KillSound050BBE precedes the overlay. */
+        simulation.swim_loop = -1;
+        actors.pc_sound = actors.pc.loop_sound = actors.pc.sword_hum_slot = -1;
+        actors.pc_flash = 0;
+        result = 0;
+    }
+    if (!result) result = ui_save_overlay(&save, &game, file.data, file.size);
     platform_file_release(&file);
     if (result || import_sim()) return -2; /* Scene replaced: caller must not resume it. */
     actors.difficulty = 1;
@@ -391,7 +403,7 @@ static int load_game(const char *data, const char *user, unsigned slot, uint32_t
     if (ai_save_import(&actors, &game, &save) || events_save_import(&events, &save))
         return -2;
     actors.events = &events;
-    ai_start_clock(&actors, ticks);
+    if (!same_scene) ai_start_clock(&actors, ticks);
     events.actors = &actors;
     memcpy(events.auto_ptr, ui.auto_ptr, sizeof events.auto_ptr);
     memcpy(events.auto_slot, ui.auto_slot, sizeof events.auto_slot);
@@ -793,7 +805,7 @@ int main(int argc, char **argv)
     int modern = 0;
     int replay_load = 0;
     int applied_settings[5], settings_applied = 0;
-    gl_enabled = gl_recording = gl_overlay_valid = gl_death_prepared = 0;
+    gl_enabled = gl_recording = gl_overlay_valid = 0;
     gl_width = gl_height = 0;
     for (i = 1; i < argc; ++i) {
         if (!strcmp(argv[i], "--headless")) headless = 1;
@@ -916,6 +928,7 @@ int main(int argc, char **argv)
         frame_draw draw = {frame, trace ? &replay : NULL, &input};
         ui_action action;
         int shop_modal = 0;
+        int death_resume = 0;
         int movie_canvas = 0, drawable = 1;
         if (gl_enabled) {
             unsigned width, height;
@@ -987,6 +1000,9 @@ int main(int argc, char **argv)
                     divergence = 1;
                 }
             }
+            /* No next original checkpoint exists for this unpaired terminal
+             * entry. Do not invent modal inputs or execute an unseen death. */
+            if (replay.next == replay.file.size) goto audio_output;
             replay_input(&simulation, &recorded);
             input.raw_count = 0;
             memset(input.pressed, 0, sizeof input.pressed);
@@ -997,25 +1013,6 @@ int main(int argc, char **argv)
             input.joystick_present = 0;
             if (replay_mouse_input(&replay, frame, simulation.input_device == 1, &input))
                 goto out;
-            {
-                cm_replay_ui command;
-                int next;
-                while ((next = replay_ui_next(&replay, frame, &command)) > 0) {
-                    ui.ticks = events.ticks = command.ticks;
-                    if (command.action == 1) {
-                        if (command.slot < UI_SAVE_SLOTS)
-                            memcpy(ui.names[command.slot], command.name, sizeof command.name);
-                        if (save_game(user, command.slot, &draw)) goto out;
-                    } else {
-                        if (load_game(data, user, command.slot, command.ticks)) goto out;
-                        replay_input(&simulation, &recorded);
-                    }
-                    /* Menu-return loop01BD28 clears all keyboard states. */
-                    memset(simulation.kb_scan_status, 0, sizeof simulation.kb_scan_status);
-                    ui_open(&ui, UI_GAME);
-                }
-                if (next < 0) goto out;
-            }
         }
         if (!trace && (!playing || ui.screen != UI_GAME)) {
             unsigned key;
@@ -1028,8 +1025,53 @@ int main(int argc, char **argv)
         events.ticks = ticks;
         if (playing && !death_phase &&
             (game.persons[game.player_person].status == 2 || events.pc_dead_man)) {
-            events.pc_dead_man = 0;
+            sim_clock(&simulation, ticks);
+            if (simulation.replay_delta >= 0) simulation.frame_ticks = simulation.replay_delta;
             if (death_start(&draw)) goto out;
+        }
+        if (trace) {
+            cm_replay_ui command;
+            int next;
+            /* PCDeath is modal INSIDE this HandleNextFrame. Complete its real
+             * wait renders and melt RNG before accepting the menu selection. */
+            while (death_phase == 1 || death_phase == 2)
+                if (death_step(&draw, 1)) goto out;
+            while ((next = replay_ui_next(&replay, frame, &command)) > 0) {
+                ui.ticks = events.ticks = command.ticks;
+                if (command.action == 1) {
+                    if (death_phase) {
+                        cm_fail(replay.ui_action_path, frame, "save is not a death menu action");
+                        goto out;
+                    }
+                    if (command.slot < UI_SAVE_SLOTS)
+                        memcpy(ui.names[command.slot], command.name, sizeof command.name);
+                    if (save_game(user, command.slot, &draw)) goto out;
+                } else {
+                    unsigned slot = command.slot;
+                    if (command.action == 3) {
+                        /* Restart chooses the engine's real last save, not a
+                         * checkpoint selected by expected trace output. */
+                        if (ui.restart_game < 0 || ui.restart_game > UI_SAVE_SLOTS ||
+                            slot != (unsigned)ui.restart_game) {
+                            cm_fail(replay.ui_action_path, frame, "Restart save-slot divergence");
+                            goto out;
+                        }
+                        slot = (unsigned)ui.restart_game;
+                    }
+                    if (load_game(data, user, slot, command.ticks)) goto out;
+                    replay_input(&simulation, &recorded);
+                    events.pc_dead_man = 0;
+                }
+                /* Both01BD28 and PCDeath015650 clear keyboard states before
+                 * the remaining simulation, without importing game outputs. */
+                memset(simulation.kb_scan_status, 0, sizeof simulation.kb_scan_status);
+                ui_open(&ui, UI_GAME);
+            }
+            if (next < 0) goto out;
+            if (death_phase == 3) {
+                cm_fail(replay.ui_action_path, frame, "missing death Load/Restart input");
+                goto out;
+            }
         }
         if (!trace && playing && ui.screen == UI_GAME && !death_phase) {
             shop_modal = ui_shop_step(&ui, &events, &game, &input, ticks);
@@ -1067,8 +1109,16 @@ int main(int argc, char **argv)
                 if (save_game(user, ui.slot, &draw)) goto out;
                 ui_open(&ui, UI_GAME);
             } else {
+                int from_death = death_phase == 3;
                 int loaded = load_requested(data, user, ticks);
-                if (loaded > 0) playing = 1;
+                if (loaded > 0) {
+                    playing = 1;
+                    if (from_death) {
+                        simulation.replay_delta = death_frame_ticks;
+                        death_resume = 1;
+                        events.pc_dead_man = 0;
+                    }
+                }
                 else if (loaded < 0) {
                     if (gl_enabled && gl_bitmap_snapshot()) goto out;
                     playing = 0;
@@ -1079,17 +1129,14 @@ int main(int argc, char **argv)
             ui_view view, backdrop_view;
             if (death_phase == 1 || death_phase == 2) {
                 sim_input(&simulation, &input);
-                simulation.previous_ticks = simulation.bp_limit_time = ticks;
-                ai_start_clock(&actors, ticks);
-                if (ui_game_view(&ui, simulation.pc_mode, simulation.vehicle_type, &view) ||
-                    render_set_view(view.x, view.y, view.width, view.height)) goto out;
                 if (death_step(&draw, trace != NULL)) goto out;
                 goto audio_output;
             }
             if (ui.screen == UI_GAME && !shop_modal) {
                 uint32_t fast_ticks, normal_ticks;
-                if (sim_frame(&simulation, &game, &input, ticks) ||
-                    ai_pc_input(&actors, &simulation, &game) ||
+                if (sim_frame(&simulation, &game, &input, ticks)) goto out;
+                if (death_resume) simulation.replay_delta = -1;
+                if (ai_pc_input(&actors, &simulation, &game) ||
                     events_step(&events, &simulation, &actors, &game)) goto out;
                 fast_ticks = trace ? recorded.fast_actor_ticks : platform_ticks(frame);
                 normal_ticks = trace ? recorded.normal_actor_ticks : platform_ticks(frame);
@@ -1108,11 +1155,13 @@ int main(int argc, char **argv)
                     events.recorder_requested = 0;
                     ui_speech_recorder(&ui, events.speechLog);
                 }
-            } else {
+            } else if (!death_phase) {
                 simulation.previous_ticks = simulation.bp_limit_time = ticks;
                 ai_start_clock(&actors, ticks);
             }
-            if (ui.screen == UI_GAME && !shop_modal) {
+            if (death_phase == 3) {
+                if (death_backdrop()) goto out;
+            } else if (ui.screen == UI_GAME && !shop_modal) {
                 if (game_draw(&draw, CM_DRAW_NORMAL)) goto out;
             } else {
                 if (ui.screen == UI_GAME) {

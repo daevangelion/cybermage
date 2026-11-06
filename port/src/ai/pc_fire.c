@@ -847,9 +847,11 @@ int ai_pc_draw_advance(ai_state *a, const sim_state *s, world *w,
         p->muzzle_mode += p->muzzle_mode > 0 ? -1 : 1;
     }
     /* PERSON0 is the foot body even while player_person names a vehicle.
-     * Death dispatch is owned by the main loop. Chance precedes CheckSound. */
+     * RenderBells01929E produces PCDeadMan; dispatch is next HandleNextFrame.
+     * A living frame does not clear the flag. Chance precedes CheckSound. */
     hp = low_word(w->persons[0].unk_0038);
     max_hp = high_word(w->persons[0].unk_0038);
+    if (hp <= 0) e->pc_dead_man = 1;
     if (hp > 0 && hp < max_hp/2 &&
         (p->sword_hum_slot == -1 || p->sword_hum_sound != 1) &&
         !world_rnd(&w->rng, hp/2+2) && snd_done(a->pc_sound, 3))

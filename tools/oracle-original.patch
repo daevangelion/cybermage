@@ -13,10 +13,10 @@ index fc1ccc6..8ae8265 100644
              gamepad::controller_input(&emu.m,&mut emu.cpu);
 diff --git a/crates/game/src/frame_trace.rs b/crates/game/src/frame_trace.rs
 new file mode 100644
-index 0000000..6c77f38
+index 0000000..cbf7450
 --- /dev/null
 +++ b/crates/game/src/frame_trace.rs
-@@ -0,0 +1,449 @@
+@@ -0,0 +1,450 @@
 +use std::io::{BufWriter, Write};
 +use x86::{Cpu, EAX, EBX, ECX, EDX, ESI, ESP};
 +use crate::le::rt;
@@ -176,12 +176,13 @@ index 0000000..6c77f38
 +        match c.eip {
 +            p if p == rt(0x5007C) || p == rt(0x50AD4) || p == rt(0x153D0) => {
 +                if self.frame != 0 {
-+                    let action = if p == rt(0x5007C) {1} else if p == rt(0x50AD4) {2} else {3};
++                    let phase = if p == rt(0x5007C) {1} else if p == rt(0x50AD4) {2} else {3};
 +                    let caller = crate::le::link(c.rd32(c.r[ESP]));
 +                    assert!(self.ui_depth < self.ui_stack.len(), "nested save/load trace overflow");
 +                    self.ui_stack[self.ui_depth] = (c.rd32(c.r[ESP]),c.r[ESP]+4,self.draw_phase);
-+                    self.ui_depth += 1; self.draw_phase = action;
-+                    if action != 3 && matches!(caller,0x1BCAB|0x1BCC2|0x1BCD7|0x15605|0x1561A) {
++                    self.ui_depth += 1; self.draw_phase = phase;
++                    if phase != 3 && matches!(caller,0x1BCAB|0x1BCC2|0x1BCD7|0x15605|0x1561A) {
++                        let action = if matches!(caller,0x1BCD7|0x1561A) {3} else {phase};
 +                        let slot = c.r[EDX];
 +                        assert!(slot <= 10, "invalid UI save/load input slot");
 +                        write!(self.ui_actions,"{},{},{},{}," ,self.frame-1,

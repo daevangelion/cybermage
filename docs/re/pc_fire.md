@@ -186,7 +186,7 @@ and changes no game algorithm. The adapter-free discrepancy remains a recorded
 original undefined-memory difference, not a hidden fallback. Both saved-start
 controls above match strictly without this adapter.
 
-### Death renderer checkpoint
+### Canonical death and warm reload
 
 The unmodified PCDeath1547C..15534 melt block matches36 native passes
 byte-for-byte for all307,200 pixels,640 column states, RNG words and completion
@@ -194,9 +194,29 @@ flags (three seeds and three initial column patterns). Each pass makes480 real
 RND(640) calls;154FE loads0x280, not64. The live wait now uses the complete HUD
 draw pipeline and the death backdrop callback is vPlaneErase15050. The new
 optional `death-inputs.csv` records timer loads153FD/15403/1543F and raw Escape
-1555A; UI inputs include actual death Load/Restart callers15605/1561A.
-This building API/observer checkpoint is not yet same-HandleNextFrame death/
-reload parity; that controller integration is isolated in the PortDeath worktree.
+1555A. RenderBells01929E sets PCDeadMan from signed PERSON0 HP<=0 even though
+PERSON.status is still0; living draws do not clear it. PCDeath runs inside that
+same HandleNextFrame: all wait HUD draws and melt RNG precede menu consumption,
+then the loaded state completes the original remaining simulation.
+
+LoadGame050CC9..050D05 skips LoadScene for the already resident scene. The port
+overlays that save without repeating scene-initialization RNG or resetting
+actor animation deadlines. KillSound0286E0 still runs, including EndSONG02879A.
+Cold/different-scene loads retain their normal reconstruction path.
+
+The genuine HP6 door-jamb checkpoint dies at frame103. The unchanged physical
+scenario `captures/Port-death-door29-typed` selects **Restart**, return1561A,
+slot0/tick795:124 player entries and18,696 actor checkpoints/123 completed frames
+match, including all RNG. `captures/Port-death-explicit-load` instead presses
+L/0/Enter and takes **Load**, return15605, slot0/tick687:160 player entries and
+24,168 actor checkpoints/159 completed frames likewise match. Both execute33
+full HUD wait renders and one480-call melt pass before the actual menu action.
+No coordinates, HP, RNG or hand fields are imported. Restart's observed slot is
+checked against the engine's real last-save slot, never installed as a checkpoint.
+
+The final read-only producer is binary6c7597f4 / whole patch0fa820aa. Changing
+only UI action typing leaves frames, actors, actor clocks, seed, draw clocks and
+death inputs byte-identical to the previous door-jamb capture.
 
 The original-only `vehicle-powerblade` scenario loads the genuinely earned
 `captures/earned-water` slot0, follows the river, stands/vaults onto the dry

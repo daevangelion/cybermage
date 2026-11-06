@@ -146,7 +146,8 @@ Sim/Events/AI state and refreshes the player transition stash, rather than
 overwriting loaded HP with an older stash. UI shops pause simulation, retain key
 releases, and render their modal after the world. Live hand rendering consumes
 Port's animation/aim state. Countdown expiry and player death route through the
-60-tick world-only wait, HIPAK1 melt and UI_DEATH menu; endings use the real TGV
+60-tick full world/HUD wait, HIPAK1 melt and UI_DEATH menu inside the original
+HandleNextFrame; melt RNG precedes the Load/Restart action. Endings use the real TGV
 decoder. Automatic transition snapshots use their reduced AUTO byte format,
 and ordinary/new-scene checkpoints write hidden SAVE010 plus GAMENAME.USR.
 
@@ -366,9 +367,9 @@ EventAction82 damage payloads, matching original IMUL/LEA01CE0C/01CE1A.
 The INTMAX×2 fixture failed under UBSan before the correction and passed after;
 it also checks the original minimum hit flash2 and signed deadline comparison.
 
-The lifecycle fixture uses the current explicit-view death API: it derives the
-view with `ui_game_view`, installs it with `render_set_view`, and passes it to
-all three death steps. The independently executed fixture passes death/menu/save
+The lifecycle fixture uses the frame-draw death API: its context carries the
+actual frame, physical input and optional replay clock source. The independent
+fixture passes death/menu/save and same-scene load RNG/deadline-preservation
 checks and its second Training boot, including the invalid-CLI negatives.
 
 ## Final simulation replay cohort

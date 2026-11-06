@@ -11,6 +11,7 @@ typedef struct {
     uint32_t frame, draw, phase, site, ticks;
 } cm_replay_draw;
 typedef struct {
+    /* UI intent: 1 Save, 2 Load selected slot, 3 Restart last actual save. */
     uint32_t frame, ticks, action, slot;
     uint8_t name[24];
 } cm_replay_ui;

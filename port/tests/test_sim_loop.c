@@ -80,7 +80,15 @@ void sim_loop_checks(void)
     actors.pc.sp_regen_timer = 123;
     ui.restart_game = 10;
     dirty_selectors();
-    assert(!load_game("../orig/retail", test_user, 0, 10));
+    {
+        uint16_t before[3];
+        uint32_t animation = actors.animation_deadline;
+        uint32_t fast = actors.fast_animation_deadline;
+        memcpy(before, game.rng.word, sizeof before);
+        assert(!load_game("../orig/retail", test_user, 0, 10));
+        assert(!memcmp(before, game.rng.word, sizeof before));
+        assert(actors.animation_deadline == animation && actors.fast_animation_deadline == fast);
+    }
     selectors_reset();
     assert(simulation.kb_latch == 12 && simulation.bios_shift == 3);
     assert(actors.pc.sp_regen_timer == 123);
@@ -318,10 +326,10 @@ int main(int argc, char **args)
     }
     {
         const char *bad_renderer[] = {"cybermage", "--renderer", "invalid"};
-        gl_enabled = gl_recording = gl_overlay_valid = gl_death_prepared = 1;
+        gl_enabled = gl_recording = gl_overlay_valid = 1;
         gl_width = 640; gl_height = 480;
         assert(cybermage_main(3, (char **)bad_renderer) == 2);
-        assert(!gl_enabled && !gl_recording && !gl_overlay_valid && !gl_death_prepared);
+        assert(!gl_enabled && !gl_recording && !gl_overlay_valid);
         assert(!gl_width && !gl_height);
     }
     return 0;

@@ -209,7 +209,7 @@ static int ui_peek(cm_replay *r)
     if (n != 5) goto bad;
     for (i = 0; i < 4; ++i)
         if (integer(fields[i], 10, 0, UINT32_MAX, &word[i])) goto bad;
-    if (word[2] < 1 || word[2] > 2 || word[3] > 10 ||
+    if (word[2] < 1 || word[2] > 3 || word[3] > 10 ||
         hex(fields[4], r->ui_pending.name, 24) ||
         !memchr(r->ui_pending.name, 0, 24)) goto bad;
     if (word[3] == 10)
@@ -241,7 +241,7 @@ int replay_draw_begin(cm_replay *r, uint32_t frame, unsigned phase)
 static int draw_failure(cm_replay *r, const char *reason)
 {
     /* Diagnostics already have process-global lifetime through cm_last_error. */
-    static char message[160];
+    static char message[192];
     snprintf(message, sizeof message, "frame=%u: %s", (unsigned)r->draw_frame, reason);
     return cm_fail(r->draw_clock_path, r->draw_frame, message);
 }
@@ -255,8 +255,15 @@ int replay_draw_clock(cm_replay *r, uint32_t site, uint32_t *ticks)
     if (n < 0) return -1;
     if (!r->draw_active || !n || r->draw_pending.frame != r->draw_frame ||
         r->draw_pending.draw != r->draw_index || r->draw_pending.phase != r->draw_phase ||
-        r->draw_pending.site != site)
-        return draw_failure(r, "missing or wrong measured timer read");
+        r->draw_pending.site != site) {
+        static char detail[160];
+        snprintf(detail, sizeof detail,
+            "wanted draw=%u phase=%u pc=%x; observed frame=%u draw=%u phase=%u pc=%x",
+            (unsigned)r->draw_index, (unsigned)r->draw_phase, (unsigned)site,
+            (unsigned)r->draw_pending.frame, (unsigned)r->draw_pending.draw,
+            (unsigned)r->draw_pending.phase, (unsigned)r->draw_pending.site);
+        return draw_failure(r, detail);
+    }
     *ticks = r->draw_pending.ticks;
     r->has_draw_pending = 0;
     ++r->draw_reads;

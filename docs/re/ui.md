@@ -178,8 +178,9 @@ probe's pose0 was not the original's settled pose. Tests now use pose4.
 ## Exercised verification and open acceptance
 
 `UI_DEATH` implements PCDeath155B3's restricted menu: only LOAD/RELOAD/QUIT/
-OPTIONS, initial RELOAD, no Escape resume. Integrator owns the60-tick world-only
-wait and melt lifecycle. On-foot backscreen is HIPAK1 (InitPC10882); death exits
+OPTIONS, initial RELOAD, no Escape resume. The60-tick wait runs the complete
+world/HUD pipeline; the melt and Load/Restart remain inside the same original
+HandleNextFrame (see `pc_fire.md`). On-foot backscreen is HIPAK1 (InitPC10882); death exits
 vehicles before melting, and SetTankMode128EB restores that same backscreen.
 PCDeath1554C waits on CheckSONG, not a PCM sample slot.
 
@@ -247,7 +248,7 @@ Still open: original shop/coder purchase/frame
 traces (current merchant/coder tests are source-grounded port-state tests, not
 original execution comparisons); automap (Controls owns its new implementation);
 vehicle oracle parity and live muzzle integration; live aim/bob/glow/muzzle trace parity and
-draw-time animation advancement (Port); death-melt end-to-end scenario (Integrator);
+draw-time animation advancement (Port); additional death-melt pixel scenarios;
 full original-save gameplay validation; demo SAVE010 layout verification.
 
 ## Original options file

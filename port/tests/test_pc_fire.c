@@ -185,6 +185,14 @@ static int checks(void)
         a.pc.sword_hum_slot = -1;
         CHECK(!ai_pc_draw_advance(&a, &s, &w, &draw_clock));
         CHECK(memcmp(before, w.rng.word, sizeof before));
+        e.pc_dead_man = 0;
+        w.persons[0].unk_0038 = 40 << 16;
+        CHECK(!ai_pc_draw_advance(&a, &s, &w, &draw_clock));
+        CHECK(e.pc_dead_man == 1); /* PERSON status is still0: HP is the producer. */
+        w.persons[0].unk_0038 = 40 << 16 | 40;
+        CHECK(!ai_pc_draw_advance(&a, &s, &w, &draw_clock));
+        CHECK(e.pc_dead_man == 1); /* Only explicit death/menu lifecycle clears it. */
+        e.pc_dead_man = 0;
         w.person_count = 0;
         CHECK(ai_pc_draw_advance(&a, &s, &w, &draw_clock) < 0);
         w.person_count = 1; w.player_person = 0;
