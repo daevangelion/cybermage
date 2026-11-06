@@ -73,6 +73,26 @@ int main(int argc, char **argv)
     assert(rsc_entry(&hipak, 31, &pal, &size) == 0);
     assert(gfx_palette(palette, pal, size, hipak.path) == 0);
     {
+        ui_view view={1,1,2,2};
+        uint8_t expected;
+        memset(screen,22,sizeof screen);
+        actors.pc.unk_1444EC=2;actors.pc_flash=1;
+        assert(gfx_overlay_begin(&overlay,screen) == 0);
+        assert(ui_draw_pc_tint(&ui,screen,&actors,view,0) == 0);
+        expected=ui.bright[256+22];
+        assert(screen[CM_WIDTH+1]==expected && screen[0]==22);
+        assert(overlay.coverage[CM_WIDTH+1]>1 && !overlay.coverage[0]);
+        assert(ui_draw_pc_tint(&ui,screen,&actors,view,1) == 0);
+        assert(screen[CM_WIDTH+1]==ui.bright[ui.flashcolor[0]*256+expected]);
+        assert(actors.pc_flash==1 && actors.pc.unk_1444EC==2);
+        assert(gfx_overlay_end() == 0);
+        actors.pc.unk_1444EC=11;
+        assert(ui_draw_pc_tint(&ui,screen,&actors,view,0) == -1);
+        actors.pc_flash=8;
+        assert(ui_draw_pc_tint(&ui,screen,&actors,view,1) == -1);
+        actors.pc.unk_1444EC=actors.pc_flash=0;
+    }
+    {
         uint8_t base[768], adjusted[768];
         ui_view view;
         memset(base,80,sizeof base);

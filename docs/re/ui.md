@@ -341,6 +341,16 @@ but not necessarily presented at capture time. Do not compare a screenshot
 blindly to the last replay row. No glow colors, raster constants or producer
 state were changed to obtain the completed-frame comparison.
 
+Combat tints now consume the shared AI player-feedback state without advancing
+it. `ui_draw_pc_tint(...,0)` applies transient1444EC-1 before hands;
+`ui_draw_pc_tint(...,1)` applies `flashcolor[pc_flash-1]` after hands/before HUD
+(189D7/190C6). TranArea5F8E0 reads HIPAK33 transfer maps, not shadow maps.
+flashcolor is seven dwords at92F1C;92F18 belongs to ThrowMissile and must not
+be treated as map0. GPU overlay capture records these as composed LUT
+operations through gfx_shade. AI owns clearing/decrementing state only after
+both consumers. Tests cover clipping, LUT composition, unchanged AI counters
+and invalid effect/flash indices.
+
 - SetGammaBright5253C adds the signed brightness to each6-bit DAC component,
   clipping0..63. SetGammaContrast52598 averages the three already-brightened
   components; mean<32 subtracts contrast, otherwise adds it, clipping0..63.

@@ -29,6 +29,7 @@ int ui_load_hand_tables(cm_ui *ui, const char *asset_dir)
         cm_exe_table(&p,0x96144,ui->arena_y,14) ||
         cm_exe_table(&p,0x961E4,ui->slot_x,24) ||
         cm_exe_table(&p,0x96244,ui->slot_y,24)) goto out;
+    if (cm_exe_table(&p,0x92F1C,ui->flashcolor,7)) goto out;
     if (cm_exe_table(&p, 0x96008, ui->shop_stock[0], 16) ||
         cm_exe_table(&p, 0x96058, ui->shop_stock[1], 16) ||
         cm_exe_table(&p, 0x960A8, ui->shop_stock[2], 3) ||

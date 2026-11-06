@@ -68,6 +68,7 @@ typedef struct {
     int32_t spellPower[16], spellScon[16];
     int32_t GlowSet[16];
     uint8_t SpellGlow[72];
+    int32_t flashcolor[7];
     int hand_tables_loaded;
     uint32_t text_revision, text_deadline;
     unsigned text_line, text_add;
@@ -157,6 +158,9 @@ int ui_draw_player_hand(const cm_ui *ui, world *w, uint8_t *dst,
                         int mode, int weapon, unsigned frame,
                         ui_view view);
 struct ai_state;
+/* after_hand0: transient tint;1: damage flash. State advances in AI, not here. */
+int ui_draw_pc_tint(const cm_ui *ui, uint8_t *dst, const struct ai_state *a,
+                      ui_view view, int after_hand);
 int ui_draw_vehicle_muzzle(const cm_ui *ui, const struct ai_state *a, uint8_t *dst);
 int ui_draw_live_hand(const cm_ui *ui, world *w, uint8_t *dst,
                        int mode, const struct events_state *events,
