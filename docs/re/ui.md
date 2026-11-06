@@ -291,6 +291,21 @@ Controls' original mouse configuration is
 `a40f5572b7b99fde71274bfa54fccc5d24a16c6f684a2e96dfb42424b44b0b7d`.
 Both are runtime test inputs, not redistributed game assets.
 
+### Selector monitor routing
+
+RenderBells' hand-mode table018948 sends modes3 and4 to018E41. An active
+weapon/power/key list clears its local monitor enable at018E65/018EB8/018F37;
+the test at0191A8 then skips StatusMonitor, including timer read016391.
+A generic no-list hand screen retains the configured VDU. PC energy recovery
+at019377/0193A4 continues independently.
+
+`ui_hud_from_world` carries that selector state into the canonical
+`ui_status_visible` predicate. Both the real renderer and the pixel-free
+event verifier use it. The regression checks that an active selector neither
+draws monitor pixels nor reads its clock, while generic mode3 still does.
+The genuine regeneration trace first exposed the missing predicate at
+frame169; no clock records or energy bytes are suppressed to get past it.
+
 ## Remaining settings and arena source facts
 
 ### UI3 implementation checkpoint

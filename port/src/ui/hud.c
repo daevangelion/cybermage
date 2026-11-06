@@ -20,6 +20,7 @@ int ui_hud_from_world(ui_hud *hud, const world *w,
     hud->cash = e->cash;
     hud->hp_count = phase;
     hud->status = hand_mode;
+    hud->selector_active=(hand_mode==3 || hand_mode==4) && events_selector_needs_input(e);
     for (i = 0; i < 6; ++i) {
         hud->armor[i] = e->armor[i];
         hud->max_armor[i] = e->max_armor[i];
@@ -105,13 +106,20 @@ static int bar(const cm_ui *ui, uint8_t *dst, unsigned bitmap,
     return 0;
 }
 
+/* RenderBells018E65/018EB8/018F37 clears the local monitor enable only
+ * for actual selector lists; generic no-list mode3 retains the VDU. */
+int ui_status_visible(const cm_ui *ui,const ui_hud *hud)
+{
+    return ui->vdu && hud->status!=7 && !hud->selector_active;
+}
+
 int ui_render_bells_and_whistles(cm_ui *ui, uint8_t *dst,
                                 const ui_hud *hud, const cm_draw_clock *clock)
 {
     /* Constructor0x1026A–0x10333: monitors(10,436),(424,436). */
     unsigned phase = hud->hp_count;
     int y = ui->vdu == 2 ? 10 : 436;
-    if (!ui->vdu || hud->status == 7) return 0;
+    if (!ui_status_visible(ui,hud)) return 0;
     ui_draw_monitor(dst, 10, y, &ui->console[0]);
     ui_draw_monitor(dst, 424, y, &ui->console[1]);
     if (phase == 0)

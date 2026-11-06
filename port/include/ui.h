@@ -111,7 +111,7 @@ typedef struct {
     int hp, max_hp, energy, max_energy, ammo, cash;
     int armor[6], max_armor[6];
     unsigned hp_count;
-    int status, weapon;
+    int status, weapon, selector_active;
 } ui_hud;
 
 /* Resource storage remains caller-owned and valid through the UI lifetime. */
@@ -146,6 +146,7 @@ int ui_draw_selector(const cm_ui *ui, const world *w,
 int ui_render_bells_and_whistles(cm_ui *ui, uint8_t *pixels,
                                 const ui_hud *hud, const cm_draw_clock *clock);
 /* Only when StatusMonitor actually runs; shared with pixel-free verification. */
+int ui_status_visible(const cm_ui *ui,const ui_hud *hud);
 int ui_status_advance(cm_ui *ui, const cm_draw_clock *clock);
 void ui_draw_monitor(uint8_t *dst, int x, int y, const ui_bitmap *bitmap);
 typedef struct {

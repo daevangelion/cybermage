@@ -14,10 +14,12 @@ static events_state events;
 static ai_state actors;
 static cm_overlay overlay;
 static uint8_t encoded[UI_SAVE_MAX], screen[CM_WIDTH * CM_HEIGHT], palette[768];
+static unsigned draw_reads;
 
 static int fixed_draw_time(void *context, uint32_t site, uint32_t *ticks)
 {
     assert(site == 0x16391);
+    ++draw_reads;
     *ticks = *(const uint32_t *)context;
     return 0;
 }
@@ -492,6 +494,17 @@ int main(int argc, char **argv)
         assert(ui_render_bells_and_whistles(&ui, screen, &hud, &draw_clock) == 0);
         assert(memcmp(encoded,screen,sizeof screen) == 0);
         ui.vdu=1;
+        {
+            unsigned reads=draw_reads;
+            hud.status=3;hud.selector_active=1;
+            memcpy(encoded,screen,sizeof screen);
+            assert(!ui_render_bells_and_whistles(&ui,screen,&hud,&draw_clock));
+            assert(draw_reads==reads && !memcmp(encoded,screen,sizeof screen));
+            hud.selector_active=0; /* Generic no-list hand mode retains monitors. */
+            assert(!ui_render_bells_and_whistles(&ui,screen,&hud,&draw_clock));
+            assert(draw_reads==reads+1);
+            hud.status=5;
+        }
         if (argc == 3) {
             cm_file rendered = {0};
             assert(platform_file_read(&rendered, argv[2]) == 0);
