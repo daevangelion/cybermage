@@ -123,16 +123,17 @@ RNG, deadlines or target outputs are installed. Corrected movement inputs retain
 all106 measured BDA bytes, including Ctrl=4 on frames71..75. This named receipt
 does not silently certify later concurrent HEAD changes.
 
-Later named4461e87 incremental route gate:
-[gate-4461e87.json](docs/re/gate-4461e87.json) records8/9 full actor/RNG matches
-and9/9 player matches across the upper-hall, door and decoder segments.
-Only door5 approach198 first differs on NPC120/RNG130. Actual saved switch5
-changes0→1 in both door5-plain runs. Switch38 remains0 during the unsuccessful
-attempts, then changes0→1 after actual F3/F6 decoder use; the native F5/F6
-246045-byte save exports are byte-identical to their original counterparts.
-These incremental results do not
-replace the full92-scenario counts above; the consolidated owner cohort awaits
-the difficulty, death/reload and remaining recoil cutovers.
+Later incremental route gates:
+[gate-4461e87.json](docs/re/gate-4461e87.json) retains the earlier8/10 full
+actor/RNG and9/10 player matches. After the definition-difficulty migration,
+[gate-c1018ed.json](docs/re/gate-c1018ed.json) fully matches all10 upper-hall,
+door, decoder and lift segments:1544 state records and233168 actor checkpoints.
+The prior door5 NPC120/RNG130 and lift13 NPC123/RNG236 divergences are closed
+in that named cohort. Actual saved switches5/38 reach1 after their real uses;
+the F5/F6 decoder-case246045-byte save outputs are byte-identical to the
+originals. This is not an all-save-byte parity claim for the other segments.
+These incremental results do not replace the full92-scenario counts above;
+the consolidated owner cohort awaits the death/reload and recoil cutovers.
 
 ## Verification Checklist
 
