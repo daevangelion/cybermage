@@ -31,6 +31,7 @@ enum {
 
 int32_t sim_mul16(int32_t a, int32_t b);
 int32_t sim_slope(const world *w, uint16_t angle);
+int sim_swim_step(sim_state *s, world *w);
 int sim_new_pc_bound(sim_state *s, world *w, unsigned object, int32_t *x, int32_t *y);
 int sim_monster_bound(sim_state *s, world *w, unsigned object, int32_t *x, int32_t *y);
 void sim_new_nx_ny(sim_state *s, const world *w, unsigned object,

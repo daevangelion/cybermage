@@ -40,9 +40,25 @@ void sim_save_export(const sim_state *s, uint32_t v[29])
 
 int sim_save_import(sim_state *s, const uint32_t v[29])
 {
-    if (v[SAVE_MODE] > 7 || v[SAVE_PREVIOUS_MODE] > 7 || v[SAVE_FLIGHT] > 3 ||
-        v[SAVE_JUMP_INDEX] > SIM_JUMP_STEPS)
-        return cm_fail("SAVE*.DAT", 0x6d4, "invalid saved simulation mode or jump index");
+    /* Input requests are bounded by768; physical heights/stance remain inside
+     * the four-level map envelope. Reject before arithmetic or state mutation. */
+    static const struct { unsigned index; int32_t low, high; } ranges[] = {
+        {SAVE_MODE,0,7}, {SAVE_PREVIOUS_MODE,0,7}, {SAVE_VEHICLE,0,1},
+        {SAVE_MOMENTUM,-768,768}, {SAVE_CURRENT_SPEED,-768,768},
+        {SAVE_BOB_STATE,0,2}, {SAVE_ACCELERATION,0,96},
+        {SAVE_JUMP_INDEX,0,SIM_JUMP_STEPS}, {SAVE_JUMP_SPEED,-768,768},
+        {SAVE_JUMP_HEIGHT,0,65536}, {SAVE_JUMP_FLOOR,0,CM_MAP_LEVELS*65536-1},
+        {SAVE_FLIGHT,0,3}, {SAVE_FALL,0,1},
+        {SAVE_CROUCH,-CM_MAP_LEVELS*65536,0},
+        {SAVE_BODY,0,CM_MAP_LEVELS*65536}, {SAVE_SWIM,0,1}
+    };
+    unsigned i;
+    for (i = 0; i < sizeof ranges / sizeof ranges[0]; ++i) {
+        int32_t value = signed_word(v[ranges[i].index]);
+        if (value < ranges[i].low || value > ranges[i].high)
+            return cm_fail("SAVE*.DAT", 0x6d4 + 4 * ranges[i].index,
+                           "saved simulation value outside physical bounds");
+    }
     s->pc_mode = signed_word(v[SAVE_MODE]);
     s->previous_pc_mode = signed_word(v[SAVE_PREVIOUS_MODE]);
     s->vehicle_type = signed_word(v[SAVE_VEHICLE]);
@@ -59,6 +75,20 @@ int sim_save_import(sim_state *s, const uint32_t v[29])
     s->unk_144b34 = signed_word(v[SAVE_CROUCH]);
     s->body_height = signed_word(v[SAVE_BODY]);
     s->unk_144b50 = signed_word(v[SAVE_SWIM]);
+    return 0;
+}
+
+int sim_save_fire_import(sim_state *s, const uint32_t v[4])
+{
+    if (v[0] > 1) return cm_fail("SAVE*.DAT", 0x34f09, "invalid saved fire flag");
+    if (v[1] > UINT8_MAX) return cm_fail("SAVE*.DAT", 0x34f0d, "invalid saved fire panel");
+    if (v[2] >= CM_PANEL_MAX) return cm_fail("SAVE*.DAT", 0x34f11, "invalid saved fire art");
+    if (v[3] > INT32_MAX / 7)
+        return cm_fail("SAVE*.DAT", 0x34f15, "saved fire damage overflows seven-die scale");
+    s->fire_check = (int32_t)v[0];
+    s->fire_tile_panel = (int32_t)v[1];
+    s->fire_tile_art = (int32_t)v[2];
+    s->fire_damage = (int32_t)v[3];
     return 0;
 }
 

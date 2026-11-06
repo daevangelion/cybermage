@@ -53,12 +53,21 @@ int main(void)
     w.player_object = 1;
     w.objects[1].z = 0x5d55;
     assert(!sim_start_scene(&s, &w));
+    assert(s.swim_check == 1 && s.swim_panel == 22 && s.swim_art == 21);
     assert(w.objects[1].z == 0x5d55 && s.body_height == 0x9bff);
     w.unk_5E7A8 = 1;
     w.objects[1].z = 0x3800;
     assert(!sim_start_scene(&s, &w));
     assert(w.objects[1].z == 0x3800 && s.body_height == 0x6400);
     w.unk_5E7A8 = 0;
+    w.scene = 4;
+    assert(!sim_start_scene(&s, &w));
+    assert(s.swim_check == 1 && s.swim_damage == 3 && s.swim_panel == 36 && s.swim_art == 35);
+    w.scene = 7;
+    assert(!sim_start_scene(&s, &w));
+    assert(s.swim_damage == -1 && s.swim_panel == 30 && s.swim_art == 29);
+    w.scene = 2;
+    assert(!sim_start_scene(&s, &w) && !s.swim_check);
     w.objects[1].x = 0x18000;
     w.objects[1].y = 0x18000;
     w.objects[1].floor_z = 0x10000;
@@ -116,6 +125,31 @@ int main(void)
         assert(values[4] == 0xabcdef12 && loaded.previous_ticks == 123);
         values[0] = 8;
         assert(sim_save_import(&loaded, values) == -1);
+        values[0] = 5;
+        {
+            static const unsigned indices[] = {5,16,17,18,19,21,22,23,25,26,27,28};
+            unsigned i;
+            for (i = 0; i < sizeof indices / sizeof indices[0]; ++i) {
+                unsigned index = indices[i];
+                uint32_t before = values[index];
+                values[index] = INT32_MAX;
+                assert(sim_save_import(&loaded, values) == -1);
+                assert(cm_last_error()->offset == 0x6d4 + 4 * index);
+                values[index] = before;
+            }
+        }
+    }
+    {
+        uint32_t fire[4] = {1, 43, 40, 8};
+        assert(!sim_save_fire_import(&s, fire));
+        assert(s.fire_check == 1 && s.fire_damage == 8 && s.fire_tile_panel == 43);
+        fire[3] = INT32_MAX;
+        assert(sim_save_fire_import(&s, fire) == -1);
+        assert(cm_last_error()->offset == 0x34f15 && s.fire_damage == 8);
+        fire[3] = 8;
+        fire[0] = 2;
+        assert(sim_save_fire_import(&s, fire) == -1);
+        assert(cm_last_error()->offset == 0x34f09);
     }
     {
         unsigned i;

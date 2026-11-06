@@ -20,13 +20,15 @@ $(B)/%.o: src/%.c
 	@mkdir -p $(@D)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -MMD -MP -c -o $@ $<
 
-check: $(B)/test_core $(B)/test_platform $(B)/test_touch $(B)/test_sim $(B)/test_exe $(B)/test_sim_loop $(B)/test_sim_fire $(B)/test_sim_fire_ubsan
+check: $(B)/test_core $(B)/test_platform $(B)/test_touch $(B)/test_sim $(B)/test_exe $(B)/test_sim_loop $(B)/test_sim_collision $(B)/test_sim_swim $(B)/test_sim_fire $(B)/test_sim_fire_ubsan
 	$(B)/test_core
 	$(B)/test_platform $(B)/platform-keys.txt $(B)/platform-dump
 	$(B)/test_touch
 	$(B)/test_sim
 	$(B)/test_exe
 	$(B)/test_sim_loop $(B)/loop-user
+	$(B)/test_sim_collision
+	$(B)/test_sim_swim ../orig/retail
 	$(MAKE) -f tests/controls.mk B=$(B) controls-check
 	$(abspath ../.venv/bin/python) ../tools/sim_fire_original.py $(B)/test_sim_fire
 	$(B)/test_sim_fire_ubsan 0 0 0
@@ -57,6 +59,14 @@ $(B)/test_exe: tests/test_exe.c tests/media_error.c src/exe.c
 $(B)/test_sim_loop: tests/test_sim_loop.c src/main.c $(filter-out $(B)/main.o,$(OBJECTS))
 	@mkdir -p $(@D)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $< $(filter %.o,$^) $(LDLIBS)
+
+$(B)/test_sim_collision: tests/test_sim_collision.c $(filter-out $(B)/main.o,$(OBJECTS))
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+
+$(B)/test_sim_swim: tests/test_sim_swim.c $(filter-out $(B)/main.o,$(OBJECTS))
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 $(B)/test_sim_fire: tests/test_sim_fire.c $(filter-out $(B)/main.o,$(OBJECTS))
 	@mkdir -p $(@D)

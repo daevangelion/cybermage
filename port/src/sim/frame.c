@@ -331,6 +331,7 @@ int sim_frame(sim_state *s, world *w, const cm_input *input, uint32_t timer_tick
     if (flight(s, w, o)) return -1;
     if (s->unk_144b1c) jump_step(s);
     else rise(s);
+    if (sim_swim_step(s, w)) return -1;
     /* HandleNextFrame 01CD80..01CE39; environmental fire uses the same
      * floor/flat contact query as swimming, not projectile CollFire. */
     if (s->fire_check && !s->unk_144b1c && !s->flight_mode && s->pc_mode != 7) {

@@ -1,4 +1,5 @@
 #include "sim.h"
+#include "ai.h"
 #include <string.h>
 
 /* CM_HI.EXE: CM_ISR9 067B7B. E0 selects a different bit pair; it is not
@@ -27,6 +28,7 @@ void sim_init(sim_state *s, uint32_t ticks)
     s->replay_delta = -1;
     s->timer_ticks = s->previous_ticks = s->bp_limit_time = ticks;
     s->unk_144b00 = 16;
+    s->swim_loop = s->swim_exit_sound = -1;
     /* CM_HI.EXE Xox::ReKeyDefaults 052644..052718. */
     s->kb_side_toggle = 0x2a;
     s->kb_side_left = 0x2c;
@@ -51,6 +53,25 @@ int sim_start_scene(sim_state *s, world *w)
         return cm_fail("LoadScene", w->player_object, "invalid player object");
     o = &w->objects[w->player_object];
     s->body_height = o->z + o->z / 2 + 0x1000 + s->unk_144b34;
+    s->swim_check = 0; /* LoadScene 01167F; other Swim* words persist unless written. */
+    s->swim_loop = s->swim_exit_sound = -1;
+    switch (w->scene) {
+    case 0: s->swim_check=1; s->swim_damage=0; s->swim_panel=22; s->swim_art=21; break;
+    case 1: s->swim_check=1; s->swim_damage=0; s->swim_panel=45; s->swim_art=44; break;
+    case 4: s->swim_check=1; s->swim_damage=3; s->swim_panel=36; s->swim_art=35; break;
+    case 6: s->swim_check=1; s->swim_damage=0; s->swim_panel=37; s->swim_art=36; break;
+    case 7: s->swim_check=1; s->swim_damage=-1; s->swim_panel=30; s->swim_art=29; break;
+    case 8: s->swim_check=1; s->swim_damage=2; s->swim_panel=32; s->swim_art=31; break;
+    case 9: s->swim_check=1; s->swim_damage=0; s->swim_panel=64; s->swim_art=60; break;
+    case 11: s->swim_check=1; s->swim_damage=0; s->swim_panel=32; s->swim_art=31; break;
+    default: break;
+    }
+    if (s->ai) {
+        s->ai->swim_check = s->swim_check;
+        s->ai->swim_damage = s->swim_damage;
+        s->ai->swim_panel = s->swim_panel;
+        s->ai->swim_art = s->swim_art;
+    }
     s->fire_check = 0; /* LoadScene 011691. */
     if (w->scene == 7) { /* 0119F2 */
         s->fire_damage = 8;

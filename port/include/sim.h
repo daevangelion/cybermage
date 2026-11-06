@@ -16,12 +16,17 @@ struct events_state;
 typedef struct {
     struct ai_state *ai;
     struct events_state *events;
+    void (*collision_observe)(void *context, const world *w, unsigned object,
+                               int32_t x, int32_t y);
+    void *collision_context;
     int32_t pc_mode, previous_pc_mode;
     int modern_aim;
     int32_t vehicle_type, flight_mode, flight_active, flight_unk_144B48;
     int32_t unk_131418; /* Flight height above the local supporting floor. */
     int32_t flight_action, key_hand_y, fly_throttle, fly_curr_throttle;
     int32_t fire_check, fire_damage, fire_tile_panel, fire_tile_art;
+    int32_t swim_check, swim_damage, swim_panel, swim_art;
+    int32_t swim_loop, swim_exit_sound;
     uint32_t swim_damage_time;
     uint8_t kb_scan_status[SIM_SCAN_COUNT];
     uint8_t kb_latch;
@@ -77,6 +82,7 @@ int sim_coll_fire_flat(world *w, unsigned object, int32_t old_z);
 int sim_coll_fire(sim_state *s, world *w, unsigned missile);
 void sim_save_export(const sim_state *s, uint32_t values[29]);
 int sim_save_import(sim_state *s, const uint32_t values[29]);
+int sim_save_fire_import(sim_state *s, const uint32_t values[4]);
 #define SIM_AUTO_PREFIX 207798u
 int sim_auto_pack(const uint8_t *save, uint32_t size, uint8_t *out,
                     uint32_t capacity, uint32_t *written);

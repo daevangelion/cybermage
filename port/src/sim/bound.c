@@ -18,6 +18,8 @@ int sim_coll_object(sim_state *s, world *w, unsigned object, int32_t *x, int32_t
     int32_t high_z = o->floor_z + (object == w->player_object ? s->body_height : o->z + o->height) - 0x1000;
     int tx[2] = {left >> 16, right >> 16}, ty[2] = {bottom >> 16, top >> 16};
     unsigned row, col;
+    if (s->collision_observe)
+        s->collision_observe(s->collision_context, w, object, *x, *y);
     for (row = 0; row < 2; ++row) {
         if (row && ty[0] == ty[1]) continue;
         for (col = 0; col < 2; ++col) {
@@ -57,15 +59,29 @@ int sim_coll_object(sim_state *s, world *w, unsigned object, int32_t *x, int32_t
                         }
                         if (w->persons[person].status != 2)
                             sim_obj_nx_ny(s, w, object, id, x, y);
-                    } else if (b->targetable == 2 && object == w->player_object) {
-                        if (!s->events) return cm_fail("CollItem", id, "missing item state");
-                        if (events_coll_item(s->events, w, id, object)) return -1;
                     } else {
-                        /* Original generic branch passes chain index, not its
-                         * object value (0438CE); retain this observable quirk. */
-                        if (node >= CM_OBJECT_MAX)
-                            return cm_fail("CollObject", node, "generic collision node exceeds object table");
-                        sim_obj_nx_ny(s, w, object, node, x, y);
+                        unsigned item = 0;
+                        if (b->targetable == 2) {
+                            if (b->person < 0 || (unsigned)b->person >= w->prop_count ||
+                                w->prop_objects[b->person] != id)
+                                return cm_fail("CollObject", id, "invalid prop placement");
+                            item = (uint16_t)w->prop_items[b->person];
+                        }
+                        if (item) {
+                            if (!s->events || item > s->events->definition_count)
+                                return cm_fail("CollObject", id, "invalid pickup definition");
+                            if (object == w->player_object) {
+                                if (events_coll_item(s->events, w, id, object)) return -1;
+                            } else if (s->events->definitions[item].kind != 16) {
+                                /* NPC pickup contact 04389A..0438C2 uses the
+                                 * object, unlike the generic 0438CE branch. */
+                                sim_obj_nx_ny(s, w, object, id, x, y);
+                            }
+                        } else {
+                            if (node >= CM_OBJECT_MAX)
+                                return cm_fail("CollObject", node, "generic collision node exceeds object table");
+                            sim_obj_nx_ny(s, w, object, node, x, y);
+                        }
                     }
                 }
                 node = w->omap.nodes[node].next;

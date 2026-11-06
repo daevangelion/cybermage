@@ -176,10 +176,14 @@ CollObject `043863..0438C2` gives targetable2 props their own branch:
 PROP runtime+6 (disk placement+26, LoadPROPS0245AA) must be nonzero;
 player contact calls CollItem, NPC item kind16 is ignored, and other NPC
 contacts pass the candidate **object** to ObjNxNy. Only the generic branch
-`0438C4..0438D2` passes the chain index. Native currently conflates that NPC
-pickup branch with generic collision. Nearby object877 is a kind15 cash prop;
-exact same-call candidate/proposal observation is being collected before fixing
-the causal regression. `sim_state.collision_observe/context` is a normally-null
+`0438C4..0438D2` passes the chain index. Native formerly conflated that NPC
+pickup branch with generic collision. Both read-only observers matched all22
+entry fields at that call: proposal1000124,884972 and only node431→object877,
+a kind15 cash prop. The source-correct branch now uses the object, skips NPC
+kind16 contacts, and leaves aux0 decorations on the generic branch.
+`test_sim_collision` failed the original flags0 expectation before this fix
+and subsequently passed its cash/kind16/decoration regressions.
+`sim_state.collision_observe/context` is a normally-null
 read-only diagnostic seam; it performs no core I/O or state substitution.
 
 ## Integrated verification (Integrator)
@@ -226,6 +230,14 @@ The real title-menu Training route selects scene11 (100HP/energy,60cash).
 the extended lifecycle/menu tests subsequently passed, including missing-save
 retention and Training through scripted title-menu input.
 
+Malformed saved motion/mode/stance/body/swim words now fail at individual
+`0x6D4+4*i` offsets; fire fields fail at `0x34F09..0x34F15`.
+Physical map/maximum-input bounds keep subsequent signed arithmetic defined.
+These checks run before replacing a scene. A later failed overlay/import
+disarms the incomplete world and retains a Load menu returning to title, not
+Resume of partially loaded state. Hostile values and preflight/deep failure
+are covered by `test_sim` and the actual-main lifecycle regression.
+
 CollFire's zero-tick contact regression reproduced signed overflow at
 `fire.c:207` under UBSan (`INT32_MAX + 32768` from the original zero-divisor
 sentinel). Sweep position/height additions now use explicit unsigned32 wrap.
@@ -233,3 +245,31 @@ The zero-tick inside-target test and all120 original-x86 sweep cases pass
 under UBSan with recovery disabled; `make check` includes the zero-tick
 sanitizer regression. This preserves the original wrapped result rather than
 silently skipping zero-tick simulation.
+
+### Swim rule recovery
+
+LoadScene defaults SwimCheck0, then enables scenes0/1/4/6/7/8/9/11.
+The respective(panel,art,damage) triples are(22,21,0),(45,44,0),(36,35,3),
+(37,36,0),(30,29,-1),(32,31,2),(64,60,0),(32,31,0), from
+`0116CF..0116E8`, `011729..011755`, `01186C..01188D`,
+`011911..011969`, `011997..0119A9`, `011A70..011B19`,
+`011BAE..011BD6`, `011D08..011D30`.
+
+HandleNextFrame `01CAC0..01CD80` runs water contact before environmental fire.
+Contact is excluded while jumping, flying or in a vehicle. Entry plays sample4
+and sets the shared swim/fire damage deadline to ticks+20+RND40. Contact sets
+swim/bob flags and the original -4800/-3000 stance. Positive damage calls
+DamagePerson((1+RND6)*damage,100,125); negative damage heals injured on-foot
+PERSON0 by RND10, clipped to maximum, with sample27. Both reset the deadline
+to ticks+40+RND60. Exit clears swim and requests standing. Moving eligible
+hands maintain loop4; stopping checks sample3, draws its random volume and
+aborts loop4. These are executable rules, not capture-derived constants.
+
+The reducer is implemented in `sim/swim.c`, called before the fire block;
+scene setup feeds the same four Swim* values to AI. `test_sim` first rejected
+the missing scene0 water configuration. `test_sim_swim` then failed the absent
+player-water transition before implementation. Both pass now, including exact
+entry/heal RNG words/deadlines, crouch/swim entry and exit, healing and harmful
+water with real retail audio/tables. `test_sim_collision` and hostile-save
+regressions passed in the same focused gate. Original multi-frame water parity
+remains a separate Sim2 oracle gate.
