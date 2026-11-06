@@ -472,3 +472,11 @@ fixed-yaw, retained-foot-rate, simultaneous-direction, ignored-foot-key and
 tank-versus-other-vehicle pitch cases.
 F4's menuFlag paths0135C3/013D79 are separate keyboard producers and are not
 implemented by this vehicle-motion dispatch.
+
+Classic keypad movement uses standard scan47/49 for forward-left/right
+diagonals at013962/0139A9. Scans4F/51 instead alias configured side-left/right
+at013AC3/013B63, including forward/backward arrow combinations and the later
+right-side priority. Vehicle013D67 bypasses all four. The old native code
+mislabelled49 as4F and omitted the side aliases; the genuine Training coast
+trace first diverged at51 when keypad9 was held. The phase fixture checks
+all four mappings, simultaneous-key priority and vehicle exclusion.

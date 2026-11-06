@@ -86,12 +86,12 @@ static int keyboard(sim_state *s, world *w)
         }
     } else s->key_rot_rate = 0;
     if (down(s, 0x47, 1)) { s->movement_angle = 0x2000; s->movement_request = MOVE_WALK; }
-    if (down(s, 0x4f, 1)) { s->movement_angle = 0xe000; s->movement_request = MOVE_WALK; }
-    if (down(s, s->kb_side_left, s->kb_side_left_bit)) {
+    if (down(s, 0x49, 1)) { s->movement_angle = 0xe000; s->movement_request = MOVE_WALK; }
+    if (down(s, 0x4f, 1) || down(s, s->kb_side_left, s->kb_side_left_bit)) {
         s->movement_angle = forward ? 0x2000 : (back ? 0xe000 : 0x4000);
         if (!s->movement_request || s->movement_request > MOVE_WALK) s->movement_request = MOVE_WALK;
     }
-    if (down(s, s->kb_side_right, s->kb_side_right_bit)) {
+    if (down(s, 0x51, 1) || down(s, s->kb_side_right, s->kb_side_right_bit)) {
         s->movement_angle = forward ? 0xe000 : (back ? 0x2000 : 0xc000);
         if (!s->movement_request || s->movement_request > MOVE_WALK) s->movement_request = MOVE_WALK;
     }

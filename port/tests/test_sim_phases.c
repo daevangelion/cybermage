@@ -142,12 +142,41 @@ static void vehicle(const char *data)
     puts("sim vehicle fixed yaw, ignored foot keys and pitch context matched");
 }
 
+static void keypad(const char *data)
+{
+    static const unsigned key[] = {0x47, 0x49, 0x4f, 0x51};
+    static const uint16_t angle[] = {0x2000, 0xe000, 0x4000, 0xc000};
+    unsigned i;
+    for (i = 0; i < sizeof key / sizeof key[0]; ++i) {
+        arena(data); s.pc_mode = 5;
+        s.kb_scan_status[key[i]] = 3;
+        assert(!sim_frame(&s, &w, &input, 2));
+        /* 013962/0139A9 diagonal7/9; 013AC3/013B63 side1/3. */
+        assert(s.movement_angle == angle[i] && s.unk_144aec > 0);
+        assert(!w.objects[1].heading && !w.camera.pitch);
+    }
+    arena(data); s.pc_mode = 5;
+    s.kb_scan_status[0x4f] = s.kb_scan_status[0x48] = 3;
+    assert(!sim_frame(&s, &w, &input, 2));
+    assert(s.movement_angle == 0x2000);
+    arena(data); s.pc_mode = 5;
+    for (i = 0; i < sizeof key / sizeof key[0]; ++i) s.kb_scan_status[key[i]] = 3;
+    assert(!sim_frame(&s, &w, &input, 2));
+    assert(s.movement_angle == 0xc000);
+    arena(data); s.pc_mode = 7;
+    for (i = 0; i < sizeof key / sizeof key[0]; ++i) s.kb_scan_status[key[i]] = 3;
+    assert(!sim_frame(&s, &w, &input, 2));
+    assert(!s.unk_144aec && !w.objects[1].heading && !w.camera.pitch);
+    puts("sim keypad diagonal7/9 and side1/3 source mappings matched");
+}
+
 int main(int argc, char **argv)
 {
     assert(argc == 3);
     if (!strcmp(argv[2], "cap")) cap(argv[1]);
     else if (!strcmp(argv[2], "hit")) hit(argv[1]);
     else if (!strcmp(argv[2], "vehicle")) vehicle(argv[1]);
+    else if (!strcmp(argv[2], "keypad")) keypad(argv[1]);
     else return 2;
     return 0;
 }
