@@ -16,21 +16,21 @@ int ai_init_missiles(ai_state *a, world *w)
     return 0;
 }
 
-/* InitSoulFire 0x2DC18: ten 0x1C records, each with an FXO association. */
+/* InitSoulFire 0x2DC18: ten 0x1C records, each with a runtime PROP record. */
 int ai_init_soul_fire(ai_state *a, world *w)
 {
     unsigned i;
-    if (w->object_count + AI_SOUL_MAX >= AI_DYNAMIC_FIRST ||
-        w->fxo_count + AI_SOUL_MAX >= 2048)
+    if (w->object_count >= AI_DYNAMIC_FIRST - AI_SOUL_MAX ||
+        w->prop_count >= 2048 - AI_SOUL_MAX)
         return cm_fail("InitSoulFire", w->object_count, "object pool exhausted");
     for (i = 0; i < AI_SOUL_MAX; ++i) {
-        unsigned object = w->object_count++, fxo = w->fxo_count++;
-        a->souls[i].active = 0;
+        unsigned object = w->object_count++, prop = w->prop_count++;
+        a->souls[i] = (ai_soul){0};
         a->souls[i].object = (int32_t)object;
-        a->souls[i].fxo = (int32_t)fxo;
-        w->fxo_objects[fxo] = (uint16_t)object;
-        w->fxo_types[fxo] = -1;
-        w->objects[object].person = (int16_t)fxo;
+        a->souls[i].prop = (int32_t)prop;
+        w->prop_objects[prop] = (uint16_t)object;
+        w->prop_items[prop] = 0;
+        w->objects[object].person = (int16_t)prop;
         w->objects[object].targetable = 2;
         w->objects[object].active = 0;
     }
@@ -51,15 +51,18 @@ int ai_make_soul_fire(ai_state *a, world *w, unsigned source, int32_t type,
     if (i == AI_SOUL_MAX) return 0;
     s = &a->souls[i]; o = &w->objects[s->object]; from = &w->objects[source];
     if (type >= 1 && type <= 3) {
-        int template_object = world_fxo_object(w, type == 3 ? 30 : 13);
+        unsigned prop = type == 3 ? 30 : 13, template_object;
         const world_object *t;
-        if (template_object < 0) return -1;
+        if (prop >= w->prop_count || w->prop_objects[prop] >= w->object_count)
+            return cm_fail("SetSoulFire", prop, "invalid template PROP");
+        template_object = w->prop_objects[prop];
         t = &w->objects[template_object];
         o->flags = t->flags & ~UINT32_C(0x00000800);
         o->radius = t->radius; o->height = t->height; o->z = t->z;
         o->texture = t->texture; o->rotations = t->rotations;
     }
-    s->type = type; s->value = (int16_t)value; s->lifetime = lifetime;
+    w->prop_items[s->prop] = (int16_t)value;
+    s->type = type; s->value = value; s->lifetime = lifetime;
     s->active = 1; s->frame = 0;
     o->heading = 0; o->x = from->x; o->y = from->y;
     o->floor_z = (int32_t)((uint32_t)from->floor_z + (on_floor ? 0u : (uint32_t)from->z));

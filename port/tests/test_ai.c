@@ -11,6 +11,35 @@ static sim_state simulation;
 static ui_save_state save;
 static events_state player;
 
+static void soul_prop_pool(void)
+{
+    unsigned i;
+    memset(&w, 0, sizeof w);
+    memset(&a, 0, sizeof a);
+    w.object_count = 100; w.prop_count = 474; w.fxo_count = 19;
+    w.prop_objects[13] = 20; w.fxo_objects[13] = 21;
+    w.objects[20].flags = UINT32_C(0x20080800);
+    w.objects[20].texture = 17; w.objects[21].texture = 99;
+    w.objects[20].height = 0x3000; w.objects[20].z = 0x2000;
+    w.objects[20].rotations = 8; w.objects[20].radius = 1234;
+    w.objects[1].x = 5 * 65536; w.objects[1].y = 5 * 65536;
+    w.objects[1].floor_z = 0x1000; w.objects[1].z = 0x2000;
+    assert(ai_init_soul_fire(&a, &w) == 0);
+    assert(w.prop_count == 484 && w.fxo_count == 19 && w.object_count == 110);
+    for (i = 0; i < AI_SOUL_MAX; ++i) {
+        unsigned object = 100 + i, prop = 474 + i;
+        assert(a.souls[i].object == (int)object && a.souls[i].prop == (int)prop);
+        assert(w.prop_objects[prop] == object && w.prop_items[prop] == 0);
+        assert(w.objects[object].person == (int)prop && w.objects[object].targetable == 2);
+    }
+    assert(world_make_omap(&w) == 0);
+    assert(ai_make_soul_fire(&a, &w, 1, 1, 50000, 4, 1) == 0);
+    assert(a.souls[0].value == 50000 && w.prop_items[474] == (int16_t)50000);
+    assert(w.objects[100].texture == 17 && w.objects[100].radius == 1234);
+    assert(w.objects[100].flags == UINT32_C(0x20080000));
+    assert(w.objects[100].floor_z == 0x1000 && w.objects[100].active == 1);
+}
+
 static void explicit_undefined_input(void)
 {
     uint8_t bytes[12 + 2 * 200] = {0};
@@ -207,9 +236,9 @@ int main(int argc, char **argv)
     }
     for (i = 0; i < AI_SOUL_MAX; ++i) {
         a.souls[i].object = (int32_t)i + 13;
-        a.souls[i].fxo = (int32_t)i + 20;
+        a.souls[i].prop = (int32_t)i + 20;
     }
-    w.fxo_count = 30;
+    w.prop_count = 30; w.fxo_count = 30;
     w.fxo_objects[13] = 42;
     w.fxo_types[13] = 7;
     a.timer_ticks = 100;
@@ -231,7 +260,8 @@ int main(int argc, char **argv)
     a.unk_144AE0 = 0;
     a.missiles[3].speed = -999;
     assert(ai_save_import(&a, &w, &save) == 0);
-    assert(a.missiles[3].speed == 300 && w.object_count == 64 && w.fxo_count == 30);
+    assert(a.missiles[3].speed == 300 && w.object_count == 64 &&
+           w.prop_count == 30 && w.fxo_count == 30);
     assert(w.fxo_objects[13] == 42 && w.fxo_types[13] == 7);
     assert(a.gem_count_down_timer == 580 && a.pc.fire == 1 &&
            a.pc.cooldown == 3 && a.pc.latch == 1 && a.unk_144AE0 == 1 &&
@@ -245,7 +275,7 @@ int main(int argc, char **argv)
     save.unk_13610C[2] = 13; /* Must not remap the SoulFire template. */
     assert(ai_save_import(&a, &w, &save) == -1);
     assert(cm_last_error()->offset == 0x2C791);
-    assert(a.souls[0].fxo == 20 && w.fxo_objects[13] == 42);
+    assert(a.souls[0].prop == 20 && w.fxo_objects[13] == 42);
     save.unk_13610C[2] = 20;
     save.unk_13610C[1] = 1;
     assert(ai_save_import(&a, &w, &save) == -1);
@@ -309,6 +339,7 @@ int main(int argc, char **argv)
     target_without_pixels();
     independent_actor_clocks();
     explicit_undefined_input();
+    soul_prop_pool();
     puts("AI data tests passed");
     return 0;
 }

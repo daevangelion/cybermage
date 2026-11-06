@@ -68,7 +68,7 @@ typedef struct {
     int32_t fxo, sound, volume, aim, speed;
 } ai_missile_data;
 typedef struct {
-    int32_t active, object, fxo, type, value, lifetime, frame;
+    int32_t active, object, prop, type, value, lifetime, frame;
 } ai_soul;
 
 typedef struct {

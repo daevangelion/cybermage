@@ -68,14 +68,23 @@ and `ai_load_tables` may precede `ai_save_import`. Never run `ai_init` after the
 saved PERSON/object overlay: it would reroll attributes and append extra pools.
 The explicit save bridge covers the twelve 48-byte missile records, ten 28-byte
 SoulFire records, remaining gem countdown and AI-owned `unk_6D4` words6..15;
-Events owns event/inventory serialization. Import requires the object/FXO slots
-already assigned by scene initialization, never remaps the FXO tables, and
+Events owns event/inventory serialization. Import requires the object/PROP slots
+already assigned by scene initialization, never remaps either pool, and
 rejects invalid animation frames, negative SoulFire lifetimes and active missile
 types outside1..52 at absolute save-file offsets. Gem deadlines use the current
 `ai_state.timer_ticks` at import/export, with modulo32-bit arithmetic.
 Fire/cooldown/latch and link counters are bounded on restore; underwater remains
 an arbitrary signed EventsAction72 payload, not a boolean. Aim X/Y retain their
 signed32 range (the original's consumers wrap arithmetic); tank aim is0..63.
+
+`InitSoulFire`0x2DC18 allocates ten runtime **PROP** records, not FXOs:
+0x2DC68 reads PROP count `Xox+130D38`, 0x2DCCB stores the descriptor at
+`Xox+131BCC`, and object.person plus SoulFire record+8 receive that PROP index.
+Only descriptor+4 (object) and +6 (pickup item, initially0) are initialized.
+`SetSoulFire`0x2DD28 looks up PROP13 or30 as its art template.
+`MakeSoulFire` writes the short pickup item at PROP+6 while preserving the
+complete32-bit value in the SoulFire record. The native pools and strict save
+identity checks follow those associations; FXO mappings/count are unchanged.
 
 ### Target-list checkpoint evidence
 

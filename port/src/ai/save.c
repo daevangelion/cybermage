@@ -61,7 +61,7 @@ int ai_save_import(ai_state *a, world *w, const ui_save_state *save)
     unsigned i;
     if (saved_pc_valid(save->unk_6D4)) return -1;
     /* Validate against the pools constructed by scene init, before changing
-     * their ownership or any live state. Saved FXO mappings are not trusted. */
+     * their ownership or any live state. Saved pool mappings are not trusted. */
     for (i = 0; i < AI_MISSILE_MAX; ++i) {
         const uint32_t *p = save->unk_135ECC + i * 12;
         if (p[1] != (uint32_t)a->missiles[i].object ||
@@ -72,8 +72,8 @@ int ai_save_import(ai_state *a, world *w, const ui_save_state *save)
     for (i = 0; i < AI_SOUL_MAX; ++i) {
         const uint32_t *p = save->unk_13610C + i * 7;
         if (p[1] != (uint32_t)a->souls[i].object ||
-            p[2] != (uint32_t)a->souls[i].fxo ||
-            p[1] == 0 || p[1] >= w->object_count || p[2] >= w->fxo_count ||
+            p[2] != (uint32_t)a->souls[i].prop ||
+            p[1] == 0 || p[1] >= w->object_count || p[2] >= w->prop_count ||
             p[5] > INT32_MAX || p[6] >= 8)
             return cm_fail("SAVE*.DAT", 0x2C791 + i * 28, "invalid saved SoulFire");
     }
@@ -91,7 +91,7 @@ int ai_save_import(ai_state *a, world *w, const ui_save_state *save)
         const uint32_t *p = save->unk_13610C + i * 7;
         ai_soul *s = &a->souls[i];
         s->active = (int32_t)p[0]; s->object = (int32_t)p[1];
-        s->fxo = (int32_t)p[2]; s->type = (int32_t)p[3];
+        s->prop = (int32_t)p[2]; s->type = (int32_t)p[3];
         s->value = (int32_t)p[4]; s->lifetime = (int32_t)p[5]; s->frame = (int32_t)p[6];
     }
     a->gem_count_down = (int32_t)save->gemCountDown;
@@ -128,7 +128,7 @@ void ai_save_export(const ai_state *a, ui_save_state *save)
         uint32_t *p = save->unk_13610C + i * 7;
         const ai_soul *s = &a->souls[i];
         p[0] = (uint32_t)s->active; p[1] = (uint32_t)s->object;
-        p[2] = (uint32_t)s->fxo; p[3] = (uint32_t)s->type;
+        p[2] = (uint32_t)s->prop; p[3] = (uint32_t)s->type;
         p[4] = (uint32_t)s->value; p[5] = (uint32_t)s->lifetime; p[6] = (uint32_t)s->frame;
     }
     save->gemCountDown = (uint32_t)a->gem_count_down;
