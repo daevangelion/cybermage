@@ -28,8 +28,12 @@ water u16 +B6; animation state u8 +BC, cursor u8 +BD.
 
 ## Target visibility
 
-Render supplies ordered clipped projected props at the original 640x480
-projection, without pixels or world writes. `target_query` includes only original
+The independent `target` module supplies ordered clipped projected props in the
+original 640x480 framebuffer coordinates, without pixels or world writes.
+`target_query` takes an explicit original view rectangle and drawing camera;
+it reads world texture extents/trig, never `render.h` or renderer caches. Its
+RayCast/CheckTile/CheckObjects list pass preserves generated-wall/flat ordering,
+cell countdowns and sprite rotation/near clipping. It includes only original
 PACK/INVIS/AURA modes with targetable==1 and inclusive left<=320<=right; MASK is
 excluded by visibility. SetAutoTarget scans this list in reverse. The MONSTER
 signed byte at +0x3C is not its kind byte at +0x3A or faction byte at +0x3B.
@@ -54,7 +58,14 @@ When those pools are already constructed, data-only `ai_load_scene_definitions`
 and `ai_load_tables` may precede `ai_save_import`. Never run `ai_init` after the
 saved PERSON/object overlay: it would reroll attributes and append extra pools.
 The explicit save bridge covers the twelve 48-byte missile records, ten 28-byte
-SoulFire records and gem countdown; Events owns event/inventory serialization.
+SoulFire records, remaining gem countdown and AI-owned `unk_6D4` words6..15;
+Events owns event/inventory serialization. Import requires the object/FXO slots
+already assigned by scene initialization, never remaps the FXO tables, and
+rejects invalid animation frames, negative SoulFire lifetimes and active missile
+types outside1..52 at absolute save-file offsets. Gem deadlines use the current
+`ai_state.timer_ticks` at import/export, with modulo32-bit arithmetic.
+Fire/cooldown/latch and link counters are bounded on restore; underwater remains
+an arbitrary signed EventsAction72 payload, not a boolean.
 
 ## Actor oracle
 
@@ -105,6 +116,18 @@ through an optional observer; the core neither allocates nor performs I/O.
 `tools/compare_rng.py` reports the first mismatching operation/bound/words and
 both caller identities, filtering only the original RND wrapper's nested RANDOM
 record (return 0x67329) to avoid double-counting.
+
+The approved `--import-undefined` verification input is limited to PERSON +0x24;
+normal play still starts it at zero (architecture_port.md). With real InitPC,
+RestorePCInfo and StartClock initialization, the next measured causal difference
+is physical collision, not an AI rule: frame 20, object 970, proposed
+(1000124,884972). Original/native CollObject entry CSVs match every field:
+source floor/z/height/radius = 0/12288/19456/7680, and the sole candidate is
+OMap node 431 → object 877, cash item 17 (kind 15), at (1015808,884736),
+floor/z/height/radius = 0/6400/6400/7680, flags 0x60080800.
+Original steering then receives collision-count/flags 0/0, native receives 1/2.
+This isolates Sim's NPC pickup contact branch; no candidate coordinates or
+collision outcomes are substituted by the harness.
 
 ## Player projectiles and radial effects
 

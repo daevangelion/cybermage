@@ -14,15 +14,23 @@ def load(path, original):
 
 
 def key(row):
-    return (row['operation'],) + tuple(int(row[n]) for n in ('bound', 'rng0', 'rng1', 'rng2'))
+    return (int(row['frame']), row['operation']) + tuple(int(row[n]) for n in ('bound', 'rng0', 'rng1', 'rng2'))
 
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('original', type=Path)
     p.add_argument('native', type=Path)
+    p.add_argument('--through-frame', type=int,
+                   help='explicit final completed frame; excludes an unfinished final oracle frame')
     args = p.parse_args()
     original, native = load(args.original, True), load(args.native, False)
+    if args.through_frame is not None:
+        if args.through_frame < 0:
+            p.error('--through-frame must be nonnegative')
+        original = [r for r in original if int(r['frame']) <= args.through_frame]
+        native = [r for r in native if int(r['frame']) <= args.through_frame]
+        print(f'Comparing initialization and completed frames 0..{args.through_frame}')
     for index, (want, got) in enumerate(zip(original, native)):
         if key(want) == key(got):
             continue
@@ -38,7 +46,7 @@ def main():
     if len(original) != len(native):
         print(f'Common prefix matches {min(len(original),len(native))} calls; lengths original={len(original)} native={len(native)}')
         return 1
-    print(f'MATCH: {len(original)} RNG calls (operation, bound, all three pre-call words)')
+    print(f'MATCH: {len(original)} RNG calls (frame, operation, bound, all three pre-call words)')
     return 0
 
 

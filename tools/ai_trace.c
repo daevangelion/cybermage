@@ -1,7 +1,7 @@
 #include "ai.h"
 #include "events.h"
 #include "replay.h"
-#include "render.h"
+#include "target.h"
 
 #include <inttypes.h>
 #include <stdio.h>
@@ -12,7 +12,7 @@ static world w;
 static ai_state a;
 static sim_state s;
 static events_state e;
-static rsc hipak;
+static const vis_view view = {120, 90, 400, 300}; /* Original default ConWinInfo. */
 static FILE *steering_file;
 static uint64_t steering_sequence;
 static int64_t observed_frame = -1;
@@ -194,9 +194,6 @@ int main(int argc, char **argv)
                 ai_init(&a, &w) || ai_load_tables(&a, argv[1]) ||
                 world_finalize_scene(&w) || sim_start_scene(&s, &w) ||
                 events_init(&e, &w) || events_load_tables(&e, argv[1])) return 1;
-            length = snprintf(path, sizeof(path), "%s/HIPAK.RSC", argv[1]);
-            if (length < 0 || (size_t)length >= sizeof(path) ||
-                rsc_open(&hipak, path) || render_load(&w, &hipak)) return 1;
             ai_restore_pc_info(&e, &w);
             ai_start_clock(&a, (uint32_t)f.values[CM_TRACE_PREVIOUS]);
             if (undefined_path && import_undefined(undefined_path)) return 1;
@@ -228,9 +225,9 @@ int main(int argc, char **argv)
             w.camera.z = pc->floor_z + s.body_height - 0x1000 + s.unk_144b38;
             w.camera.angle = pc->heading;
         }
-        if (target_query(&a.targets, &w, &w.camera)) return 1;
+        if (target_query(&a.targets, &w, &w.camera, &view)) return 1;
     }
-    replay_close(&replay); render_unload(); rsc_close(&hipak); world_close(&w);
+    replay_close(&replay); world_close(&w);
     if (rng.out && fclose(rng.out)) return 1;
     if (steering_file && fclose(steering_file)) return 1;
     if (collision.out && fclose(collision.out)) return 1;

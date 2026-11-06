@@ -199,6 +199,15 @@ target, animation/cursor, object active flag, and the three original RNG words.
 `CM_HI.EXE:068ABF`, before it copies BIOS word `0x46C`; this is a source
 measurement, not a seed inferred from a later checkpoint.
 
+`--rng-trace` logs original RND/RANDOM caller addresses, frame, bound and RNG
+words; `--steering-trace` logs NewMONBound decision inputs at `0x46507`.
+`--collision-object N` logs CollObject entry (`0x435EC`) proposals, source
+geometry and every candidate in its four OMap chains to `collision.csv`.
+Candidate zero/node zero is the entry marker, not a contact. `--watch LINK_HEX`
+uses the host's existing read-only byte write-watch; heap addresses are runtime
+minus relocation `0x400000`. All observers preserve guest registers, memory,
+instruction/time accounting and the zero-hook original execution contract.
+
 The wrapper verifies the complete source checkout before building: it accepts
 only pristine pinned HEAD (then applies the patch) or exactly HEAD plus the
 patch, including the new observer source. Staged changes, unrelated edits,
