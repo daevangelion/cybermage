@@ -175,6 +175,19 @@ void sim_loop_checks(void)
     assert(actors.difficulty == 2);
     assert((uint16_t)game.persons[1].unk_0038 == 11);
     assert((uint16_t)((uint32_t)game.persons[1].unk_0038 >> 16) == 25);
+    {
+        cm_input key = {0};
+        int32_t hp = game.persons[1].unk_0038;
+        ui_open(&ui, UI_OPTIONS);
+        ui.options[8] = 0;
+        assert(menu_input(&key, 12) == UI_NONE);
+        assert(actors.difficulty == 2 && game.persons[1].unk_0038 == hp);
+        ui.options[8] = 1;
+        key.pressed[1] = 1;
+        assert(menu_input(&key, 13) == UI_NONE);
+        assert(actors.difficulty == 1 && actors.attack_difficulty == 1);
+        ui_open(&ui, UI_GAME);
+    }
     assert(!ai_set_difficulty(&actors, &game, 1));
     ui.options[8] = 1;
     events.scene_requested.pending = 1;

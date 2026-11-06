@@ -258,6 +258,8 @@ full original-save gameplay validation; demo SAVE010 layout verification.
 172 bytes:43 little-endian dwords, with no native structure padding.
 `WriteConfigFile020C18` writes the same sequence; OptOptions05422D invokes it
 on exit before applying monster difficulty.
+Difficulty is applied once at that exit boundary for any resident scene,
+not on slider frames: repeated integer HP rescaling is lossy.
 
 | File offset | Original value |
 |---|---|

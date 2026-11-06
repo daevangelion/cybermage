@@ -593,6 +593,10 @@ static ui_action menu_input(cm_input *input, uint32_t ticks)
         ui_options_to_config(&ui);
         if(ui_config_save(&ui.config,setup_path)) return UI_ERROR;
         simulation.input_device=ui.config.in_device;
+        if (game.scenes.data &&
+            (ai_set_attack_difficulty(&actors, (unsigned)ui.options[8]) ||
+             ai_set_difficulty(&actors, &game, (unsigned)ui.options[8])))
+            return UI_ERROR;
     }
     if (ui.screen != UI_GAME && simulation.swim_loop != -1) {
         snd_abort(simulation.swim_loop, 4);
@@ -1085,10 +1089,6 @@ int main(int argc, char **argv)
         action = trace || shop_modal || death_phase == 1 || death_phase == 2 ?
             UI_NONE : menu_input(&input, ticks);
         if(action==UI_ERROR) goto out;
-        if (playing && (actors.difficulty != ui.options[8] ||
-                        actors.attack_difficulty != ui.options[8]) &&
-            (ai_set_attack_difficulty(&actors, (unsigned)ui.options[8]) ||
-             ai_set_difficulty(&actors, &game, (unsigned)ui.options[8]))) goto out;
         if (!settings_applied ||
             memcmp(applied_settings, ui.options + 3, sizeof applied_settings)) {
             if (ui_apply_settings(&ui, palette, base_palette)) goto out;
