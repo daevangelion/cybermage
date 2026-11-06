@@ -298,6 +298,17 @@ int main(int argc, char **argv)
         for (i = 0; i < AI_SEQUENCE_MAX; ++i)
             assert(ai_sequence_decode(&s, p + i * AI_SEQUENCE_DISK_SIZE,
                                       AI_SEQUENCE_DISK_SIZE) == 0);
+        /* LoadMONSTER adjusts a fresh definition from level1, not from the
+         * previous scene's already-scaled bytes. */
+        a.attack_difficulty = 0;
+        assert(ai_load_scene_definitions(&a, &w) == 0);
+        assert(a.monsters[11].unk_007C == 37);
+        a.attack_difficulty = 2;
+        assert(ai_load_scene_definitions(&a, &w) == 0);
+        assert(a.monsters[11].unk_007C == 12);
+        a.attack_difficulty = 1;
+        assert(ai_load_scene_definitions(&a, &w) == 0);
+        assert(a.monsters[11].unk_007C == 24);
         puts("MONSTER=109 ANIMOBJ=56");
         rsc_close(&w.scenes);
     }
@@ -419,6 +430,11 @@ int main(int argc, char **argv)
     assert(ai_save_import(&a, &w, &save) == 0);
     assert(a.gem_count_down_timer == 24);
     a.difficulty = 1;
+    a.attack_difficulty = 1;
+    a.monster_count = 2;
+    a.monsters[0].unk_007C = a.monsters[1].unk_007C = 24;
+    assert(ai_set_attack_difficulty(&a, 0) == 0);
+    assert(a.monsters[0].unk_007C == 24 && a.monsters[1].unk_007C == 37);
     w.person_count = 3;
     w.persons[1].status = 0;
     w.persons[1].unk_0038 = (int32_t)(20u << 16 | 10u);
@@ -431,6 +447,13 @@ int main(int argc, char **argv)
     assert((int16_t)w.persons[1].unk_0038 == 5 &&
            (int16_t)((uint32_t)w.persons[1].unk_0038 >> 16) == 10);
     assert(w.persons[2].unk_0038 == (int32_t)(20u << 16));
+    /* SaveGame's PERSON normalization must not round-trip definition delays. */
+    assert(a.attack_difficulty == 0 && a.monsters[1].unk_007C == 37);
+    assert(ai_set_attack_difficulty(&a, 2) == 0);
+    assert(a.monsters[1].unk_007C == 12);
+    assert(ai_set_attack_difficulty(&a, 0) == 0);
+    assert(a.monsters[1].unk_007C == 38);
+    assert(ai_set_attack_difficulty(&a, 3) == -1);
     assert(ai_set_difficulty(&a, &w, 3) == -1);
     ai_start_clock(&a, 300);
     assert(a.animation_deadline == 300 && a.fast_animation_deadline == 300);

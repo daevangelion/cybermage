@@ -349,7 +349,7 @@ static void retail_cosmetics(const char *data)
     memset(&w,0,sizeof(w));memset(&e,0,sizeof(e));sim_init(&s,0);
     for(scene=1;scene<=11;++scene) {
         assert(world_load_scene(&w,data,scene)==0);
-        assert(ai_init(&a,&w)==0 && world_finalize_scene(&w)==0);
+        assert(ai_init(&a,&w,1)==0 && world_finalize_scene(&w)==0);
         assert(events_init(&e,&w)==0 && events_load_tables(&e,data)==0);
         for(i=0;i<w.prop_count;++i)
             assert((uint16_t)w.prop_items[i]==cm_u16(w.scene_sections[1].data+(w.prop_placements[i]+1)*30+26));

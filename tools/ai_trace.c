@@ -192,7 +192,7 @@ int main(int argc, char **argv)
             platform_file_release(&rules_file);
             s.ai = &a; s.events = &e;
             if (world_load_scene(&w, argv[1], (unsigned)f.values[CM_TRACE_SCENE]) ||
-                ai_init(&a, &w) || ai_load_tables(&a, argv[1]) ||
+                ai_init(&a, &w, 1) || ai_load_tables(&a, argv[1]) ||
                 world_finalize_scene(&w) || sim_start_scene(&s, &w) ||
                 events_init(&e, &w) || events_load_tables(&e, argv[1])) return 1;
             ai_restore_pc_info(&e, &w);

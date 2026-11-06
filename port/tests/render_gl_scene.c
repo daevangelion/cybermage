@@ -116,7 +116,7 @@ int main(int argc,char **argv)
     n=snprintf(path,sizeof path,"%s/HIPAK.RSC",argv[1]);if (n<0 || (size_t)n>=sizeof path) return 2;
     if (platform_init(1) || rsc_open(&hipak,path) || rsc_entry(&hipak,31,&pal,&size) ||
         gfx_palette(palette,pal,size,path) || world_load_scene(&map,argv[1],1)) goto out;
-    if (hud && ai_init(&actors,&map)) goto out;
+    if (hud && ai_init(&actors,&map,1)) goto out;
     if (world_finalize_scene(&map) || render_load(&map,&hipak)) goto out;
     if (hud) {
         n=snprintf(path,sizeof path,"%s/STRINGS.MSG",argv[1]);

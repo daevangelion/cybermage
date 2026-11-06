@@ -20,7 +20,7 @@ $(B)/%.o: src/%.c
 	@mkdir -p $(@D)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -MMD -MP -c -o $@ $<
 
-check: $(B)/test_core $(B)/test_platform $(B)/test_touch $(B)/test_sim $(B)/test_replay $(B)/test_exe $(B)/test_sim_loop $(B)/test_sim_collision $(B)/test_sim_swim $(B)/test_sim_swim_ubsan $(B)/test_sim_swim_original $(B)/test_sim_fire $(B)/test_sim_fire_ubsan
+check: $(B)/test_core $(B)/test_platform $(B)/test_touch $(B)/test_sim $(B)/test_replay $(B)/test_exe $(B)/test_sim_loop $(B)/test_sim_collision $(B)/test_sim_swim $(B)/test_sim_swim_ubsan $(B)/test_sim_swim_original $(B)/test_sim_fire $(B)/test_sim_fire_ubsan $(B)/test_attack_ignore
 	$(B)/test_core
 	$(B)/test_platform $(B)/platform-keys.txt $(B)/platform-dump
 	$(B)/test_touch
@@ -38,6 +38,7 @@ check: $(B)/test_core $(B)/test_platform $(B)/test_touch $(B)/test_sim $(B)/test
 	$(MAKE) -f tests/sim_phases.mk B=$(B) sim-phases-check
 	$(abspath ../.venv/bin/python) ../tools/sim_fire_original.py $(B)/test_sim_fire
 	$(B)/test_sim_fire_ubsan 0 0 0
+	$(abspath ../.venv/bin/python) ../tools/attack_ignore_original.py $(B)/test_attack_ignore
 	$(abspath ../.venv/bin/python) ../tools/test_rsc.py
 	$(MAKE) -f tests/audio.mk B=$(B)/audio check
 	$(MAKE) -f tests/world.mk B=$(B)/world check
@@ -61,6 +62,10 @@ $(B)/test_sim: tests/test_sim.c tests/media_error.c src/sim/input.c src/sim/flat
 $(B)/test_exe: tests/test_exe.c tests/media_error.c src/exe.c
 	@mkdir -p $(@D)
 	$(CC) -Iinclude $(CFLAGS) $(LDFLAGS) -o $@ $^
+
+$(B)/test_attack_ignore: tests/test_attack_ignore.c $(filter-out $(B)/main.o,$(OBJECTS))
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 $(B)/test_replay: tests/test_replay.c tests/media_error.c src/sim/replay.c
 	@mkdir -p $(@D)

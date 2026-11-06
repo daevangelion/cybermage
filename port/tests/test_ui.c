@@ -530,7 +530,7 @@ int main(int argc, char **argv)
         cm_input input={0};
         int cash;
         assert(world_load_scene(&w,"orig/retail",2) == 0);
-        assert(ai_init(&actors,&w) == 0);
+        assert(ai_init(&actors,&w,1) == 0);
         assert(events_init(&events,&w) == 0);
         events.actors=&actors;events.cash=10000;events.PCBetOdds=3;
         events.shop_requested.kind=2;events.PCBet=0;events.PCBetPick=-1;
@@ -574,7 +574,7 @@ int main(int argc, char **argv)
         world_close(&w);
     }
     assert(world_load_scene(&w,"orig/retail",9) == 0);
-    assert(ai_init(&actors,&w) == 0);
+    assert(ai_init(&actors,&w,1) == 0);
     assert(world_finalize_scene(&w) == 0);
     vehicle_frame(&hipak,argv[1],11,1,8);
     world_close(&w);

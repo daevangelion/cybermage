@@ -7,12 +7,16 @@ OBJECTS := $(patsubst src/%.c,$(B)/%.o,$(SOURCES))
 LDLIBS += $(shell pkg-config --libs sdl2) -lm
 
 .PHONY: check
-check: $(B)/test_ai
+check: $(B)/test_ai $(B)/test_attack_ignore
 	$(B)/test_ai ../orig/retail/SCENE.RSC ../orig/retail
+	$(abspath ../.venv/bin/python) ../tools/attack_ignore_original.py $(B)/test_attack_ignore
 	$(abspath ../.venv/bin/python) tests/test_target_trace.py
 	$(abspath ../.venv/bin/python) tests/test_actor_trace.py
 
 $(B)/test_ai: tests/test_ai.c $(OBJECTS)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+
+$(B)/test_attack_ignore: tests/test_attack_ignore.c $(OBJECTS)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 $(B)/ai_trace: ../tools/ai_trace.c $(OBJECTS)

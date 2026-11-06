@@ -38,7 +38,7 @@ int main(int argc,char **argv)
     if (n<0 || (size_t)n>=sizeof path) return 2;
     if (platform_init(1) || rsc_open(&hipak,path) ||
         rsc_entry(&hipak,31,&pal,&size) || gfx_palette(palette,pal,size,path) ||
-        world_load_scene(&map,argv[1],1) || ai_init(&actors,&map) ||
+        world_load_scene(&map,argv[1],1) || ai_init(&actors,&map,1) ||
         world_finalize_scene(&map) || render_load(&map,&hipak) ||
         render_draw(&map,&camera,pixels) || platform_dump(argv[2],0,pixels,palette)) goto out;
     printf("render_scene camera=%" PRId32 ",%" PRId32 ",%" PRId32 ",%u,%" PRId32

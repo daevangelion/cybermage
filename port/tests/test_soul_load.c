@@ -107,7 +107,7 @@ static void loaded_records(const char *path, const char *data)
     assert(ui_save_scene(file.data, file.size, &scene) == 0);
     world_rng_init(&w.rng, 44);
     assert(world_load_scene(&w, data, scene) == 0);
-    assert(ai_init(&a, &w) == 0 && ai_load_tables(&a, data) == 0);
+    assert(ai_init(&a, &w, 1) == 0 && ai_load_tables(&a, data) == 0);
     assert(world_finalize_scene(&w) == 0);
     assert(events_init(&e, &w) == 0);
     assert(e.definition_count >= 46 && e.definitions[46].kind == 16);

@@ -101,9 +101,12 @@ int ai_load_scene_definitions(ai_state *a, world *w)
     if (size % AI_MONSTER_DISK_SIZE || size / AI_MONSTER_DISK_SIZE > AI_MONSTER_MAX)
         return cm_fail(w->scenes.path, 98, "invalid MONSTER database");
     a->monster_count = size / AI_MONSTER_DISK_SIZE;
-    for (i = 0; i < a->monster_count; ++i)
+    for (i = 0; i < a->monster_count; ++i) {
         if (ai_monster_decode(&a->monsters[i], p + i * AI_MONSTER_DISK_SIZE,
                               AI_MONSTER_DISK_SIZE)) return -1;
+        if (ai_set_monster_attack_ignore(a, (int)i, 1,
+                                          (unsigned)a->attack_difficulty)) return -1;
+    }
     if (rsc_entry(&w->scenes, 99, &p, &size)) return -1;
     if (size % AI_GSX_DISK_SIZE || size / AI_GSX_DISK_SIZE > AI_GSX_MAX)
         return cm_fail(w->scenes.path, 99, "invalid GSX database");
@@ -120,12 +123,15 @@ int ai_load_scene_definitions(ai_state *a, world *w)
     return 0;
 }
 
-int ai_init(ai_state *a, world *w)
+int ai_init(ai_state *a, world *w, unsigned difficulty)
 {
+    if (difficulty > 2)
+        return cm_fail("LoadMONSTER", difficulty, "invalid difficulty");
     memset(a, 0, sizeof(*a));
     a->pc_sound = -1;
     a->pc_learn_spell = -1;
-    a->difficulty = 1; /* CM_HI.EXE playDiffLevel initial data at 0x925E8. */
+    a->difficulty = 1; /* PERSON HP is normalized before the caller applies config. */
+    a->attack_difficulty = (int32_t)difficulty;
     if (ai_load_scene_definitions(a, w) || ai_init_persons(a, w) ||
         ai_init_missiles(a, w)) return -1;
     return ai_init_soul_fire(a, w);

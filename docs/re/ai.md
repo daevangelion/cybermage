@@ -194,6 +194,41 @@ they are the boot call 0x10FBA and new-game call 0x11058/0x110D7.
 (0x1B8CC/0x1B8F8). LoadScene explicitly restores saved player HP/status at
 0x11FBC..0x11FE5 after randomizing all PERSONs. No artificial RNG advances are used.
 
+### Difficulty changes definition cooldowns separately from saved HP
+
+LoadMONSTER023773 calls SetMonAtkIgnore053D04 for each new definition from
+normal level1. ReCalcMonIgnore053AF0 adjusts signed MONSTER+66/+7C/+94, storing
+the low signed16 after **each** transition:
+
+| Transition | Delay operation |
+|---|---|
+| Easy0→Normal1 | `delay * 2 / 3` |
+| Normal1→Hard2 | `delay / 2` |
+| Hard2→Normal1 | `delay * 2 + 1` |
+| Normal1→Easy0 | `delay * 3 / 2 + 1` |
+
+Division truncates toward zero. A live global change skips definition0; loading
+an individual definition also adjusts index0. `ai_init(..., difficulty)` loads
+the definitions for the actual config, and `ai_set_attack_difficulty` changes
+them live. Its level is separate from PERSON HP's `ai_set_difficulty`:
+SaveGame normalizes/restores HP without round-tripping these mutable delays.
+
+This is the first cause of frozen f0186a3's Easy guard60 checkpoint57 mismatch.
+The actual fire cooldown base is37, not raw24. Frame15's identical RND6 at
+035780 adds that base; the raw delay expires early in C. At frame56 the native
+`choose_attack` then adds RND2/RND4 at pre-words8516/16651/9241, whereas the
+original's next caller is still event04657E/RND512. Source NPC60 keeps walking;
+the native incorrectly selects idle. No RNG padding or movement coefficient
+change is involved. The native read-only witness is
+`captures/AI-easy-native-{rng.csv,gdb.txt}`; initial saves are the pinned inputs
+from `earned-route-easy-door29`, not exported end-state saves.
+`.venv/bin/python tools/attack_ignore_original.py port/build/AI/test_attack_ignore` passes288
+unmodified-x86 cases: all old/new levels, individual indices0/1/2 and live
+all-definition selection, signed extremes and intermediate16-bit wrapping.
+`make check` and the focused `tests/ai.mk` both run it. The C data fixture also
+checks fresh Easy37/Hard12/Normal24 reloads and that HP normalization leaves
+the Easy37 definition unchanged.
+
 `--rng-trace` writes every original RND/RANDOM call's return address, frame,
 bound and pre-call words. Native `world_rnd`/`world_random` tag their C call site
 through an optional observer; the core neither allocates nor performs I/O.

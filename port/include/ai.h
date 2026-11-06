@@ -143,6 +143,7 @@ typedef struct ai_state {
     int32_t swim_damage, swim_check, mon_swim_damage_time;
     int32_t swim_panel, swim_art;
     int32_t difficulty;
+    int32_t attack_difficulty; /* Definition delays are not normalized when saving PERSON HP. */
     int32_t pc_sound, body_mark_count[6];
     int32_t gem_count_down, gem_count_down_timer;
     int32_t unk_144AE0;
@@ -167,9 +168,12 @@ static inline void ai_pc_set_shake(ai_state *a, int32_t value)
     a->pc.unk_1444EC=value;
 }
 
-int ai_init(ai_state *a, world *w);
+int ai_init(ai_state *a, world *w, unsigned difficulty);
 void ai_start_clock(ai_state *a, uint32_t timer_ticks);
 int ai_set_difficulty(ai_state *a, world *w, unsigned difficulty);
+int ai_set_attack_difficulty(ai_state *a, unsigned difficulty);
+int ai_set_monster_attack_ignore(ai_state *a, int monster, unsigned previous,
+                                  unsigned difficulty);
 int ai_init_pc(struct events_state *e, sim_state *s, world_rng *rng,
                 const cm_exe *exe, unsigned start_scene, uint32_t timer_ticks);
 void ai_save_pc_info(struct events_state *e, const world *w);
