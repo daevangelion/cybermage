@@ -7,6 +7,7 @@
 typedef struct {
     uint8_t *pixels;
     uint8_t coverage[CM_WIDTH * CM_HEIGHT]; /* 0 keep,1 replace,2+ LUT row */
+    uint32_t source[CM_WIDTH * CM_HEIGHT]; /* LUT input, canvas coordinates */
     uint8_t maps[CM_OVERLAY_MAPS][256];
     const uint8_t *map_source[CM_OVERLAY_MAPS];
     uint16_t previous[CM_OVERLAY_MAPS];
@@ -21,6 +22,7 @@ int gfx_overlay_end(void);
 void gfx_store(uint8_t *dst,uint8_t color);
 void gfx_map_pixel(uint8_t *dst,const uint8_t table[256]);
 void gfx_cover(uint8_t *dst,unsigned count);
+void gfx_copy(uint8_t *dst,const uint8_t *src,unsigned count);
 
 typedef struct {
     const uint8_t *data;

@@ -27,6 +27,17 @@ int main(void)
     assert(overlay.coverage[0]==1 && pixels[0]==17);
     gfx_cover(pixels+3,4);
     for (i=3;i<7;++i) assert(overlay.coverage[i]==1);
+    gfx_copy(pixels+21,pixels+20,1);
+    op=overlay.coverage[21];
+    assert(op>=2 && overlay.source[21]==20 && overlay.maps[op-2][77]==77);
+    gfx_map_pixel(pixels+21,a);
+    op=overlay.coverage[21];
+    assert(overlay.source[21]==20 && overlay.maps[op-2][77]==a[77]);
+    gfx_copy(pixels+22,pixels+2,1);
+    op=overlay.coverage[22];
+    assert(overlay.source[22]==2 && overlay.maps[op-2][77]==b[a[77]]);
+    gfx_copy(pixels+23,pixels+1,1);
+    assert(overlay.coverage[23]==1 && pixels[23]==255);
     assert(gfx_overlay_end()==0);
     gfx_store(pixels+7,255);
     assert(pixels[7]==255 && overlay.coverage[7]==0);

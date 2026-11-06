@@ -5,13 +5,20 @@
 #define TEXT_LIMIT (32 * CM_WIDTH)
 
 static cm_overlay *active_overlay;
+static uint8_t identity_map[256];
+static int identity_ready;
 
 int gfx_overlay_begin(cm_overlay *overlay,uint8_t *pixels)
 {
+    unsigned i;
     if (!overlay || !pixels || active_overlay)
         return cm_fail("UI overlay",0,"invalid or nested overlay capture");
     overlay->pixels=pixels;overlay->map_count=0;overlay->error=0;
     overlay->last_source=NULL;
+    if (!identity_ready) {
+        for (i=0;i<256;++i) identity_map[i]=(uint8_t)i;
+        identity_ready=1;
+    }
     memset(overlay->coverage,0,sizeof overlay->coverage);
     active_overlay=overlay;
     return 0;
@@ -25,7 +32,7 @@ int gfx_overlay_end(void)
     return error;
 }
 
-static uint8_t *coverage(uint8_t *dst)
+static uint8_t *coverage(const uint8_t *dst)
 {
     uintptr_t offset;
     if (!active_overlay) return NULL;
@@ -77,10 +84,40 @@ void gfx_map_pixel(uint8_t *dst,const uint8_t table[256])
 {
     uint8_t *op=coverage(dst);
     if (op && *op!=1) {
+        if (!*op) active_overlay->source[op-active_overlay->coverage]=(uint32_t)(op-active_overlay->coverage);
         int row=overlay_map(table,*op ? (unsigned)*op-2:UINT16_MAX);
         if (row>=0) *op=(uint8_t)(row+2);
     }
     *dst=table[*dst];
+}
+
+void gfx_copy(uint8_t *dst,const uint8_t *src,unsigned count)
+{
+    uint8_t *to=coverage(dst),*from=coverage(src);
+    if (to && count) {
+        cm_overlay *o=active_overlay;
+        size_t d=(size_t)(to-o->coverage),s=from ? (size_t)(from-o->coverage):0;
+        unsigned k;
+        int identity=-1;
+        if (count>sizeof o->coverage-d || (from && count>sizeof o->coverage-s)) {
+            o->error=cm_fail("UI overlay",(uint32_t)d,"copy span outside canvas");
+            return;
+        }
+        if (!from) memset(to,1,count);
+        else for (k=0;k<count;++k) {
+            unsigned i=d>s ? count-1-k:k;
+            uint8_t op=from[i];
+            if (!op) {
+                if (identity<0) identity=overlay_map(identity_map,UINT16_MAX);
+                if (identity<0) return;
+                to[i]=(uint8_t)(identity+2);o->source[d+i]=(uint32_t)(s+i);
+            } else {
+                to[i]=op;
+                if (op>=2) o->source[d+i]=o->source[s+i];
+            }
+        }
+    }
+    memmove(dst,src,count);
 }
 
 /* CM_HI.EXE Video::SetPalette: VGA DAC values become RGB8 by shifting two. */
