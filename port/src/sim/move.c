@@ -1,5 +1,6 @@
 #include "sim_internal.h"
 #include "ai.h"
+#include "audio.h"
 
 static int32_t clamp(int32_t n, int32_t low, int32_t high)
 {
@@ -187,6 +188,14 @@ int sim_move_person(sim_state *s, world *w, unsigned object,
             if (crouch != s->unk_144b34) {
                 s->unk_144b34 = crouch;
                 s->unk_144b3c = -1;
+                /* MovePerson047A9F..047AFA: forced crouch plays sample0 and
+                 * produces the next frame's hit shake, even without damage. */
+                if (s->ai) {
+                    if (snd_done(s->ai->pc_sound, 0))
+                        s->ai->pc_sound = snd_play(0,
+                            32767 - world_rnd(&w->rng, 0x4000), 32768);
+                    if (s->ai->pc_flash < 2) s->ai->pc_flash = 2;
+                }
                 body_height(s, o);
             }
         }

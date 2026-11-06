@@ -480,3 +480,24 @@ right-side priority. Vehicle013D67 bypasses all four. The old native code
 mislabelled49 as4F and omitted the side aliases; the genuine Training coast
 trace first diverged at51 when keypad9 was held. The phase fixture checks
 all four mappings, simultaneous-key priority and vehicle exclusion.
+
+## Standing gate: forced-ceiling crouch
+
+The isolated `5bc4fde` gate covers76 named original traces; its receipt is
+`gate-5bc4fde.json`. It records33 scoped/full matches,33 divergences and10
+Easy0 configuration-prerequisite failures, with strict build/check exit0.
+The earned Training stair-fight now matches all418 player records and62550
+actor checkpoints/RNG through417 completed frames. Player-only captures
+remain explicitly narrower than actor/RNG comparisons.
+
+The first fence-jump RNG divergence is pre-frame88, before player X differs
+at89; Regen-carry similarly differs on RNG116, then player117. Both follow
+a forced `CrouchTopFlat` adjustment. Original `CM_HI.EXE:047A9F..047AE1`
+checks `PCSound` with sample0 and, when done, draws `RND(16384)` for
+`PlayDIGI(0,32767-random,32768)`, storing the returned handle even when muted.
+`047AE7..047AFA` raises hit flash to at least2 without lowering a stronger hit.
+This produces the next frame's real `01CF71..01D09E` shake and collision push.
+Native `sim_move_person` previously adjusted only body height and stance,
+omitting that entire sound/RNG/hit producer. The regression uses a bounded
+ceiling fixture and checks the muted sound's actual RNG draw, no-repeat
+contact and stronger-flash preservation; it does not fit a route coordinate.
