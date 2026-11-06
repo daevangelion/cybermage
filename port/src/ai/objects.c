@@ -3,9 +3,6 @@
 #include "events.h"
 
 /* CM_HI.EXE UpdateObjects 0x348C4. State jump table is at 0x34888. */
-static const unsigned fire_missile[12] = {2,19,17,45,20,15,14,6,7,9,44,51};
-static const unsigned throw_missile[3] = {1,38,46};
-static const unsigned spell_missile[16] = {9,11,21,22,23,24,25,26,27,46,50,9,39,9,9,9};
 
 static int32_t add(int32_t a, int32_t b)
 {
@@ -88,7 +85,7 @@ static int actor_attack(ai_state *a, sim_state *s, world *w, unsigned id,
     if (p->unk_0028 > 2) p->unk_0028 -= 2;
     if (ai_move_object(a, s, w, id, tick, p->unk_001A == 1 ? fire_moving : moving)) return -1;
     if (tick && m->kind == 15) {
-        if (fire_missile[m->fire] == 17) {
+        if (a->fire_missile[m->fire] == 17) {
             unsigned pan;
             int vol;
             if (snd_clip(w, (unsigned)p->object, 0x60000, 0x7FFF, 0, &pan, &vol)) {
@@ -96,7 +93,7 @@ static int actor_attack(ai_state *a, sim_state *s, world *w, unsigned id,
                 else snd_set_panvol(p->unk_0050, pan, vol, 0);
             }
         }
-        if (ai_launch_missile(a, s, w, (unsigned)p->object, target, fire_missile[m->fire])) return -1;
+        if (ai_launch_missile(a, s, w, (unsigned)p->object, target, (unsigned)a->fire_missile[m->fire])) return -1;
     }
     if (!p->unk_0018) return 0;
     if (tick && m->kind == 15 && p->unk_0050 != -1) {
@@ -143,7 +140,7 @@ static int actor_attack(ai_state *a, sim_state *s, world *w, unsigned id,
     }
     case 0: case 2:
         if (ai_launch_missile(a, s, w, (unsigned)p->object, target,
-                              p->unk_001A == 2 ? throw_missile[m->throw_type] : fire_missile[m->fire])) return -1;
+                              (unsigned)(p->unk_001A == 2 ? a->throw_missile[m->throw_type] : a->fire_missile[m->fire]))) return -1;
         if (p->unk_0034) break;
         p->state = 1; p->unk_0016 = 1;
         if (can_move && p->unk_0028) p->unk_001E = (int16_t)(1 + world_rnd(&w->rng, 4));
@@ -159,7 +156,7 @@ static int actor_attack(ai_state *a, sim_state *s, world *w, unsigned id,
         if (spell == 14) p->unk_005C += 300;
         else {
             if (spell >= 16) return cm_fail("UpdateObjects", id, "unknown spell projectile");
-            if (ai_launch_missile(a, s, w, (unsigned)p->object, target, spell_missile[spell])) return -1;
+            if (ai_launch_missile(a, s, w, (unsigned)p->object, target, (unsigned)a->spell_missile[spell])) return -1;
         }
         p->state = 1; p->unk_0016 = 1;
         p->unk_001E = (int16_t)(can_move && p->unk_0028 ?
@@ -475,7 +472,7 @@ static int actor_state(ai_state *a, sim_state *s, world *w, unsigned id,
                 } else p->unk_001E = 1;
             }
         } else if (target) {
-            if (ai_launch_missile(a, s, w, (unsigned)p->object, target, fire_missile[m->fire])) return -1;
+            if (ai_launch_missile(a, s, w, (unsigned)p->object, target, (unsigned)a->fire_missile[m->fire])) return -1;
         } else { p->unk_00BC = 5; p->unk_0016 = 1; p->unk_001E = 1; }
         if (p->unk_0018) {
             --p->unk_0034;
@@ -493,6 +490,8 @@ int ai_update_objects(ai_state *a, sim_state *s, world *w, uint32_t timer_ticks)
 {
     unsigned id;
     int tick = 0, fast = 0, water_damage = 0;
+    if (!a->tables_loaded)
+        return cm_fail("UpdateObjects", 0, "combat tables not loaded");
     a->timer_ticks = timer_ticks;
     if ((int32_t)timer_ticks > (int32_t)a->animation_deadline) {
         tick = 1; a->animation_deadline = timer_ticks + 4;

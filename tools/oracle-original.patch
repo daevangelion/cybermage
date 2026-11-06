@@ -23,7 +23,7 @@ index 5118211..a7b3ee4 100644
                          if self.trace_ints {
                              eprintln!("[dos] open {} -> {}", name, h);
 diff --git a/crates/game/src/main.rs b/crates/game/src/main.rs
-index e9094e3..5e93c17 100644
+index e9094e3..48ab7bd 100644
 --- a/crates/game/src/main.rs
 +++ b/crates/game/src/main.rs
 @@ -14,6 +14,7 @@ mod desktop;
@@ -76,7 +76,7 @@ index e9094e3..5e93c17 100644
              let start_ic = self.cpu.icount;
              let mut res = Ok(());
              for _ in 0..n {
-+                if let Some(trace) = &mut self.frame_trace { trace.observe(&self.cpu); }
++                if let Some(trace) = &mut self.frame_trace { trace.observe(&self.cpu, self.m.time); }
                  if let Err(e) = self.cpu.step(&mut self.m) {
                      res = Err(e);
                      break;
@@ -130,10 +130,10 @@ index cfdf063..d8fbaf4 100644
          if self.mode == 3 {
 diff --git a/crates/game/src/frame_trace.rs b/crates/game/src/frame_trace.rs
 new file mode 100644
-index 0000000..b462cc7
+index 0000000..7aeaf0b
 --- /dev/null
 +++ b/crates/game/src/frame_trace.rs
-@@ -0,0 +1,135 @@
+@@ -0,0 +1,169 @@
 +use std::io::{BufWriter, Write};
 +use x86::{Cpu, EAX};
 +use crate::le::rt;
@@ -155,6 +155,8 @@ index 0000000..b462cc7
 +pub struct FrameTrace {
 +    file: BufWriter<std::fs::File>, ranges: Vec<Range>,
 +    pending: Option<Pending>, frame: u32, this: u32,
++    actors: Option<BufWriter<std::fs::File>>,
++    seed: BufWriter<std::fs::File>,
 +}
 +
 +impl FrameTrace {
@@ -176,13 +178,22 @@ index 0000000..b462cc7
 +            assert!(ranges.len() < RANGE_MAX && total <= RANGE_BYTES_MAX, "too much trace memory");
 +            ranges.push(Range { relative, address, length });
 +        }
++        let mut seed_path = std::path::PathBuf::from(&path);
++        seed_path.set_file_name("seed.csv");
++        let mut seed = BufWriter::new(std::fs::File::create(seed_path).expect("create seed trace"));
++        writeln!(seed,"bios_tick,icount,time").expect("seed header");
 +        let mut file = BufWriter::new(std::fs::File::create(path).expect("create frame trace"));
 +        writeln!(file,"CMTRACE1,{}",ranges.len()).expect("write trace");
 +        for r in &ranges {
 +            writeln!(file,"range,{},{:x},{}",if r.relative {'x'} else {'l'},r.address,r.length).expect("write trace");
 +        }
 +        writeln!(file,"frame,ticks,previous,delta,limit_time,limit_flag,object,person,x,y,z,heading,pitch,body,kblatch,bios_shift,object_z,camera_u,camera_v,camera_z,camera_angle,horizon,scene,keys,input_keys,ranges...").expect("write trace");
-+        Some(Self { file, ranges, pending: None, frame: 0, this: 0 })
++        let actors = std::env::var_os("CM_ACTOR_TRACE").map(|path| {
++            let mut out = BufWriter::new(std::fs::File::create(path).expect("create actor trace"));
++            writeln!(out,"frame,ticks,rng0,rng1,rng2,person,object,x,y,z,heading,state,status,hp,target,animation,cursor,active").expect("actor header");
++            out
++        });
++        Some(Self { file, ranges, pending: None, frame: 0, this: 0, actors, seed })
 +    }
 +
 +    fn hex(file: &mut BufWriter<std::fs::File>, bytes: &[u8]) {
@@ -202,12 +213,35 @@ index 0000000..b462cc7
 +        }
 +    }
 +
-+    pub fn observe(&mut self, c: &Cpu) {
++    pub fn observe(&mut self, c: &Cpu, time: f64) {
 +        match c.eip {
++            p if p == rt(0x68ABF) => {
++                writeln!(self.seed,"{},{},{}",c.rd16(0x46C),c.icount,time).expect("write seed source");
++                self.seed.flush().expect("flush seed source");
++            }
 +            p if p == rt(FRAME_ENTRY) => {
 +                self.flush_pending();
 +                self.this = c.r[EAX];
 +                let x = self.this;
++                if let Some(out) = &mut self.actors {
++                    let count = c.rd32(x+0x130D24);
++                    assert!(count <= 2842,"invalid actor trace count");
++                    for i in 0..count {
++                        let p = c.rd32(x+0x13141C+i*4);
++                        assert!(p != 0,"null actor trace record");
++                        let obj = c.rd16(p) as u32;
++                        assert!(obj < 2842,"invalid traced actor object");
++                        writeln!(out,"{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}",
++                            self.frame,c.rd32(rt(0x207473)),
++                            c.rd16(rt(0x9747F)),c.rd16(rt(0x97481)),c.rd16(rt(0x97483)),
++                            i,obj,c.rd32(x+0x61418+obj*4) as i32,c.rd32(x+0x64080+obj*4) as i32,
++                            c.rd32(x+0x78D8C+obj*4) as i32,c.rd16(x+0x7E65C+obj*2),
++                            c.rd16(p+0x1C) as i16,c.rd16(p+0x36) as i16,c.rd16(p+0x38) as i16,
++                            c.rd32(p+8) as i32,c.rd8(p+0xBC),c.rd8(p+0xBD),c.rd8(x+0x7DB42+obj))
++                            .expect("write actor trace");
++                    }
++                    out.flush().expect("flush actor trace");
++                }
 +                if self.frame == 0 {
 +                    if let Some(prefix) = std::env::var_os("CM_FRAME_SNAPSHOT") {
 +                        let mut path = std::path::PathBuf::from(&prefix);

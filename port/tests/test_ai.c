@@ -6,6 +6,8 @@
 
 static world w;
 static ai_state a;
+static sim_state simulation;
+static ui_save_state save;
 
 int main(int argc, char **argv)
 {
@@ -45,7 +47,18 @@ int main(int argc, char **argv)
     w.objects[3].flags = UINT32_C(0x00000400);
     ai_make_missile_list(&a, &w);
     assert(a.missile_count == 1 && a.missile_objects[0] == 1);
-    if (argc == 2) {
+    w.persons[1].object = 2; w.persons[1].status = 0;
+    w.persons[2].object = 3; w.persons[2].status = 2;
+    w.objects[1].x = w.objects[1].y = 0x18000;
+    w.objects[1].height = w.objects[2].height = 0x2000;
+    w.objects[2].x = 0x1A000; w.objects[2].y = 0x18000;
+    w.objects[1].heading = cm_atan64k(w.objects[1].x, w.objects[1].y,
+                                     w.objects[2].x, w.objects[2].y);
+    assert(ai_h2h_target(&a, &simulation, &w, 1, 0) == 1);
+    assert(a.h2h_angle == 0 && a.h2h_distance < 0x6000);
+    w.persons[1].status = 2;
+    assert(ai_h2h_target(&a, &simulation, &w, 1, 0) == 0);
+    if (argc >= 2) {
         const uint8_t *p;
         uint32_t size;
         assert(rsc_open(&w.scenes, argv[1]) == 0);
@@ -62,6 +75,27 @@ int main(int argc, char **argv)
         puts("MONSTER=109 ANIMOBJ=56");
         rsc_close(&w.scenes);
     }
+    if (argc == 3) {
+        assert(ai_load_tables(&a, argv[2]) == 0);
+        assert(a.tables_loaded && a.missile_types[1].fxo == 3);
+        assert(a.missile_types[2].speed == 0x40000 && a.fire_missile[0] == 2);
+        puts("Original executable combat tables loaded");
+    }
+    w.object_count = 64;
+    for (i = 0; i < AI_MISSILE_MAX; ++i) {
+        a.missiles[i].object = (int32_t)i + 1;
+        a.missiles[i].speed = (int32_t)i * 100;
+    }
+    for (i = 0; i < AI_SOUL_MAX; ++i) {
+        a.souls[i].object = (int32_t)i + 13;
+        a.souls[i].fxo = (int32_t)i + 20;
+    }
+    ai_save_export(&a, &save);
+    a.missiles[3].speed = -999;
+    assert(ai_save_import(&a, &w, &save) == 0);
+    assert(a.missiles[3].speed == 300 && w.object_count == 64 && w.fxo_count == 30);
+    save.unk_135ECC[1] = 64;
+    assert(ai_save_import(&a, &w, &save) == -1);
     puts("AI data tests passed");
     return 0;
 }

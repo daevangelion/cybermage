@@ -92,13 +92,11 @@ int ai_sequence_decode(ai_sequence *s, const uint8_t *p, uint32_t size)
     return 0;
 }
 
-int ai_init(ai_state *a, world *w)
+int ai_load_scene_definitions(ai_state *a, world *w)
 {
     const uint8_t *p;
     uint32_t size;
     unsigned i;
-    memset(a, 0, sizeof(*a));
-    a->pc_sound = -1;
     if (rsc_entry(&w->scenes, 98, &p, &size)) return -1;
     if (size % AI_MONSTER_DISK_SIZE || size / AI_MONSTER_DISK_SIZE > AI_MONSTER_MAX)
         return cm_fail(w->scenes.path, 98, "invalid MONSTER database");
@@ -119,7 +117,17 @@ int ai_init(ai_state *a, world *w)
     for (i = 0; i < a->sequence_count; ++i)
         if (ai_sequence_decode(&a->sequences[i], p + i * AI_SEQUENCE_DISK_SIZE,
                                AI_SEQUENCE_DISK_SIZE)) return -1;
-    if (ai_init_persons(a, w) || ai_init_missiles(a, w)) return -1;
+    return 0;
+}
+
+int ai_init(ai_state *a, world *w)
+{
+    memset(a, 0, sizeof(*a));
+    a->pc_sound = -1;
+    a->pc_learn_spell = -1;
+    a->difficulty = 1; /* CM_HI.EXE playDiffLevel initial data at 0x925E8. */
+    if (ai_load_scene_definitions(a, w) || ai_init_persons(a, w) ||
+        ai_init_missiles(a, w)) return -1;
     return ai_init_soul_fire(a, w);
 }
 

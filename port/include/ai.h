@@ -2,6 +2,7 @@
 #define CM_AI_H
 
 #include "sim.h"
+#include "ui.h"
 
 #define AI_MONSTER_MAX 109
 #define AI_MONSTER_DISK_SIZE 276
@@ -19,6 +20,7 @@
 #define AI_DYNAMIC_FIRST 2378
 #define AI_PERSON_DISK_SIZE 351
 #define AI_TARGET_COLUMN 320
+#define AI_MISSILE_TYPES 53
 
 typedef struct { uint8_t count, sides; int16_t add; } ai_dice;
 typedef struct {
@@ -67,8 +69,25 @@ typedef struct {
     int32_t sound, speed, variant, radius; /* +20,+24,+28,+2C */
 } ai_missile;
 typedef struct {
+    int32_t fxo, sound, volume, aim, speed;
+} ai_missile_data;
+typedef struct {
     int32_t active, object, fxo, type, value, lifetime, frame;
 } ai_soul;
+
+typedef struct {
+    int16_t pistol_angle, pistol_angoffset;
+    int32_t pistol_lr, pistol_lroffset, pistol_ud, pistol_udoffset;
+    int32_t pistol_fall, pistol_falloffset, pistol_xoffset, pistol_boffset;
+    int32_t w_max_leftaimx, w_leftaimx, w_max_rightaimx, w_rightaimx;
+    int32_t w_max_topaimy, w_topaimy, w_max_botaimy, w_botaimy;
+    int32_t aim_x, aim_y, tank_aim_y; /* Xox+144ABC/144AC0/144AC4 */
+    int32_t auto_enable, tank_auto;
+    uint32_t reset_auto_aim_time;
+    int32_t weapon_aim_step, tank_aim_step; /* Xox+144A48 / +144A50 */
+    int32_t tank_udoffset, tank_ud, tank_fall, tank_falloffset;
+    unsigned hand_type; /* Xox+144A40, CenterAim table index */
+} ai_pc_aim;
 
 typedef struct ai_state {
     struct events_state *events;
@@ -83,16 +102,34 @@ typedef struct ai_state {
     ai_target_list targets;
     ai_missile missiles[AI_MISSILE_MAX];
     ai_soul souls[AI_SOUL_MAX];
+    ai_missile_data missile_types[AI_MISSILE_TYPES];
+    int32_t fire_missile[12], throw_missile[3], spell_missile[16];
+    int32_t sword_range[3];
+    ai_dice zone_dice[24][3];
+    int32_t zone_radius[34][3]; /* Type 11 reads adjacent EXE rows through 33. */
+    int tables_loaded;
     int32_t swim_damage, swim_check, mon_swim_damage_time;
     int32_t swim_panel, swim_art;
     int32_t difficulty;
     int32_t pc_sound, body_mark_count[6];
     int32_t gem_count_down, gem_count_down_timer;
     int32_t unk_144AE0;
+    uint32_t missile_fade_time;
+    int32_t pc_learn_spell, pc_flash;
+    int32_t h2h_distance;
+    int16_t h2h_angle;
+    ai_pc_aim pc_aim;
 } ai_state;
 
 int ai_init(ai_state *a, world *w);
+int ai_load_tables(ai_state *a, const char *asset_dir);
+int ai_load_scene_definitions(ai_state *a, world *w);
+int ai_save_import(ai_state *a, world *w, const ui_save_state *save);
+void ai_save_export(const ai_state *a, ui_save_state *save);
 int ai_init_persons(ai_state *a, world *w);
+int ai_set_person(ai_state *a, world *w, unsigned person, unsigned type,
+                   unsigned state, int32_t x, int32_t y, int32_t z,
+                   int32_t floor_z, uint16_t heading);
 int ai_update_objects(ai_state *a, sim_state *s, world *w, uint32_t timer_ticks);
 int ai_monster_blocked(ai_state *a, sim_state *s, world *w, unsigned object,
                        unsigned collisions);
@@ -107,6 +144,8 @@ int32_t ai_do_dice(world_rng *rng, ai_dice d);
 int ai_person_kind(const ai_state *a, const world *w, unsigned person);
 int target_query(ai_target_list *out, const world *w, const world_camera *camera);
 int32_t ai_set_auto_target(const ai_state *a, const world *w);
+int32_t ai_h2h_target(ai_state *a, const sim_state *s, const world *w,
+                      unsigned source, unsigned sword);
 void ai_make_missile_list(ai_state *a, const world *w);
 void ai_track_target(world *w, unsigned object, unsigned other, int offset);
 int ai_sight_person(const ai_state *a, sim_state *s, world *w,
@@ -127,5 +166,18 @@ int ai_damage_person(ai_state *a, world *w, unsigned person, int32_t damage,
                      int32_t armor_percent, int32_t erosion_percent);
 int ai_launch_missile(ai_state *a, sim_state *s, world *w, unsigned source,
                       unsigned target, unsigned type);
+
+int ai_pc_launch_missile(ai_state *a, sim_state *s, world *w, unsigned type,
+                         int32_t aim_x, int32_t aim_y, int16_t aim);
+int ai_update_missile(ai_state *a, sim_state *s, world *w);
+int ai_freeze_monster(ai_state *a, sim_state *s, world *w, unsigned object,
+                       unsigned tier, unsigned dice_row);
+int ai_radial_damage(ai_state *a, sim_state *s, world *w, unsigned source,
+                      unsigned radius_zone, int32_t shooter, unsigned dice_row,
+                      unsigned resistance, int32_t force);
+int ai_pc_zone_radius(const world *w, unsigned source, unsigned tile);
+int ai_pc_radial_damage(ai_state *a, sim_state *s, world *w, unsigned source,
+                         unsigned radius_zone, unsigned dice_row, int double_hit,
+                         int32_t armor, int32_t erosion);
 
 #endif

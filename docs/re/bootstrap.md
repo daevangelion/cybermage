@@ -192,6 +192,13 @@ u32 runtime pointer, and 0xC0 original bytes. This is diagnostic evidence, not
 a native struct serialization or a replacement for loading the retail scene.
 All trace/snapshot files remain ignored under `captures/`.
 
+`--actor-trace` (with `--frame-trace`) also writes `actors.csv`, one row per
+PERSON at each frame entry: object coordinates/heading, PERSON state/status/HP,
+target, animation/cursor, object active flag, and the three original RNG words.
+`seed.csv` records `bios_tick,icount,time` at original RANDOM_SEED entry
+`CM_HI.EXE:068ABF`, before it copies BIOS word `0x46C`; this is a source
+measurement, not a seed inferred from a later checkpoint.
+
 The wrapper verifies the complete source checkout before building: it accepts
 only pristine pinned HEAD (then applies the patch) or exactly HEAD plus the
 patch, including the new observer source. Staged changes, unrelated edits,
