@@ -123,6 +123,14 @@ RNG, deadlines or target outputs are installed. Corrected movement inputs retain
 all106 measured BDA bytes, including Ctrl=4 on frames71..75. This named receipt
 does not silently certify later concurrent HEAD changes.
 
+Later named4461e87 incremental route gate:
+[gate-4461e87.json](docs/re/gate-4461e87.json) records2/3 full actor/RNG matches
+and3/3 player matches: hall119110 and door5-plain81 fully match; door5
+approach198 first differs on NPC120/RNG130. Actual saved switch5 changes0→1
+in both original and native door5-plain runs. These incremental results do not
+replace the full92-scenario counts above; the consolidated owner cohort awaits
+the difficulty, death/reload and remaining recoil cutovers.
+
 ## Verification Checklist
 
 - [x] Ph3: 3+ functions cross-checked against original execution (world math/rays and CollFire gates above).
