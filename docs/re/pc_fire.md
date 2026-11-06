@@ -19,6 +19,14 @@ Retail CM_HI.EXE v1.01F LE link addresses. Gameplay only; UI consumes state.
   and WeaponTrajectory16x2x8 are supplied executable tables, not compiled assets.
   `ai_pc_equip` also runs at scene initialization/save restore, matching
   LoadScene0x12148/0x12155 before the first game frame.
+- Selector commits0x1E4A0..0x1E768 call `ai_pc_select` after assigning the selected
+  raw mode/item, before clearing the selector. It equips and resets aim in that
+  same frame, then clears fire/cooldown/latch. Modern RMB's previous effective
+  mode must not override the new selection. EquipHHWeapon0x103A4 preserves glove
+  type; EquipWeapon resets glow phase only in its mode5 branch0x10441.
+  Selecting another power from mode5 changes glow set without resetting phase.
+  Focused native checks cover gun/melee/power/cancel commits and raw-mode aiming;
+  the full selector/hotkey consumer and its original-x86 fixtures belong to Events.
 - AutoSwordSwing0x1A07C uses autoSPos11x4 signed bytes, autoSInitMode9x3,
   autoSInitPos11 and timer-gated3-tick steps. No pixels are involved.
 - Keyboard hand steering0x12E83/0x1365B..0x13C02/0x13E1F uses the previous
@@ -110,3 +118,19 @@ provides clock/keys and measured BIOS seed, never recorded coordinates or hand s
 This is not all-weapons/full-firefight parity. The direct hand fixtures have no NPC
 targets; genuine earned-weapon pickup/punch verification is separate. Legacy mouse/
 tank hand activity still needs its input bridge; bob and keyboard producers are live.
+
+The original-only `vehicle-powerblade` scenario loads the genuinely earned
+`captures/earned-water` slot0, follows the river, stands/vaults onto the dry
+outcropping, picks up item4, then uses F1/F1 and Space. The 34-second capture has448
+frame entries, inventory120+4, mode2 and changing sword frames7/4/8. It does not
+inject coordinates, inventory or hand state. This is an original pickup/punch
+oracle, not yet a claim of native replay parity:
+
+```
+tools/oracle.sh vehicle-powerblade --import-saves captures/earned-water \
+  --frame-trace --actor-trace --rng-trace \
+  --trace-range x:1444e8:1536 --trace-range x:130d64:1600 \
+  --trace-range x:1313a4:128 --trace-range x:135ecc:576 \
+  --trace-range x:62518:48 --trace-range x:65180:48 \
+  --trace-range x:79e8c:48 --trace-range x:7eedc:24 --snapshot
+```
