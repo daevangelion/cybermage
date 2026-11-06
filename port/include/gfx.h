@@ -3,6 +3,25 @@
 
 #include "cm.h"
 
+#define CM_OVERLAY_MAPS 254
+typedef struct {
+    uint8_t *pixels;
+    uint8_t coverage[CM_WIDTH * CM_HEIGHT]; /* 0 keep,1 replace,2+ LUT row */
+    uint8_t maps[CM_OVERLAY_MAPS][256];
+    const uint8_t *map_source[CM_OVERLAY_MAPS];
+    uint16_t previous[CM_OVERLAY_MAPS];
+    unsigned map_count;
+    const uint8_t *last_source;
+    uint16_t last_previous, last_row;
+    int error;
+} cm_overlay;
+
+int gfx_overlay_begin(cm_overlay *overlay,uint8_t *pixels);
+int gfx_overlay_end(void);
+void gfx_store(uint8_t *dst,uint8_t color);
+void gfx_map_pixel(uint8_t *dst,const uint8_t table[256]);
+void gfx_cover(uint8_t *dst,unsigned count);
+
 typedef struct {
     const uint8_t *data;
     uint16_t height;

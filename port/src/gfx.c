@@ -4,6 +4,85 @@
 
 #define TEXT_LIMIT (32 * CM_WIDTH)
 
+static cm_overlay *active_overlay;
+
+int gfx_overlay_begin(cm_overlay *overlay,uint8_t *pixels)
+{
+    if (!overlay || !pixels || active_overlay)
+        return cm_fail("UI overlay",0,"invalid or nested overlay capture");
+    overlay->pixels=pixels;overlay->map_count=0;overlay->error=0;
+    overlay->last_source=NULL;
+    memset(overlay->coverage,0,sizeof overlay->coverage);
+    active_overlay=overlay;
+    return 0;
+}
+
+int gfx_overlay_end(void)
+{
+    int error;
+    if (!active_overlay) return cm_fail("UI overlay",0,"overlay capture not active");
+    error=active_overlay->error;active_overlay=NULL;
+    return error;
+}
+
+static uint8_t *coverage(uint8_t *dst)
+{
+    uintptr_t offset;
+    if (!active_overlay) return NULL;
+    offset=(uintptr_t)dst-(uintptr_t)active_overlay->pixels;
+    return offset<sizeof active_overlay->coverage ? active_overlay->coverage+offset:NULL;
+}
+
+void gfx_store(uint8_t *dst,uint8_t color)
+{
+    uint8_t *op=coverage(dst);
+    *dst=color;
+    if (op) *op=1;
+}
+
+void gfx_cover(uint8_t *dst,unsigned count)
+{
+    uint8_t *op=coverage(dst);
+    if (op) {
+        size_t offset=(size_t)(op-active_overlay->coverage);
+        if (count>sizeof active_overlay->coverage-offset) {
+            active_overlay->error=cm_fail("UI overlay",(uint32_t)offset,"coverage span outside canvas");
+            return;
+        }
+        memset(op,1,count);
+    }
+}
+
+static int overlay_map(const uint8_t table[256],unsigned previous)
+{
+    cm_overlay *o=active_overlay;
+    unsigned row,i;
+    if (o->last_source==table && o->last_previous==previous) return o->last_row;
+    for (row=0;row<o->map_count;++row)
+        if (o->map_source[row]==table && o->previous[row]==previous) break;
+    if (row==o->map_count) {
+        if (row==CM_OVERLAY_MAPS) {
+            o->error=cm_fail("UI overlay",row,"composed colormap bank full");
+            return -1;
+        }
+        for (i=0;i<256;++i)
+            o->maps[row][i]=table[previous==UINT16_MAX ? i:o->maps[previous][i]];
+        o->map_source[row]=table;o->previous[row]=(uint16_t)previous;++o->map_count;
+    }
+    o->last_source=table;o->last_previous=(uint16_t)previous;o->last_row=(uint16_t)row;
+    return (int)row;
+}
+
+void gfx_map_pixel(uint8_t *dst,const uint8_t table[256])
+{
+    uint8_t *op=coverage(dst);
+    if (op && *op!=1) {
+        int row=overlay_map(table,*op ? (unsigned)*op-2:UINT16_MAX);
+        if (row>=0) *op=(uint8_t)(row+2);
+    }
+    *dst=table[*dst];
+}
+
 /* CM_HI.EXE Video::SetPalette: VGA DAC values become RGB8 by shifting two. */
 int gfx_palette(uint8_t rgb[768], const uint8_t *data, uint32_t size,
                 const char *path)
@@ -96,7 +175,7 @@ static int text_draw(uint8_t *dst, const cm_font *f, int x, int y,
                         continue;
                     c = 1; /* title font TEXT_DEF 0x10EE8: shadow index 1 */
                 }
-                dst[ty * CM_WIDTH + tx] = c;
+                gfx_store(dst+ty*CM_WIDTH+tx,c);
             }
         }
         x += (int)width + f->spacing;
@@ -132,8 +211,10 @@ void gfx_blit(uint8_t *dst, int x, int y, const uint8_t *src,
         count = (unsigned)(CM_WIDTH - x);
     for (row = 0; row < height; ++row) {
         int ty = y + (int)row;
-        if (ty >= 0 && ty < CM_HEIGHT)
+        if (ty >= 0 && ty < CM_HEIGHT) {
             memcpy(dst + ty * CM_WIDTH + x, src + row * width + skip, count);
+            gfx_cover(dst+ty*CM_WIDTH+x,count);
+        }
     }
 }
 
@@ -148,5 +229,5 @@ void gfx_shade(uint8_t *dst, int x0, int y0, int x1, int y1,
     if (y1 >= CM_HEIGHT) y1 = CM_HEIGHT - 1;
     for (y = y0; y <= y1; ++y)
         for (x = x0; x <= x1; ++x)
-            dst[y * CM_WIDTH + x] = table[dst[y * CM_WIDTH + x]];
+            gfx_map_pixel(dst+y*CM_WIDTH+x,table);
 }
