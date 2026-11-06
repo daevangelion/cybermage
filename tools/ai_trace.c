@@ -1,6 +1,7 @@
 #include "ai.h"
 #include "events.h"
 #include "replay.h"
+#include "render.h"
 
 #include <inttypes.h>
 #include <stdio.h>
@@ -11,9 +12,51 @@ static world w;
 static ai_state a;
 static sim_state s;
 static events_state e;
+static rsc hipak;
 static FILE *steering_file;
 static uint64_t steering_sequence;
 static int64_t observed_frame = -1;
+
+typedef struct { FILE *out; unsigned object; uint64_t sequence; } collision_trace;
+
+static void collision_row(collision_trace *t, const world *scene, unsigned object,
+                           unsigned node, unsigned candidate, int32_t x, int32_t y)
+{
+    const world_object *a = &scene->objects[object], *b = &scene->objects[candidate];
+    fprintf(t->out, "%" PRIu64 ",%" PRId64 ",%u,%" PRId32 ",%" PRId32
+            ",%" PRId32 ",%" PRId32 ",%" PRId32 ",%" PRId32 ",%" PRId32
+            ",%" PRId32 ",%u,%u,%u,%" PRIu32 ",%" PRId32 ",%" PRId32
+            ",%" PRId32 ",%" PRId32 ",%" PRId32 ",%" PRId32 ",%u\n",
+            t->sequence, observed_frame, object, x, y, a->x, a->y, a->floor_z,
+            a->z, a->height, (int32_t)a->unk_74AF0, node, candidate, b->targetable,
+            b->flags, b->x, b->y, b->floor_z, b->z, b->height, (int32_t)b->unk_74AF0, b->active);
+}
+
+static void collision_observe(void *context, const world *scene, unsigned object,
+                               int32_t x, int32_t y)
+{
+    collision_trace *t = context;
+    int tx[2] = {(x - 0x4000) >> 16, (x + 0x4000) >> 16};
+    int ty[2] = {(y - 0x4000) >> 16, (y + 0x4000) >> 16};
+    unsigned row, col;
+    if (object != t->object) return;
+    collision_row(t, scene, object, 0, 0, x, y);
+    for (row = 0; row < 2; ++row) {
+        if (row && ty[0] == ty[1]) continue;
+        for (col = 0; col < 2; ++col) {
+            unsigned node, count = 0;
+            if (col && tx[0] == tx[1]) continue;
+            if (tx[col] < 0 || tx[col] >= CM_MAP_SIDE || ty[row] < 0 || ty[row] >= CM_MAP_SIDE) continue;
+            node = (unsigned)(ty[row] * CM_MAP_SIDE + tx[col]);
+            while (node && node < CM_CHAIN_NODES && ++count <= CM_CHAIN_NODES) {
+                unsigned id = scene->omap.nodes[node].object;
+                if (id < scene->object_count) collision_row(t, scene, object, node, id, x, y);
+                node = scene->omap.nodes[node].next;
+            }
+        }
+    }
+    ++t->sequence;
+}
 
 int __real_ai_monster_blocked(ai_state *, sim_state *, world *, unsigned, unsigned);
 
@@ -88,8 +131,9 @@ int main(int argc, char **argv)
     unsigned id;
     unsigned long seed;
     char *end;
-    const char *rng_path = NULL, *undefined_path = NULL, *steering_path = NULL;
-    rng_trace rng = {NULL, 0, -1};
+    const char *rng_path = NULL, *undefined_path = NULL, *steering_path = NULL, *collision_path = NULL;
+    static rng_trace rng = {NULL, 0, -1};
+    static collision_trace collision = {NULL, CM_OBJECT_MAX, 0};
     int next, initialized = 0;
     int arg;
     if (argc < 4 || !*argv[3] || *argv[3] == '-') return 2;
@@ -100,6 +144,13 @@ int main(int argc, char **argv)
             undefined_path = argv[++arg];
         else if (!strcmp(argv[arg], "--steering-trace") && arg + 1 < argc && !steering_path)
             steering_path = argv[++arg];
+        else if (!strcmp(argv[arg], "--collision-trace") && arg + 1 < argc && !collision_path)
+            collision_path = argv[++arg];
+        else if (!strcmp(argv[arg], "--collision-object") && arg + 1 < argc) {
+            unsigned long object = strtoul(argv[++arg], &end, 10);
+            if (!*argv[arg] || *end || object >= CM_OBJECT_MAX) return 2;
+            collision.object = (unsigned)object;
+        }
         else return 2;
     }
     seed = strtoul(argv[3], &end, 10);
@@ -115,6 +166,12 @@ int main(int argc, char **argv)
         steering_file = fopen(steering_path, "w");
         if (!steering_file) return 1;
         fputs("sequence,frame,object,x,y,heading,target,mode,collisions,flags,mask\n", steering_file);
+    }
+    if (collision_path) {
+        if (collision.object == CM_OBJECT_MAX) return 2;
+        collision.out = fopen(collision_path, "w");
+        if (!collision.out) return 1;
+        fputs("sequence,frame,object,proposed_x,proposed_y,source_x,source_y,source_floor,source_z,source_height,source_radius,node,candidate,targetable,flags,x,y,floor,z,height,radius,active\n", collision.out);
     }
     if (replay_open(&replay, argv[2])) return 1;
     puts("frame,ticks,rng0,rng1,rng2,person,object,x,y,z,heading,state,status,hp,target,animation,cursor,active");
@@ -135,13 +192,17 @@ int main(int argc, char **argv)
             platform_file_release(&rules_file);
             if (world_load_scene(&w, argv[1], (unsigned)f.values[CM_TRACE_SCENE]) ||
                 ai_init(&a, &w) || ai_load_tables(&a, argv[1]) ||
-                world_finalize_scene(&w) || events_init(&e, &w)) return 1;
+                world_finalize_scene(&w) || sim_start_scene(&s, &w) ||
+                events_init(&e, &w) || events_load_tables(&e, argv[1])) return 1;
+            length = snprintf(path, sizeof(path), "%s/HIPAK.RSC", argv[1]);
+            if (length < 0 || (size_t)length >= sizeof(path) ||
+                rsc_open(&hipak, path) || render_load(&w, &hipak)) return 1;
             ai_restore_pc_info(&e, &w);
             ai_start_clock(&a, (uint32_t)f.values[CM_TRACE_PREVIOUS]);
             if (undefined_path && import_undefined(undefined_path)) return 1;
             s.ai = &a; s.events = &e; a.events = &e;
-            s.body_height = w.objects[w.player_object].z +
-                            w.objects[w.player_object].z / 2 + 0x1000;
+            e.actors = &a;
+            if (collision.out) { s.collision_observe = collision_observe; s.collision_context = &collision; }
             initialized = 1;
         }
         for (id = 0; id < w.person_count; ++id) {
@@ -158,10 +219,20 @@ int main(int argc, char **argv)
         observed_frame = rng.frame;
         replay_input(&s, &f);
         if (sim_frame(&s, &w, &input, (uint32_t)f.values[CM_TRACE_TICKS]) ||
-            ai_update_objects(&a, &s, &w, (uint32_t)f.values[CM_TRACE_TICKS])) return 1;
+            ai_pc_input(&a, &s, &w) || events_step(&e, &s, &a, &w) ||
+            ai_update_objects(&a, &s, &w, (uint32_t)f.values[CM_TRACE_TICKS]) ||
+            ai_pc_hand2hand(&a, &s, &w)) return 1;
+        {
+            const world_object *pc = &w.objects[w.player_object];
+            w.camera.u = pc->x; w.camera.v = pc->y;
+            w.camera.z = pc->floor_z + s.body_height - 0x1000 + s.unk_144b38;
+            w.camera.angle = pc->heading;
+        }
+        if (target_query(&a.targets, &w, &w.camera)) return 1;
     }
-    replay_close(&replay); world_close(&w);
+    replay_close(&replay); render_unload(); rsc_close(&hipak); world_close(&w);
     if (rng.out && fclose(rng.out)) return 1;
     if (steering_file && fclose(steering_file)) return 1;
+    if (collision.out && fclose(collision.out)) return 1;
     return next < 0;
 }

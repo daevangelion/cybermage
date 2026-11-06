@@ -4,6 +4,7 @@
 #include "sim.h"
 #include "exe.h"
 #include "ui.h"
+#include "target.h"
 
 #define AI_MONSTER_MAX 109
 #define AI_MONSTER_DISK_SIZE 276
@@ -20,7 +21,6 @@
 #define AI_MISSILE_MAX 12
 #define AI_DYNAMIC_FIRST 2378
 #define AI_PERSON_DISK_SIZE 351
-#define AI_TARGET_COLUMN 320
 #define AI_MISSILE_TYPES 53
 
 typedef struct { uint8_t count, sides; int16_t add; } ai_dice;
@@ -58,11 +58,6 @@ typedef struct {
     int32_t speed[AI_ANIM_FRAMES], vertical[AI_ANIM_FRAMES];
     uint8_t image[AI_ANIM_FRAMES];
 } ai_sequence;
-
-typedef struct {
-    unsigned count;
-    uint16_t objects[CM_OBJECT_MAX];
-} ai_target_list;
 
 typedef struct {
     int32_t active, object, vertical, ticks; /* +0,+4,+8,+C */
@@ -130,7 +125,7 @@ typedef struct ai_state {
     int32_t acquisition_phase;
     unsigned missile_count;
     uint16_t missile_objects[CM_OBJECT_MAX];
-    ai_target_list targets;
+    target_list targets;
     ai_missile missiles[AI_MISSILE_MAX];
     ai_soul souls[AI_SOUL_MAX];
     ai_missile_data missile_types[AI_MISSILE_TYPES];
@@ -187,7 +182,6 @@ int ai_monster_decode(ai_monster *m, const uint8_t *data, uint32_t size);
 int ai_sequence_decode(ai_sequence *s, const uint8_t *data, uint32_t size);
 int32_t ai_do_dice(world_rng *rng, ai_dice d);
 int ai_person_kind(const ai_state *a, const world *w, unsigned person);
-int target_query(ai_target_list *out, const world *w, const world_camera *camera);
 int32_t ai_set_auto_target(const ai_state *a, const world *w);
 int32_t ai_h2h_target(ai_state *a, const sim_state *s, const world *w,
                       unsigned source, unsigned sword);

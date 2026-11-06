@@ -11,6 +11,33 @@ static sim_state simulation;
 static ui_save_state save;
 static events_state player;
 
+static void target_without_pixels(void)
+{
+    unsigned i;
+    target_view view = {120, 90, 400, 300};
+    memset(&w, 0, sizeof w);
+    world_trig_init(&w.trig);
+    w.camera.u = w.camera.v = 5 * 65536 + 32768;
+    w.camera.z = 32768;
+    w.map_id_texture[1] = 1;
+    for (i = 0; i < CM_MAP_CELLS; ++i) w.cells[0][i].wall_sides = 0x01010101;
+    w.object_count = 3;
+    w.texture_count = 3;
+    w.textures[2].half_w = 8192;
+    w.textures[2].base = 32768;
+    w.objects[1].flags = UINT32_C(0x20080000);
+    w.objects[1].x = w.camera.u + 16384;
+    w.objects[1].y = w.camera.v;
+    w.objects[1].z = w.objects[1].height = 32768;
+    w.objects[1].texture = 2; w.objects[1].targetable = 1;
+    w.omap.nodes[5 * 32 + 5].object = 1;
+    /* Extents suffice. No framebuffer, packed pixels or renderer load. */
+    assert(target_query(&a.targets, &w, &w.camera, &view) == 0);
+    assert(a.targets.count == 1 && a.targets.objects[0] == 1);
+    w.objects[1].flags &= ~UINT32_C(0x00080000);
+    assert(target_query(&a.targets, &w, &w.camera, &view) == 0 && a.targets.count == 0);
+}
+
 int main(int argc, char **argv)
 {
     uint8_t monster[AI_MONSTER_DISK_SIZE] = {0};
@@ -112,12 +139,81 @@ int main(int argc, char **argv)
         a.souls[i].object = (int32_t)i + 13;
         a.souls[i].fxo = (int32_t)i + 20;
     }
+    w.fxo_count = 30;
+    w.fxo_objects[13] = 42;
+    w.fxo_types[13] = 7;
+    a.timer_ticks = 100;
+    a.gem_count_down = 1; a.gem_count_down_timer = 180;
+    a.pc.fire = 1; a.pc.cooldown = 3; a.pc.latch = 1;
+    a.unk_144AE0 = 1; a.pc.magic_link_ticks = 5; a.pc.underwater = 9;
+    a.pc_aim.auto_enable = 1;
+    a.pc_aim.aim_x = 13; a.pc_aim.aim_y = -25; a.pc_aim.tank_aim_y = 19;
     ai_save_export(&a, &save);
+    assert(save.gemCountDownTimer == 80);
+    assert(save.unk_6D4[6] == 1 && save.unk_6D4[7] == 3 &&
+           save.unk_6D4[8] == 1 && save.unk_6D4[9] == 1 &&
+           save.unk_6D4[10] == 5 && save.unk_6D4[11] == 9 && save.unk_6D4[12] == 1 &&
+           save.unk_6D4[13] == 13 && (int32_t)save.unk_6D4[14] == -25 &&
+           save.unk_6D4[15] == 19);
+    a.timer_ticks = 500;
+    memset(&a.pc, 0, sizeof a.pc);
+    memset(&a.pc_aim, 0, sizeof a.pc_aim);
+    a.unk_144AE0 = 0;
     a.missiles[3].speed = -999;
     assert(ai_save_import(&a, &w, &save) == 0);
     assert(a.missiles[3].speed == 300 && w.object_count == 64 && w.fxo_count == 30);
-    save.unk_135ECC[1] = 64;
+    assert(w.fxo_objects[13] == 42 && w.fxo_types[13] == 7);
+    assert(a.gem_count_down_timer == 580 && a.pc.fire == 1 &&
+           a.pc.cooldown == 3 && a.pc.latch == 1 && a.unk_144AE0 == 1 &&
+           a.pc.magic_link_ticks == 5 && a.pc.underwater == 9 && a.pc_aim.auto_enable == 1 &&
+           a.pc_aim.aim_x == 13 && a.pc_aim.aim_y == -25 && a.pc_aim.tank_aim_y == 19);
+    save.unk_135ECC[1] = 2; /* Valid object, wrong reserved pool slot. */
     assert(ai_save_import(&a, &w, &save) == -1);
+    assert(cm_last_error()->offset == 0x2C551);
+    assert(a.missiles[0].object == 1);
+    save.unk_135ECC[1] = 1;
+    save.unk_13610C[2] = 13; /* Must not remap the SoulFire template. */
+    assert(ai_save_import(&a, &w, &save) == -1);
+    assert(cm_last_error()->offset == 0x2C791);
+    assert(a.souls[0].fxo == 20 && w.fxo_objects[13] == 42);
+    save.unk_13610C[2] = 20;
+    save.unk_13610C[1] = 1;
+    assert(ai_save_import(&a, &w, &save) == -1);
+    save.unk_13610C[1] = 13;
+    save.unk_135ECC[0] = 1; save.unk_135ECC[4] = 0;
+    assert(ai_save_import(&a, &w, &save) == -1);
+    save.unk_135ECC[4] = 53;
+    assert(ai_save_import(&a, &w, &save) == -1);
+    save.unk_135ECC[4] = 52;
+    assert(ai_save_import(&a, &w, &save) == 0);
+    save.unk_135ECC[7] = UINT32_MAX;
+    assert(ai_save_import(&a, &w, &save) == -1);
+    save.unk_135ECC[7] = 8;
+    assert(ai_save_import(&a, &w, &save) == -1);
+    save.unk_135ECC[7] = 0;
+    save.unk_13610C[5] = UINT32_C(0x80000000);
+    assert(ai_save_import(&a, &w, &save) == -1);
+    save.unk_13610C[5] = 0; save.unk_13610C[6] = INT32_MAX;
+    assert(ai_save_import(&a, &w, &save) == -1);
+    save.unk_13610C[6] = 0;
+    for (i = 6; i <= 15; ++i) {
+        uint32_t old = save.unk_6D4[i];
+        if (i == 11) continue; /* EventsAction72 arbitrary signed payload. */
+        save.unk_6D4[i] = INT32_MAX;
+        assert(ai_save_import(&a, &w, &save) == -1);
+        assert(cm_last_error()->offset == 0x6D4 + i * 4);
+        save.unk_6D4[i] = old;
+    }
+    a.gem_count_down = 0;
+    ai_save_export(&a, &save);
+    assert(save.gemCountDownTimer == 0);
+    a.timer_ticks = UINT32_MAX - 15;
+    a.gem_count_down = 1; a.gem_count_down_timer = 16;
+    ai_save_export(&a, &save);
+    assert(save.gemCountDownTimer == 32);
+    a.timer_ticks = UINT32_MAX - 7;
+    assert(ai_save_import(&a, &w, &save) == 0);
+    assert(a.gem_count_down_timer == 24);
     a.difficulty = 1;
     w.person_count = 3;
     w.persons[1].status = 0;
@@ -134,6 +230,7 @@ int main(int argc, char **argv)
     assert(ai_set_difficulty(&a, &w, 3) == -1);
     ai_start_clock(&a, 300);
     assert(a.animation_deadline == 300 && a.fast_animation_deadline == 300);
+    target_without_pixels();
     puts("AI data tests passed");
     return 0;
 }
