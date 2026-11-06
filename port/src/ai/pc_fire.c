@@ -73,6 +73,7 @@ int ai_pc_load_tables(ai_state *a, const cm_exe *exe)
     q->tank_auto = a->pc.auto_s_flag = 1; /* Init 0x10988..0x109A6. */
     q->hand_type = 1;
     a->pc.loop_sound = -1; /* InitPC/first scene, original +144A28. */
+    a->pc.sword_hum_slot = -1; /* Supplied EXE initial SwordHum_Slot9261C. */
     a->pc.kb_fire = 0x39; a->pc.kb_fire_bit = 1; /* ReKeyDefaults 0x52644. */
     return 0;
 }
@@ -276,6 +277,47 @@ static int launch_pc(ai_state *a, sim_state *s, world *w, unsigned type, int aim
 {
     return ai_pc_launch_missile(a, s, w, type, a->pc_aim.aim_x,
                                 a->pc_aim.aim_y, (int16_t)aim);
+}
+
+/* ProcessInputEvents 0x14857/0x1496A/0x14C19: create the new loop before
+ * aborting a different old sample; -1 is the real muted/full-pool handle. */
+static void player_loop(ai_pc_state *p, unsigned sample, int volume,
+                         int first_volume, int adjust)
+{
+    if (p->sword_hum_slot == -1) {
+        p->sword_hum_sound = (int32_t)sample;
+        p->sword_hum_slot = snd_loop(sample, first_volume, 32768);
+    } else if (p->sword_hum_sound != (int32_t)sample) {
+        int slot = snd_loop(sample, volume, 32768);
+        snd_abort(p->sword_hum_slot, (unsigned)p->sword_hum_sound);
+        p->sword_hum_slot = slot; p->sword_hum_sound = (int32_t)sample;
+    } else if (adjust) (void)snd_set_volume(p->sword_hum_slot, volume);
+}
+
+static void player_loops(ai_state *a, const sim_state *s, world *w, int mode)
+{
+    ai_pc_state *p = &a->pc;
+    int keep = 0;
+    if (mode == 2 && p->fire) {
+        player_loop(p, 32, 32767, 16384, 0);
+        keep = 1;
+    } else if (s->running && (mode == 1 || mode == 2 || mode == 5)) {
+        player_loop(p, 1, 32767, 32767, 0);
+        keep = 1;
+    }
+    if (mode == 7 && !s->vehicle_type) {
+        int32_t speed = s->unk_144af8 < 0 ? ai_sub32(0, s->unk_144af8) : s->unk_144af8;
+        int32_t volume = ai_add32(ai_signed32((uint32_t)speed << 7), 4096);
+        player_loop(p, 61, volume, volume, 1);
+        keep = 1;
+    }
+    if (!keep && p->sword_hum_slot != -1) {
+        snd_abort(p->sword_hum_slot, (unsigned)p->sword_hum_sound);
+        p->sword_hum_slot = -1;
+        /* 0x14D04..0x14D41: stopping running can play a breath even at full HP. */
+        if (p->sword_hum_sound == 1 && snd_done(a->pc_sound, 3))
+            a->pc_sound = snd_play(3, 16384-world_rnd(&w->rng, 8192), 32768);
+    }
 }
 
 static int bad_spell(ai_state *a, world *w)
@@ -638,6 +680,7 @@ int ai_pc_input(ai_state *a, sim_state *s, world *w)
     }
     keyboard_hand(p, s, mode);
     fire_input(a, s, &w->persons[w->player_person], mode);
+    player_loops(a, s, w, mode);
     if (ai_pc_hit_response(a, s, w) || prepare_aim(a, s, mode)) return -1;
     if ((mode == 1 && ranged_fire(a, s, w)) ||
         (mode == 5 && spell_fire(a, s, w)) ||
@@ -657,28 +700,40 @@ int ai_pc_input(ai_state *a, sim_state *s, world *w)
     return 0;
 }
 
-/* RenderBells 0x18BA4/0x18D73 and DrawACarMonitor 0x157AC advance after
- * hand drawing. Energy recovery 0x19340..0x193B2 precedes the HUD drawing. */
-void ai_pc_draw_advance(ai_state *a, const sim_state *s)
+/* RenderBells: defer hand counters until after the read-only HUD, then run
+ * low-HP respiration 0x1928B..0x19340 and energy recovery 0x19340..0x193B2. */
+int ai_pc_draw_advance(ai_state *a, const sim_state *s, world *w)
 {
-    ai_pc_state *p = &a->pc;
-    events_state *e = a->events;
-    int mode = combat_mode(s);
-    int maximum = signed16((uint32_t)e->max_energy);
-    int interval = 65-maximum/10;
+    ai_pc_state *p;
+    events_state *e;
+    int mode, maximum, interval, hp, max_hp;
+    if (!a || !s || !w || !a->events || !w->person_count)
+        return cm_fail("RenderBells", 0x1928b, "missing player state");
+    p = &a->pc; e = a->events; mode = combat_mode(s);
     /* RenderBells 0x18A05/0x190F1: per-draw effects, not timer-gated. */
     p->unk_1444EC = 0;
     if (a->pc_flash) a->pc_flash = ai_sub32(a->pc_flash, 1);
+    /* PERSON0 is the foot body even while player_person names a vehicle.
+     * Death dispatch is owned by the main loop. Chance precedes CheckSound. */
+    hp = low_word(w->persons[0].unk_0038);
+    max_hp = high_word(w->persons[0].unk_0038);
+    if (hp > 0 && hp < max_hp/2 &&
+        (p->sword_hum_slot == -1 || p->sword_hum_sound != 1) &&
+        !world_rnd(&w->rng, hp/2+2) && snd_done(a->pc_sound, 3))
+        a->pc_sound = snd_play(3, 16384-world_rnd(&w->rng, 8192), 32768);
+    maximum = signed16((uint32_t)e->max_energy);
+    interval = 65-maximum/10;
     if (interval < 6) interval = 6;
     if (after(s->timer_ticks, p->sp_regen_timer)) {
         if (signed16((uint32_t)e->energy) < maximum)
             e->energy = signed16((uint32_t)e->energy+1);
         p->sp_regen_timer = s->timer_ticks+(uint32_t)interval;
     }
-    if (mode != 1 && mode != 5 && !(mode == 7 && s->vehicle_type)) return;
-    if (!p->muzzle_mode || (mode == 7 && p->muzzle_mode < 0)) return;
+    if (mode != 1 && mode != 5 && !(mode == 7 && s->vehicle_type)) return 0;
+    if (!p->muzzle_mode || (mode == 7 && p->muzzle_mode < 0)) return 0;
     p->muzzle_count = ai_add32(p->muzzle_count, 1);
     p->muzzle_mode += p->muzzle_mode > 0 ? -1 : 1;
+    return 0;
 }
 
 static int hand_frame(ai_state *a, world_person *person)

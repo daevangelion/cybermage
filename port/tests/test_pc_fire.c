@@ -23,6 +23,7 @@ static int setup(const char *path)
     platform_file_release(&file);
     if (result) return -1;
     a.tables_loaded = 1; a.events = &e;
+    a.pc_sound = -1;
     w.person_count = 1; w.object_count = 2;
     w.player_object = 1; w.player_person = 0;
     w.persons[0].object = 1; w.persons[0].unk_0038 = 40 | 40<<16;
@@ -51,20 +52,20 @@ static int checks(void)
         for (sign = -1; sign <= 1; sign += 2) {
             a.pc.muzzle_mode = 3*sign; a.pc.muzzle_count = 0;
             for (i = 0; i < 3; ++i) {
-                ai_pc_draw_advance(&a, &s);
+                CHECK(!ai_pc_draw_advance(&a, &s, &w));
                 CHECK(a.pc.muzzle_mode == (2-(int)i)*sign);
                 CHECK(a.pc.muzzle_count == (int)i+1);
             }
-            ai_pc_draw_advance(&a, &s);
+            CHECK(!ai_pc_draw_advance(&a, &s, &w));
             CHECK(a.pc.muzzle_count == 3);
         }
     }
     s.pc_mode = 7; s.vehicle_type = 0;
     a.pc.muzzle_mode = 3; a.pc.muzzle_count = 0;
-    ai_pc_draw_advance(&a, &s);
+    CHECK(!ai_pc_draw_advance(&a, &s, &w));
     CHECK(a.pc.muzzle_mode == 3 && !a.pc.muzzle_count);
     s.vehicle_type = 1;
-    ai_pc_draw_advance(&a, &s);
+    CHECK(!ai_pc_draw_advance(&a, &s, &w));
     CHECK(a.pc.muzzle_mode == 2 && a.pc.muzzle_count == 1);
     s.kb_scan_status[0x1e] = 1;
     for (i = 0; i < 24; ++i) CHECK(!ai_pc_input(&a, &s, &w));
@@ -81,23 +82,48 @@ static int checks(void)
     CHECK(a.pc.air_car_spread == 0x380);
     e.energy = 35; e.max_energy = 40; a.pc.sp_regen_timer = 0;
     s.timer_ticks = 300;
-    ai_pc_draw_advance(&a, &s);
+    CHECK(!ai_pc_draw_advance(&a, &s, &w));
     CHECK(e.energy == 36 && a.pc.sp_regen_timer == 361);
     s.timer_ticks = 361;
-    ai_pc_draw_advance(&a, &s);
+    CHECK(!ai_pc_draw_advance(&a, &s, &w));
     CHECK(e.energy == 36);
     s.timer_ticks = 362;
-    ai_pc_draw_advance(&a, &s);
+    CHECK(!ai_pc_draw_advance(&a, &s, &w));
     CHECK(e.energy == 37 && a.pc.sp_regen_timer == 423);
     e.energy = e.max_energy = 999; s.timer_ticks = 424;
-    ai_pc_draw_advance(&a, &s);
+    CHECK(!ai_pc_draw_advance(&a, &s, &w));
     CHECK(e.energy == 999 && a.pc.sp_regen_timer == 430);
     s.pc_mode = 2; s.bp_limit_flag = 0; a.pc_flash = 3;
     for (i = 0; i < 4; ++i) {
         a.pc.unk_1444EC = 2;
-        ai_pc_draw_advance(&a, &s);
+        CHECK(!ai_pc_draw_advance(&a, &s, &w));
         CHECK(!a.pc.unk_1444EC);
         CHECK(a.pc_flash == (i < 3 ? 2-(int)i : 0));
+    }
+    s.running = 0; s.kb_scan_status[0x39] = 1; a.pc.auto_s_flag = 0;
+    CHECK(!ai_pc_input(&a, &s, &w));
+    CHECK(a.pc.sword_hum_sound == 32 && a.pc.sword_hum_slot == -1);
+    s.pc_mode = 5; s.running = 1; s.kb_scan_status[0x39] = 0;
+    CHECK(!ai_pc_input(&a, &s, &w));
+    CHECK(a.pc.sword_hum_sound == 1 && a.pc.sword_hum_slot == -1);
+    s.pc_mode = 7; s.vehicle_type = 0; s.running = 0;
+    CHECK(!ai_pc_input(&a, &s, &w));
+    CHECK(a.pc.sword_hum_sound == 61 && a.pc.sword_hum_slot == -1);
+    {
+        uint16_t before[3];
+        w.persons[0].unk_0038 = 40<<16 | 19;
+        w.person_count = 2; w.player_person = 1;
+        w.rng.word[0] = 3000; w.rng.word[1] = 44; w.rng.word[2] = 29999;
+        memcpy(before, w.rng.word, sizeof before);
+        a.pc.sword_hum_slot = 0; a.pc.sword_hum_sound = 1;
+        CHECK(!ai_pc_draw_advance(&a, &s, &w));
+        CHECK(!memcmp(before, w.rng.word, sizeof before));
+        a.pc.sword_hum_slot = -1;
+        CHECK(!ai_pc_draw_advance(&a, &s, &w));
+        CHECK(memcmp(before, w.rng.word, sizeof before));
+        w.person_count = 0;
+        CHECK(ai_pc_draw_advance(&a, &s, &w) < 0);
+        w.person_count = 1; w.player_person = 0;
     }
     puts("PC fire: equipment, modern ResetAim, draw counters, aircar spread and energy recovery matched");
     return 0;
@@ -148,7 +174,7 @@ static int regen(char **argv)
     a.pc.sp_regen_timer = (uint32_t)strtoul(argv[2], NULL, 0);
     for (i = 0; i < 80; ++i) {
         s.timer_ticks = 300+i*2+i/5;
-        ai_pc_draw_advance(&a, &s);
+        CHECK(!ai_pc_draw_advance(&a, &s, &w));
         printf("%u %d %u\n", i, e.energy, (unsigned)a.pc.sp_regen_timer);
     }
     return 0;
@@ -174,13 +200,35 @@ static int bob(char **argv)
     return 0;
 }
 
+static int breath(char **argv)
+{
+    unsigned i;
+    int hp = (int)strtol(argv[0], NULL, 0), max = (int)strtol(argv[1], NULL, 0);
+    int slot = (int)strtol(argv[2], NULL, 0), sample = (int)strtol(argv[3], NULL, 0);
+    if (hp < -32768 || hp > 32767 || max < -32768 || max > 32767 ||
+        slot < -1 || slot > 15 || sample < 0 || sample > 255) return 2;
+    w.persons[0].unk_0038 = (int32_t)((uint32_t)(uint16_t)max<<16 | (uint16_t)hp);
+    w.person_count = 2; w.player_person = 1; /* Must still read PERSON0. */
+    a.pc.sword_hum_slot = slot; a.pc.sword_hum_sound = sample;
+    for (i = 0; i < 3; ++i) w.rng.word[i] = (uint16_t)strtoul(argv[4+i], NULL, 0);
+    for (i = 0; i < 80; ++i) {
+        s.timer_ticks = 300+i*2;
+        CHECK(!ai_pc_draw_advance(&a, &s, &w));
+        printf("%u %u %u %u %d\n", i, (unsigned)w.rng.word[0],
+            (unsigned)w.rng.word[1], (unsigned)w.rng.word[2], a.pc_sound);
+    }
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     if (argc != 2 && (argc != 9 || strcmp(argv[2], "hand")) &&
         (argc != 6 || strcmp(argv[2], "regen")) &&
-        (argc != 8 || strcmp(argv[2], "bob"))) return 2;
+        (argc != 8 || strcmp(argv[2], "bob")) &&
+        (argc != 10 || strcmp(argv[2], "breath"))) return 2;
     if (setup(argv[1])) return 1;
     if (argc == 2) return checks();
     if (argc == 9) return hand(argv+3);
+    if (argc == 10) return breath(argv+3);
     return argc == 8 ? bob(argv+3) : regen(argv+3);
 }

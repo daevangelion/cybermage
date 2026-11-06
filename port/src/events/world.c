@@ -570,6 +570,12 @@ static int dispatch(events_state *e, sim_state *s, ai_state *a, world *w, unsign
         break;
     case 26:
         if(v->state) break;
+        /* CM_HI.EXE3AAA6..3AAE2: modal entry stops these two loops. */
+        if(a->pc.sword_hum_slot!=-1) {
+            snd_abort(a->pc.sword_hum_slot,(unsigned)a->pc.sword_hum_sound);
+            a->pc.sword_hum_slot=-1;
+        }
+        if(s->swim_loop!=-1) { snd_abort(s->swim_loop,4);s->swim_loop=-1; }
         e->shop_requested.kind=p[0]; e->shop_requested.switch_index=p[3];
         e->shop_requested.screen=p[9]; e->shop_requested.arg=p[8];
         v->state=1; p[1]=0;

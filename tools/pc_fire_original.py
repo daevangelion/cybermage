@@ -136,6 +136,37 @@ def compare_bob(native, phase, speed, x, y, moving):
                              f'frame={frame}: native={got}, original={wanted}')
     return len(rows)
 
+def compare_breath(native, hp, maximum, hum_slot, hum_sound, seed):
+    original = Original()
+    cpu = original.cpu
+    cpu.mem_write(THIS + 0x13141C, struct.pack('<I', PERSON))
+    cpu.mem_write(THIS + 0x130D08, struct.pack('<I', 1))
+    cpu.mem_write(PERSON + 0x38, struct.pack('<hh', hp, maximum))
+    cpu.mem_write(THIS + 0x144A3C, struct.pack('<i', -1))
+    cpu.mem_write(0x9261C, struct.pack('<i', hum_slot))
+    cpu.mem_write(0x1E3964, struct.pack('<i', hum_sound))
+    cpu.mem_write(0x1E38C8, struct.pack('<I', 1))  # Original -x, not a function hook.
+    cpu.mem_write(0x9747F, struct.pack('<3H', *seed))
+    cpu.reg_write(UC_X86_REG_EBP, STACK + 0x100)
+    cpu.reg_write(UC_X86_REG_ESP, STACK)
+    cpu.mem_write(STACK + 0xFC, struct.pack('<I', THIS))
+    rows = subprocess.check_output([str(native), str(ROOT / 'orig/retail/CM_HI.EXE'),
+                                   'breath', *map(str, (hp, maximum, hum_slot, hum_sound, *seed))],
+                                  text=True).splitlines()
+    if len(rows) != 80:
+        raise ValueError('native respiration fixture did not emit 80 frames')
+    for frame, row in enumerate(rows):
+        cpu.emu_start(0x1928B, 0x19340, count=1024)
+        if cpu.reg_read(UC_X86_REG_EIP) != 0x19340:
+            raise ValueError('original respiration did not reach its exit')
+        wanted = (frame, *struct.unpack('<3H', cpu.mem_read(0x9747F, 6)),
+                  struct.unpack('<i', cpu.mem_read(THIS + 0x144A3C, 4))[0])
+        got = tuple(map(int, row.split()))
+        if got != wanted:
+            raise ValueError(f'breathing hp={hp}/{maximum} hum={hum_slot,hum_sound} '
+                             f'seed={seed} frame={frame}: native={got}, original={wanted}')
+    return len(rows)
+
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
@@ -165,6 +196,14 @@ def main():
         count += compare_bob(args.native.resolve(), 0, 0, x, y, 0)
     print(f'PC hand bob: {count} unmodified original x86 frames matched '
           '(14 phases, signed speed extremes, idle decay, moving/jump and timer gates)')
+    count = 0
+    for hp, maximum in ((0, 40), (1, 40), (19, 40), (20, 40), (39, 40),
+                        (-1, 40), (32767, 32767)):
+        for hum_slot, hum_sound in ((-1, 1), (0, 1), (0, 32)):
+            for seed in ((1, 2, 3), (3000, 44, 29999), (65535, 32768, 32767)):
+                count += compare_breath(args.native.resolve(), hp, maximum, hum_slot, hum_sound, seed)
+    print(f'PC respiration: {count} unmodified original x86 frames matched '
+          '(PERSON0, HP half/death edges, real muted RND/volume path, hum gate, 3 RNG seeds)')
 
 
 if __name__ == '__main__':

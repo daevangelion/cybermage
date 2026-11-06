@@ -104,6 +104,7 @@ typedef struct {
     int32_t sword_aim_step, sword_frame; /* +144A44/+144A4C */
     int32_t muzzle_frame, muzzle_mode, muzzle_count; /* +144A5C/60/64 */
     int32_t underwater, shot_count, loop_sound; /* +144A24/2C/28 */
+    int32_t sword_hum_slot, sword_hum_sound; /* globals9261C/1E3964 */
     int32_t glow_set, glow_frame; /* +1444F8/+1444F4 */
     int32_t unk_1444EC;
     int32_t hit_camera_z; /* Current frame's +4B170 increment from +1444FC. */
@@ -179,7 +180,7 @@ void ai_pc_hand_bob(ai_state *a, const sim_state *s);
 int ai_pc_input(ai_state *a, sim_state *s, world *w);
 int ai_pc_hit_response(ai_state *a, sim_state *s, world *w);
 int ai_pc_hand2hand(ai_state *a, sim_state *s, world *w);
-void ai_pc_draw_advance(ai_state *a, const sim_state *s);
+int ai_pc_draw_advance(ai_state *a, const sim_state *s, world *w);
 int ai_load_scene_definitions(ai_state *a, world *w);
 int ai_save_import(ai_state *a, world *w, const ui_save_state *save);
 void ai_save_export(const ai_state *a, ui_save_state *save);

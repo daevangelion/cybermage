@@ -34,7 +34,7 @@ Retail CM_HI.EXE v1.01F LE link addresses. Gameplay only; UI consumes state.
   previous combat mode while the existing input machinery uses mode3.
 - RenderBells0x18BA4/0x18D73 advances positive/negative muzzle sequences after
   drawing; DrawACarMonitor0x157AC does the same for aircar positive sequences.
-  Call `ai_pc_draw_advance` after hand drawing but before HUD composition.
+  Call `ai_pc_draw_advance(a,s,w)` after the read-only HUD, before dialogue.
   Glow frame advances modulo4 at0x1BA49 when bp_limit_flag is nonzero.
 - One-frame tint1444EC clears at0x18A05; damage flash1444E8 decrements at0x190F1
   after its viewport tint. Both use every draw, including zero-tick draws, rather
@@ -42,7 +42,18 @@ Retail CM_HI.EXE v1.01F LE link addresses. Gameplay only; UI consumes state.
 - RenderBells0x19340..0x193B2 recovers one energy when ticks is strictly greater
   than global spRegenTimer206834. The interval is max(6,65-signed16(max_energy)/10);
   the deadline advances even at full energy. It survives scene/NewGame/save loads.
-  This state-only step must precede HUD reads so the increment is visible immediately.
+  StatusMonitor0x19286 precedes recovery, so the HUD sees the increment next frame.
+- Low-HP respiration0x1928B..0x19340 reads PERSON0, including while driving.
+  Positive HP below signed maxHP/2 and the real SwordHum gate consume
+  RND(HP/2+2) before CheckSound(PCSound,3). A zero chance result and completed
+  sound consume RND(8192), play sample3 at volume16384−RND and store PCSound.
+  Muted playback still consumes the real random calls.
+- ProcessInputEvents0x14857/0x1496A/0x14C19 maintains the actual shared hum
+  slot/sample: running1, held melee32, tank61 with momentum-derived volume.
+  Switching starts the new loop before aborting the old one. Stop-running breath
+  at0x14D04..0x14D41 uses the same PCSound handle. KillSound/KillLoops clear the
+  slot only; modal event26 stops hum and swim at0x3AAA6..0x3AAE2. Pause stops
+  only swim(0x1BC60..0x1BC79), not hum.
 - Aircar spread0x13208..0x13276: A held adds128, capped1024; D held subtracts128,
   floored−2048; S clears the spread and consumes its scan byte.
 - Underwater backfire reads144A24; Events action72 produces it at0x3E9D7/0x3E9FA
@@ -72,6 +83,9 @@ nine initial grids, manual/automatic, three RNG seeds, eight directions/Shift an
 press/hold/release);2,400 energy-recovery frames;7,040 hand-bob frames including
 signed speed extremes and idle decay. They execute unmodified original routines
 and inline basic blocks, not a second Python implementation of their rules.
+The low-HP respiration block additionally matches5,040 original-x86 draws across
+PERSON0/vehicle selection, death/half-health edges, hum gating and three RNG seeds.
+The oracle's real noSoundFlag option is set; chance/volume RND and PlayDIGI still run.
 
 The genuine scene1 fire replay has193 completed frames,22 PC fields/frame and772
 missile checkpoints(17 active): no field divergence. It exercises Starbolt9/impact10,
