@@ -184,6 +184,33 @@ static void keypad(const char *data)
     puts("sim keypad diagonal7/9 and side1/3 source mappings matched");
 }
 
+static void stationary_modes(const char *data)
+{
+    static const int mode[] = {0,3,4,6};
+    unsigned i;
+    for (i = 0; i < sizeof mode / sizeof mode[0]; ++i) {
+        int32_t x, y;
+        arena(data);
+        s.pc_mode = mode[i]; s.previous_pc_mode = 5;
+        s.unk_144ae8 = s.unk_144af8 = 32;
+        s.unk_144afc = 2; s.unk_144b38 = 512;
+        if (mode[i] == 3) s.kb_scan_status[0x1d] = 3;
+        x = w.objects[1].x; y = w.objects[1].y;
+        /* HNF01D44E table:0/3/4/6 skip MovePerson, not momentum decay. */
+        assert(!sim_frame(&s, &w, &input, 2));
+        assert(s.pc_mode == mode[i] && w.objects[1].x == x && w.objects[1].y == y);
+        assert(s.unk_144ae8 == 26 && s.unk_144af8 == 32);
+        if (mode[i] == 3) assert(!s.unk_144afc && !s.unk_144b38);
+    }
+    /* Enhanced aim deliberately retains the previous combat physics context. */
+    arena(data); s.pc_mode = 5;
+    s.unk_144b1c = 2; s.unk_144b28 = 8192;
+    input.modern = input.aim = 1;
+    assert(!sim_frame(&s, &w, &input, 2));
+    assert(s.modern_aim && s.pc_mode == 3 && w.objects[1].floor_z > 0);
+    puts("sim stationary modes preserve inertia but skip physical movement; modern aim physics retained");
+}
+
 int main(int argc, char **argv)
 {
     assert(argc == 3);
@@ -191,6 +218,7 @@ int main(int argc, char **argv)
     else if (!strcmp(argv[2], "hit")) hit(argv[1]);
     else if (!strcmp(argv[2], "vehicle")) vehicle(argv[1]);
     else if (!strcmp(argv[2], "keypad")) keypad(argv[1]);
+    else if (!strcmp(argv[2], "stationary")) stationary_modes(argv[1]);
     else return 2;
     return 0;
 }

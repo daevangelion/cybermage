@@ -6,6 +6,7 @@ sim-phases-check: $(B)/test_sim_phases
 	$(B)/test_sim_phases ../orig/retail hit
 	$(B)/test_sim_phases ../orig/retail vehicle
 	$(B)/test_sim_phases ../orig/retail keypad
+	$(B)/test_sim_phases ../orig/retail stationary
 
 $(B)/test_sim_phases: tests/test_sim_phases.c $(filter-out $(B)/main.o,$(OBJECTS))
 	@mkdir -p $(@D)
