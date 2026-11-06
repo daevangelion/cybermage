@@ -39,9 +39,9 @@ typedef struct {
     int modern;
     int32_t move_speed, look_yaw, look_pitch;
     uint16_t move_angle;
-    uint8_t jump, aim;
+    uint8_t jump, aim, run;
     int8_t fly, cycle;
-    uint8_t select_kind, select_slot;
+    uint8_t select_kind, select_slot, select_open;
     cm_touch touches[CM_TOUCH_MAX];
     unsigned touch_count;
     int quit;

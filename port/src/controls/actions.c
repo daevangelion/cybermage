@@ -76,17 +76,17 @@ void controls_frame(cm_controls *c, controls_context context,
     }
     c->context = context;
     for (i = 0; i < CM_KEY_COUNT; ++i) {
-        if (in.pressed[i] && in.released[i]) c->key_owner[i] = 0;
+        if (!in.focus_lost && in.pressed[i] && in.released[i]) c->key_owner[i] = 0;
         keys[i] = (uint8_t)owned(&c->key_owner[i], in.held[i] || in.pressed[i], context);
     }
     for (i = 0; i < 8; ++i) {
         unsigned bit = 1u << i;
-        if (in.mouse_pressed & in.mouse_released & bit) c->mouse_owner[i] = 0;
+        if (!in.focus_lost && (in.mouse_pressed & in.mouse_released & bit)) c->mouse_owner[i] = 0;
         mouse[i] = (uint8_t)owned(&c->mouse_owner[i], ((in.mouse_buttons | in.mouse_pressed) & bit) != 0, context);
     }
     for (i = 0; i < 23; ++i) {
         int held = i < 21 ? ((in.pad_buttons | in.pad_pressed) & (1u << i)) != 0 : in.pad_axes[i - 17] > 8192;
-        if (i < 21 && (in.pad_pressed & in.pad_released & (1u << i))) c->pad_owner[i] = 0;
+        if (!in.focus_lost && i < 21 && (in.pad_pressed & in.pad_released & (1u << i))) c->pad_owner[i] = 0;
         pad[i] = (uint8_t)owned(&c->pad_owner[i], held, context);
     }
     for (i = 0; i < CM_CONTROL_COUNT; ++i) {
@@ -110,7 +110,13 @@ void controls_frame(cm_controls *c, controls_context context,
     c->previous_actions = actions;
 #define HELD(a) ((actions & (UINT64_C(1) << CM_CONTROL_##a)) != 0)
 #define EDGE(a) ((edges & (UINT64_C(1) << CM_CONTROL_##a)) != 0)
+    if (EDGE(WEAPONS)) c->selection_kind = 1;
+    if (EDGE(POWERS)) c->selection_kind = 2;
+    if (EDGE(ITEMS)) c->selection_kind = 3;
+    output->select_kind = (uint8_t)c->selection_kind;
+    output->select_open = (uint8_t)(EDGE(WEAPONS) || EDGE(POWERS) || EDGE(ITEMS));
     if (gameplay) {
+        if (EDGE(MAP)) c->map_visible = !c->map_visible;
         mx = (double)HELD(RIGHT) - HELD(LEFT) + lx +
             (touch_move ? in.touch_move_x / 32768.0 : 0);
         my = (double)HELD(FORWARD) - HELD(BACK) - ly -
@@ -136,12 +142,9 @@ void controls_frame(cm_controls *c, controls_context context,
         c->pitch_fraction -= output->look_pitch;
         output->jump = (uint8_t)HELD(JUMP);
         output->aim = (uint8_t)HELD(AIM);
+        output->run = (uint8_t)HELD(RUN);
         output->fly = (int8_t)((int)HELD(FLY_UP) - HELD(FLY_DOWN));
         output->cycle = (int8_t)((int)EDGE(NEXT) - EDGE(PREV));
-        if (EDGE(WEAPONS)) c->selection_kind = 1;
-        if (EDGE(POWERS)) c->selection_kind = 2;
-        if (EDGE(ITEMS)) c->selection_kind = 3;
-        output->select_kind = (uint8_t)c->selection_kind;
         for (i = CM_CONTROL_SLOT1; i <= CM_CONTROL_SLOT0; ++i)
             if (edges & (UINT64_C(1) << i)) output->select_slot = (uint8_t)(1 + i - CM_CONTROL_SLOT1);
         output_key(output, 0x39, HELD(FIRE));
@@ -152,9 +155,6 @@ void controls_frame(cm_controls *c, controls_context context,
         output_key(output, 0x20, HELD(GUN_WIDEN));
         output_key(output, 0x1f, EDGE(GUN_CENTER));
         output_key(output, 0x21, EDGE(LAND));
-        if (EDGE(WEAPONS)) output_key(output, 0x3b, 1);
-        if (EDGE(POWERS)) output_key(output, 0x3c, 1);
-        if (EDGE(ITEMS)) output_key(output, 0x3d, 1);
     } else {
         output_key(output, 0x48, HELD(FORWARD) || ly < -0.5);
         output_key(output, 0x50, HELD(BACK) || ly > 0.5);
@@ -162,7 +162,6 @@ void controls_frame(cm_controls *c, controls_context context,
         output_key(output, 0x4d, HELD(RIGHT) || lx > 0.5 || in.mouse_wheel < 0);
         output_key(output, 0x1c, EDGE(USE) || EDGE(JUMP));
         output_key(output, 1, EDGE(AIM) || EDGE(CROUCH));
-        output->select_kind = (uint8_t)c->selection_kind;
         for (i = CM_CONTROL_SLOT1; i <= CM_CONTROL_SLOT0; ++i)
             if (edges & (UINT64_C(1) << i))
                 output->select_slot = (uint8_t)(1 + i - CM_CONTROL_SLOT1);
@@ -183,7 +182,7 @@ void controls_frame(cm_controls *c, controls_context context,
         output->mouse_x = c->pointer_x;
         output->mouse_y = c->pointer_y;
     }
-    output_key(output, 1, EDGE(MENU));
+    output_key(output, 1, EDGE(MENU) || EDGE(PAUSE));
     output_key(output, 0x0f, EDGE(MAP));
     output_key(output, 0x19, EDGE(PAUSE));
     /* Text entry and confirmation retain literal keys, with context ownership. */

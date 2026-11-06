@@ -15,7 +15,7 @@ static void notify(events_state *e, int type, int icon)
     e->item_up_type = type; e->item_up_icon = icon; e->item_up_time = e->ticks + 80;
 }
 
-static void fly_landing(sim_state *s, const world_object *p)
+void events_fly_landing(sim_state *s, const world_object *p)
 {
     s->flight_mode = 0; s->flight_unk_144B48 = 0; s->unk_144aec = 0;
     s->unk_144b34 = s->unk_144b38 = s->unk_144b3c = 0;
@@ -49,7 +49,7 @@ int events_use_item(events_state *e, sim_state *s, world *w, unsigned slot)
     case 14:
         if (v->type == 22) { e->spell = 5; s->pc_mode = 5; used = 1; }
         else if (v->type == 111) {
-            if (s->flight_mode) fly_landing(s,p);
+            if (s->flight_mode) events_fly_landing(s,p);
             else { s->flight_mode = 3; s->flight_active = 1; s->flight_unk_144B48 = 0;
                 s->unk_144b34 = s->unk_144b38 = s->unk_144b3c = 0; s->body_height = p->z * 2; used = 1; }
         } else {
@@ -60,7 +60,7 @@ int events_use_item(events_state *e, sim_state *s, world *w, unsigned slot)
         break;
     case 0:
         if (v->type == 25) {
-            if (s->flight_mode) fly_landing(s,p);
+            if (s->flight_mode) events_fly_landing(s,p);
             else { s->flight_mode = 1; s->flight_active = 1; s->flight_unk_144B48 = 0;
                 s->unk_144b34 = s->unk_144b38 = s->unk_144b3c = 0; s->body_height = p->z * 2; used = 1; }
         } else if (v->type == 104 && w->scene == 9 && w->person_count > 11 && w->persons[11].status != 2) {

@@ -41,6 +41,7 @@ typedef struct {
     double stick_yaw, stick_pitch;
     int pointer_x, pointer_y;
     unsigned selection_kind;
+    int map_visible;
     controls_context context;
 } cm_controls;
 
@@ -49,5 +50,8 @@ int controls_parse(cm_controls *c, const uint8_t *data, uint32_t size);
 int controls_load(cm_controls *c, const char *path);
 void controls_frame(cm_controls *c, controls_context context,
                      const cm_input *physical, cm_input *output);
+struct world;
+int controls_draw_map(const cm_controls *c, const struct world *w,
+                       uint8_t pixels[CM_WIDTH * CM_HEIGHT]);
 
 #endif

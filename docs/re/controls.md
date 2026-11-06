@@ -36,7 +36,9 @@ and RT clicks. A mouse or touchscreen tap retains the original pointer path.
 
 Movement uses a radial 18% controller dead zone, rescaled to full throw. Combined
 keyboard/stick/touch motion is normalised, so diagonals are not faster. Walking
-requests 640, running 768 in the game's existing movement/acceleration fields.
+outputs 640, running 768. The adapter scales this magnitude into the original
+walking/running momentum caps (48/96) before the existing acceleration reducer,
+so partial stick deflection remains analog instead of saturating the request.
 Relative mouse heading is -10 angle units/pixel and pitch +0.5 units/pixel;
 right-stick full throw requests 1024 heading units and 8 pitch units per frame.
 Fractional look is retained between frames; each sampled delta is consumed
@@ -84,6 +86,11 @@ right=2), `pad:0..20` (SDL GameController button enumeration), `trigger:0..1`
 (LT/RT), `wheel:0..1` (up/down). Common pad numbers: A=0, B=1, X=2, Y=3,
 Back=4, Start=6, L3=7, R3=8, LB=9, RB=10, D-pad up/down/left/right=11/12/13/14.
 `mouse_yaw` and `mouse_pitch` accept finite values in [-100,100].
+
+Automap is a modern live-topology overlay, not a reproduction of DOS AutoMap
+artwork or its exploration-reveal rules. It draws the current height level's
+wall cells and the actual player position/heading in a 192×192 upper-right
+panel. P uses the existing pause menu rather than a separate pause screen.
 
 ## Android touch
 

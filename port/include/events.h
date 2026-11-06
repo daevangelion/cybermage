@@ -117,6 +117,7 @@ int events_switch_search(events_state *e, sim_state *s, struct ai_state *a, worl
 int events_key_search(events_state *e, sim_state *s, world *w, unsigned key);
 int events_toggle_switch(events_state *e, world *w, unsigned index);
 int events_use_item(events_state *e, sim_state *s, world *w, unsigned slot);
+void events_fly_landing(sim_state *s, const world_object *p);
 int events_coll_item(events_state *e, world *w, unsigned item, unsigned source);
 int events_set_tank_mode(events_state *e, sim_state *s, world *w, int enter);
 int events_clear_vehicle(sim_state *s, world *w, unsigned object);

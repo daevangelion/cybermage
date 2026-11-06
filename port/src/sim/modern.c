@@ -4,10 +4,10 @@ static int select_action(sim_state *s, world *w, const cm_input *in)
 {
     events_state *e = s->events;
     unsigned i, index = 0, kind;
-    if (!e || (!in->cycle && !in->select_slot)) return 0;
-    kind = e->selector_kind ? e->selector_kind : in->select_kind;
+    if (!e || (!in->cycle && !in->select_slot && !in->select_open)) return 0;
+    kind = e->selector_kind && !in->select_open ? e->selector_kind : in->select_kind;
     if (kind < 1 || kind > 3) kind = 1;
-    if (!e->selector_kind) {
+    if (!e->selector_kind || in->select_open) {
         e->previous_mode = s->modern_aim ? s->previous_pc_mode : s->pc_mode;
         if (events_make_selector(e, kind)) return -1;
         for (i = 0; i < e->selector_count; ++i) {
@@ -18,6 +18,7 @@ static int select_action(sim_state *s, world *w, const cm_input *in)
         }
         e->selector_index = index;
     }
+    if (in->select_open) { s->pc_mode = 3; s->modern_aim = 0; return 0; }
     if (!e->selector_count) { e->selector_kind = 0; return 0; }
     if (in->select_slot) {
         unsigned key = in->select_slot - 1;
@@ -55,6 +56,10 @@ int sim_modern_input(sim_state *s, world *w, const cm_input *in)
     s->yaw_request = 0;
     if (s->movement_request < 0) s->movement_request = 0;
     if (s->movement_request > 768) s->movement_request = 768;
+    /* Classic request values accelerate to walking/running momentum caps.
+     * Modern analog magnitude scales that cap, not the oversized request. */
+    s->movement_request = s->movement_request * (in->run ? 96 : 48) /
+                         (in->run ? 768 : 640);
     if (!selector) {
         o->heading = (uint16_t)((uint32_t)o->heading + (uint32_t)in->look_yaw);
         pitch = (int64_t)w->camera.pitch + in->look_pitch;
@@ -64,6 +69,10 @@ int sim_modern_input(sim_state *s, world *w, const cm_input *in)
     if (in->pressed[0x52])
         s->unk_144b3c = s->unk_144b3c == -1 ||
             s->unk_144b34 == (w->unk_5E7A8 ? -0x3000 : -0x4800) ? 1 : -1;
+    if (in->pressed[0x21]) {
+        if (s->pc_mode == 7) s->kb_scan_status[0x1c] = 2;
+        else if (s->flight_mode) events_fly_landing(s, o);
+    }
     s->kb_scan_status[0x11] = in->fly > 0;
     s->kb_scan_status[0x2d] = in->fly < 0;
     return !selector && !s->modern_aim && in->jump;
