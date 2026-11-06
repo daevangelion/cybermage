@@ -13,3 +13,4 @@ $(B)/test_ui: tests/test_ui.c $(UI_SOURCES) $(wildcard include/*.h)
 
 check: $(B)/test_ui
 	cd .. && port/$(B)/test_ui out/port/ui
+	$(MAKE) -f tests/config.mk B=$(B) config-check

@@ -248,8 +248,48 @@ traces (current merchant/coder tests are source-grounded port-state tests, not
 original execution comparisons); automap (Controls owns its new implementation);
 vehicle oracle parity and live muzzle integration; live aim/bob/glow/muzzle trace parity and
 draw-time animation advancement (Port); death-melt end-to-end scenario (Integrator);
-options config persistence;
 full original-save gameplay validation; demo SAVE010 layout verification.
+
+## Original options file
+
+`ReadConfigFile0204EC` (called by LoadSetup at01F46C/01F4E0) reads
+**CMDATA.CNF**, not a new port-specific settings file. The format is exactly
+172 bytes:43 little-endian dwords, with no native structure padding.
+`WriteConfigFile020C18` writes the same sequence; OptOptions05422D invokes it
+on exit before applying monster difficulty.
+
+| File offset | Original value |
+|---|---|
+| 00 | bLong scratch word; writer always stores0 |
+| 04 | inDevice:0 keyboard,1 mouse,2 joystick |
+| 08 | playDiffLevel0..2 |
+| 0C,10 | signed gammaBright/gammaContrast, -32..32 |
+| 14 | textMsgDelay, original slider0..980 |
+| 18,1C,20 | MIDI, digital and speech master volumes, percentages0..100 |
+| 24..30 | four signed joystick calibration values |
+| 34..AB | fifteen scan/mask dword pairs, kbFire through kbVDU |
+
+Missing-file defaults are the original020560..0205CA branch: keyboard,
+difficulty1, gamma0, delay120, MIDI/digital75, speech100, calibration-999 and
+English ReKeyDefaults052644..05277A. The missing file is created in `--user`;
+an existing malformed file is rejected at its file offset, not replaced.
+The codec retains all calibration and key/mask words. GUI options remain the
+separate LoadOptVals projection, including the original volume-order mapping.
+
+Main reads the real user file before InitPC or a replay's slot load. Leaving
+the real Options screen writes it; a failed write is an error, not a silent
+exit. No difficulty command-line override or output-derived setting exists.
+Classic Sim mouse/joystick routing requires the configured device as well as
+physical driver availability; simply having an SDL window no longer selects
+the mouse for a keyboard configuration.
+
+`tests/config.mk` exercises the real Main/Options path, byte-exact round trips,
+truncation/field errors and a second application launch. The genuine Easy
+file supplied by Route is172 bytes with SHA256
+`427768892174df9b194e1822625b17cefd5bccb6c7fbcdff31e77f8c5cc66586`;
+Controls' original mouse configuration is
+`a40f5572b7b99fde71274bfa54fccc5d24a16c6f684a2e96dfb42424b44b0b7d`.
+Both are runtime test inputs, not redistributed game assets.
 
 ## Remaining settings and arena source facts
 

@@ -91,8 +91,8 @@ int sim_start_scene(sim_state *s, world *w)
 void sim_input(sim_state *s, const cm_input *input)
 {
     unsigned i;
-    s->mouse_present=!input->modern && input->mouse_present;
-    s->joystick_present=!input->modern && input->joystick_present;
+    s->mouse_present=!input->modern && s->input_device==1 && input->mouse_present;
+    s->joystick_present=!input->modern && s->input_device==2 && input->joystick_present;
     if(s->mouse_present) {
         int32_t x=world_sub32(input->mouse_x,320)/2;
         int32_t y=world_sub32(input->mouse_y/2,100);

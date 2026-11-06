@@ -108,12 +108,8 @@ int ui_init(cm_ui *ui, rsc *hipak, const cm_file *strings)
         ui->scon[i].pixels = p + 4 + i * 56 * 38;
         ui->scon[i].width = 56; ui->scon[i].height = 38;
     }
-    /* ReadConfigFile0x20560–0x205C4: defaults when CMDATA.CNF is absent. */
-    ui->options[0] = 0;
-    ui->options[3] = ui->options[5] = 75;
-    ui->options[4] = 100;
-    ui->options[8] = 1;
-    ui->options[9] = 120;
+    ui_config_defaults(&ui->config);
+    ui_options_from_config(ui);
     ui->con_size = 2;
     ui->vdu = 1;
     ui->restart_game = ui->restart_auto = -1;

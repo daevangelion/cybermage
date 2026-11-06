@@ -144,7 +144,7 @@ static void keyboard_hand(ai_pc_state *p, const sim_state *s, int mode)
 {
     const uint8_t *k = s->kb_scan_status;
     int side;
-    if (mode != 2 || p->fire != 1) return;
+    if (mode != 2 || p->fire != 1 || s->mouse_present || s->joystick_present) return;
     side = s->kb_side_toggle < SIM_SCAN_COUNT &&
            (k[s->kb_side_toggle] & s->kb_side_toggle_bit);
     if ((k[0x48]&5) || (k[0x4c]&1)) hand_axis(&p->key_hand_y, -1);

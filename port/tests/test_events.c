@@ -309,7 +309,7 @@ static void selector_pointer(void)
     unsigned col,row,i;
     cm_input input={0};
     for(row=0;row<4;++row) for(col=0;col<5;++col) {
-        event_setup(0);e.selector_kind=3;e.selectors[2].count=20;
+        event_setup(0);e.selector_kind=3;e.selectors[2].count=20;s.input_device=1;
         input.mouse_present=1;input.mouse_x=(x[col]+160)*2;input.mouse_y=(200-y[row])*2;
         sim_input(&s,&input);a.pc.sword_aim_step=4;
         assert(events_process_selector(&e,&s,&w)==0);
@@ -318,16 +318,16 @@ static void selector_pointer(void)
         assert(a.pc.sword_aim_step==4+dx[col]+dy[row]);
     }
     for(row=0;row<6;++row) for(col=0;col<8;++col) {
-        event_setup(0);e.selector_kind=3;e.selectors[2].count=20;
+        event_setup(0);e.selector_kind=3;e.selectors[2].count=20;s.input_device=1;
         input.mouse_x=(xx[col]+160)*2;input.mouse_y=(200-yy[row])*2;
         sim_input(&s,&input);
         assert(events_process_selector(&e,&s,&w)==0);
         assert(e.selectors[2].index==(unsigned)(rows[row]*5+columns[col]));
     }
-    event_setup(0);e.selector_kind=3;e.selectors[2].count=7;
+    event_setup(0);e.selector_kind=3;e.selectors[2].count=7;s.input_device=1;
     input.mouse_x=540;input.mouse_y=360;sim_input(&s,&input);
     assert(events_process_selector(&e,&s,&w)==0 && e.selectors[2].index==6);
-    event_setup(0);e.selector_kind=3;e.selectors[2].count=20;
+    event_setup(0);e.selector_kind=3;e.selectors[2].count=20;s.input_device=1;
     sim_input(&s,&input);s.kb_scan_status[0x4D]=8;
     assert(events_process_selector(&e,&s,&w)==0 && e.selectors[2].index==1);
     assert(a.pc_aim.aim_x==-38 && a.pc_aim.aim_y==140 && !s.kb_scan_status[0x4D]);

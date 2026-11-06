@@ -50,6 +50,7 @@ static char resource_path[PATH_BYTES], strings_path[PATH_BYTES], save_path[PATH_
 static char names_path[PATH_BYTES];
 static char executable_path[PATH_BYTES];
 static char controls_path[PATH_BYTES];
+static char setup_path[PATH_BYTES];
 static int auto_save = -1;
 
 typedef struct {
@@ -254,6 +255,7 @@ static int load_scene(const char *data, unsigned scene)
     render_unload();
     simulation.ai = &actors;
     simulation.events = &events;
+    simulation.input_device=ui.config.in_device;
     if (world_load_scene(&game, data, scene)) return -1;
     result = ai_init(&actors, &game);
     actors.pc.sp_regen_timer = regen_timer;
@@ -541,12 +543,19 @@ static int death_start(uint32_t ticks)
 static ui_action menu_input(const cm_input *input, uint32_t ticks)
 {
     ui_action action;
+    int options_open=ui.screen==UI_OPTIONS;
     if(input->quit) return UI_QUIT;
     /* Keyboard012F04/01340D owns Escape and all twenty shortcuts before
      * pause/save/load. Classic no-list hand mode also skips the foot menu. */
     if(ui.screen==UI_GAME && (events_selector_needs_input(&events) ||
        (!input->modern && simulation.pc_mode==3))) return UI_NONE;
     action = ui_input(&ui, input, ticks);
+    if(options_open && ui.screen!=UI_OPTIONS) {
+        /* OptOptions05422D writes CMDATA before applying difficulty. */
+        ui_options_to_config(&ui);
+        if(ui_config_save(&ui.config,setup_path)) return UI_ERROR;
+        simulation.input_device=ui.config.in_device;
+    }
     if (ui.screen != UI_GAME && simulation.swim_loop != -1) {
         snd_abort(simulation.swim_loop, 4);
         simulation.swim_loop = -1;
@@ -835,7 +844,10 @@ int main(int argc, char **argv)
         rsc_entry(&hipak, 31, &pal_data, &pal_size) ||
         gfx_palette(palette, pal_data, pal_size, resource_path) ||
         ui_init(&ui, &hipak, &strings) || ui_load_hand_tables(&ui, data) ||
+        make_path(setup_path,sizeof setup_path,user,"CMDATA.CNF") ||
+        ui_config_load(&ui.config,setup_path) ||
         snd_open(data) || game_names_read(user)) goto out;
+    ui_options_from_config(&ui);
     memcpy(base_palette, palette, sizeof base_palette);
     if (gl_enabled) {
         if (render_gl_open(headless, gl_width, gl_height) || render_gl_palette(palette)) goto out;
@@ -848,6 +860,7 @@ int main(int argc, char **argv)
     if (trace && replay.has_bios_seed && !seed_explicit)
         world_rng_init(&game.rng, replay.bios_seed);
     sim_init(&simulation, platform_ticks(0));
+    simulation.input_device=ui.config.in_device;
     if (ai_init_pc(&events, &simulation, &game.rng, &exe, 1, platform_ticks(0))) goto out;
     while (!input.quit && (!frames || frame < frames)) {
         uint32_t ticks = platform_ticks(frame);
@@ -970,6 +983,7 @@ int main(int argc, char **argv)
         }
         action = trace || shop_modal || death_phase == 1 || death_phase == 2 ?
             UI_NONE : menu_input(&input, ticks);
+        if(action==UI_ERROR) goto out;
         if (playing && actors.difficulty != ui.options[8] &&
             ai_set_difficulty(&actors, &game, (unsigned)ui.options[8])) goto out;
         if (!settings_applied ||
