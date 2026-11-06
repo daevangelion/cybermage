@@ -301,3 +301,20 @@ panel/art, healing damage-1, alternate body flag and initial HP30/40. It also
 matched all frames, including native original RND10 healing and RND60 deadline
 resets. Positive damage and enabled-sound shared-slot tests remain native-only
 regressions, not original-executed parity claims.
+
+The original boot route `tools/scenarios/scene1-water.txt` reaches the upper
+river through ordinary keys (including the cave dialogue and diagonal-frame
+maze). `captures/scene1-water/frames.csv` has2033 entry records;127 have swim1,
+frames1906..2032. It records the swim/body span, shared global deadline, RNG,
+actor HP and actor phase clocks, with `scene-start.persons` for the explicitly
+approved undefined-word input. Compare computed native state with:
+
+```
+tools/run_capped.sh .venv/bin/python tools/compare_swim.py \
+  captures/scene1-water/frames.csv captures/scene1-water/Sim2-native
+```
+
+The comparator excludes the unfinished terminal checkpoint, checks original
+pre-frameN+1 against native post-frameN, and rejects dry-only or missing-frame
+evidence. Its five controls cover alignment, changed RNG/swim, dry-only and
+missing checkpoints.
