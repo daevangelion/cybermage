@@ -666,6 +666,9 @@ void ai_pc_draw_advance(ai_state *a, const sim_state *s)
     int mode = combat_mode(s);
     int maximum = signed16((uint32_t)e->max_energy);
     int interval = 65-maximum/10;
+    /* RenderBells 0x18A05/0x190F1: per-draw effects, not timer-gated. */
+    p->unk_1444EC = 0;
+    if (a->pc_flash) a->pc_flash = ai_sub32(a->pc_flash, 1);
     if (interval < 6) interval = 6;
     if (after(s->timer_ticks, p->sp_regen_timer)) {
         if (signed16((uint32_t)e->energy) < maximum)

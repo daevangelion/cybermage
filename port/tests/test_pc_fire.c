@@ -92,6 +92,13 @@ static int checks(void)
     e.energy = e.max_energy = 999; s.timer_ticks = 424;
     ai_pc_draw_advance(&a, &s);
     CHECK(e.energy == 999 && a.pc.sp_regen_timer == 430);
+    s.pc_mode = 2; s.bp_limit_flag = 0; a.pc_flash = 3;
+    for (i = 0; i < 4; ++i) {
+        a.pc.unk_1444EC = 2;
+        ai_pc_draw_advance(&a, &s);
+        CHECK(!a.pc.unk_1444EC);
+        CHECK(a.pc_flash == (i < 3 ? 2-(int)i : 0));
+    }
     puts("PC fire: equipment, modern ResetAim, draw counters, aircar spread and energy recovery matched");
     return 0;
 }

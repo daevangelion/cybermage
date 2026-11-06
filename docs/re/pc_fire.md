@@ -34,6 +34,9 @@ Retail CM_HI.EXE v1.01F LE link addresses. Gameplay only; UI consumes state.
   drawing; DrawACarMonitor0x157AC does the same for aircar positive sequences.
   Call `ai_pc_draw_advance` after hand drawing but before HUD composition.
   Glow frame advances modulo4 at0x1BA49 when bp_limit_flag is nonzero.
+- One-frame tint1444EC clears at0x18A05; damage flash1444E8 decrements at0x190F1
+  after its viewport tint. Both use every draw, including zero-tick draws, rather
+  than bp_limit_flag. UI reads/draws the effects before this state-only step.
 - RenderBells0x19340..0x193B2 recovers one energy when ticks is strictly greater
   than global spRegenTimer206834. The interval is max(6,65-signed16(max_energy)/10);
   the deadline advances even at full energy. It survives scene/NewGame/save loads.
