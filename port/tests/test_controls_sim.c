@@ -190,6 +190,36 @@ static void configured_classic(void)
     assert(!s.flight_mode && !s.unk_131418 && !s.kb_scan_status[0x15]);
 }
 
+static void classic_hand_confirm(void)
+{
+    cm_input in = {0};
+    unsigned i;
+    selector_arena();
+    s.pc_mode = 3; s.previous_pc_mode = 5;
+    s.kb_hand = 0x14; s.kb_hand_bit = 4;
+    s.flight_mode = 1; s.unk_131418 = 1000;
+    s.kb_scan_status[0x14] = 8;
+    s.kb_scan_status[s.kb_jump] = 3;
+    s.kb_scan_status[s.kb_map] = 2;
+    s.kb_scan_status[s.kb_exit] = 2;
+    assert(!sim_frame(&s, &w, &in, 2));
+    assert(s.primary_fire && s.flight_mode == 1 && !s.automap);
+    for (i = 0; i < SIM_SCAN_COUNT; ++i) assert(!s.kb_scan_status[i]);
+
+    selector_arena();
+    s.kb_hand = 0x14; s.kb_hand_bit = 4;
+    assert(!events_make_selector(&e, 3));
+    assert(e.selectors[2].count == 2);
+    s.pc_mode = 3; s.previous_pc_mode = 5;
+    s.kb_scan_status[0x14] = 8;
+    assert(!sim_frame(&s, &w, &in, 2));
+    assert(!s.primary_fire && !e.selector_confirm && e.selector_kind == 3);
+    s.kb_scan_status[0x1c] = 2;
+    assert(!sim_frame(&s, &w, &in, 4));
+    assert(e.selector_confirm);
+    memset(&e, 0, sizeof e);
+}
+
 static void modern_selector(void)
 {
     cm_controls controls;
@@ -321,6 +351,7 @@ int main(int argc, char **argv)
     classic_mouse();
     vehicle_secondary();
     configured_classic();
+    classic_hand_confirm();
     modern_selector();
     arena();
     w.object_count = w.person_count = 1;

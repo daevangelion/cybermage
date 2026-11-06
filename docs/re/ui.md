@@ -288,6 +288,9 @@ from the explicitly Enhanced live-topology overlay.
 Hand/use tests the latched `mask*2`, not held bits (013633..013656).
 Exit also lands on foot and clears the flight height (013335..0133E7); VDU's
 0139F0 consumer is bypassed by the separate hand/vehicle keyboard branches.
+No-list hand confirmation (012FBF..012FF7) runs before map/Exit/jump sampling,
+sets primary fire and clears all scan statuses. A list instead accepts literal
+Enter; rebinding Hand does not create a second selector-confirm key.
 
 Main reads the real user file before InitPC or a replay's slot load. Leaving
 the real Options screen writes it; a failed write is an error, not a silent

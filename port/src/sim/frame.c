@@ -1,6 +1,7 @@
 #include "sim_internal.h"
 #include "ai.h"
 #include "events.h"
+#include <string.h>
 
 #define MOVE_FAST 768
 #define MOVE_WALK 640
@@ -31,6 +32,18 @@ static int keyboard(sim_state *s, world *w)
     if (keys[0x2a]) {
         if (!s->shift_lock) { keys[0x2a] |= 2; s->shift_lock = 1; }
     } else s->shift_lock = 0;
+    /* Keyboard012FBF..012FF7 precedes map/Exit/jump and returns after clearing
+     * every scan. Active lists accept literal Enter through events_keyboard. */
+    if (s->pc_mode == 3 &&
+        (!s->events || (!s->events->selectors[0].count &&
+                       !s->events->selectors[1].count &&
+                       !s->events->selectors[2].count)) &&
+        down(s, s->kb_hand, s->kb_hand_bit * 2)) {
+        s->primary_fire = 1;
+        s->movement_request = s->yaw_request = 0;
+        memset(keys, 0, sizeof s->kb_scan_status);
+        return 0;
+    }
     if (down(s, s->kb_map, s->kb_map_bit * 2)) {
         keys[s->kb_map] = 0;
         if (!vehicle) s->automap ^= 1; /* Keyboard012FF9..01303B. */
@@ -356,22 +369,17 @@ int sim_frame(sim_state *s, world *w, const cm_input *input, uint32_t timer_tick
     /* HandleNextFrame 01C244..01C258 clears frame actions, not inertia.
      * In particular, zero momentum must not reuse last frame's speed. */
     s->unk_144aec = s->unk_144af0 = s->unk_144af4 = 0;
+    s->primary_fire = 0;
     jump = input->modern ? sim_modern_input(s, w, input) : keyboard(s, w);
     if (jump < 0) return -1;
     if(!input->modern && s->events && s->ai &&
        events_keyboard(s->events,s,s->ai,w)) return -1;
     /* HandleKeyboardEvents 013E39 samples B10 once, before acceleration. */
-    s->primary_fire = 0;
     if (s->ai) {
         unsigned key = input->modern ? 0x39 : s->ai->pc.kb_fire;
         unsigned mask = input->modern ? 1 : s->ai->pc.kb_fire_bit;
-        s->primary_fire = down(s, key, mask | mask * 2);
+        s->primary_fire |= down(s, key, mask | mask * 2);
         if (s->primary_fire) s->kb_scan_status[key] &= (uint8_t)~(mask * 2);
-        if (!input->modern && s->pc_mode == 3 &&
-            down(s, s->kb_hand, s->kb_hand_bit * 2)) {
-            s->primary_fire = 1;
-            s->kb_scan_status[s->kb_hand] = 0;
-        }
     }
     if (s->mouse_present) mouse_input(s, input);
     if (!jump) s->unk_144b20 = 0;
