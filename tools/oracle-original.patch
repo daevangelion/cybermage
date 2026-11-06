@@ -11,322 +11,6 @@ index fc1ccc6..8ae8265 100644
          for frame in 0..280 {
              if frame == 180 {gamepad::tap(&mut emu.m.kbd_queue,0x1C,false);}
              gamepad::controller_input(&emu.m,&mut emu.cpu);
-diff --git a/crates/game/src/frame_trace.rs b/crates/game/src/frame_trace.rs
-new file mode 100644
-index 0000000..4e11e9e
---- /dev/null
-+++ b/crates/game/src/frame_trace.rs
-@@ -0,0 +1,310 @@
-+use std::io::{BufWriter, Write};
-+use x86::{Cpu, EAX, EBX, ECX, EDX, ESI, ESP};
-+use crate::le::rt;
-+
-+const FRAME_ENTRY: u32 = 0x01B9DC;
-+const FRAME_DELTA_READY: u32 = 0x01BA1F;
-+const KEYBOARD_ENTRY: u32 = 0x012DD4;
-+const MOVE_WORLD_ENTRY: u32 = 0x037CF4;
-+const WORLD_BYTES: u32 = 0x144B74;
-+const RANGE_MAX: usize = 8;
-+const RANGE_BYTES_MAX: usize = 65536;
-+
-+struct Range { relative: bool, address: u32, length: usize }
-+struct Pending {
-+    words: [i64; 23], keys: [u8; 128], input_keys: [u8; 128],
-+    ranges: Vec<Vec<u8>>,
-+}
-+
-+/// Read-only observer: no guest opcode writes, hooks, registers or time changes.
-+pub struct FrameTrace {
-+    file: BufWriter<std::fs::File>, ranges: Vec<Range>,
-+    pending: Option<Pending>, frame: u32, this: u32,
-+    actors: Option<BufWriter<std::fs::File>>,
-+    actor_clocks: Option<BufWriter<std::fs::File>>, actor_fast_tick: Option<(u32, u32)>,
-+    seed: BufWriter<std::fs::File>,
-+    rng: Option<BufWriter<std::fs::File>>, rng_calls: u64,
-+    steering: Option<BufWriter<std::fs::File>>, steering_calls: u64,
-+    events: Option<BufWriter<std::fs::File>>,
-+    collision: Option<BufWriter<std::fs::File>>, collision_object: u32, collision_calls: u64,
-+}
-+
-+impl FrameTrace {
-+    pub fn open() -> Option<Self> {
-+        let path = std::env::var_os("CM_FRAME_TRACE")?;
-+        assert!(std::env::var_os("CM_ORIGINAL").is_some(), "frame traces require original mode");
-+        let spec = std::env::var("CM_FRAME_RANGES").unwrap_or_default();
-+        let mut ranges = Vec::new();
-+        let mut total = 0;
-+        for text in spec.split(',').filter(|s| !s.is_empty()) {
-+            let p: Vec<_> = text.split(':').collect();
-+            assert!(p.len() == 3 && matches!(p[0], "x"|"l"), "range must be x|l:HEX:DECIMAL");
-+            let address = u32::from_str_radix(p[1].trim_start_matches("0x"),16).expect("range address");
-+            let length: usize = p[2].parse().expect("range length");
-+            let relative = p[0] == "x";
-+            assert!(length > 0 && address.checked_add(length as u32).is_some_and(|end|
-+                end <= if relative { WORLD_BYTES } else { 0x20AB80 }), "range outside game image");
-+            total += length;
-+            assert!(ranges.len() < RANGE_MAX && total <= RANGE_BYTES_MAX, "too much trace memory");
-+            ranges.push(Range { relative, address, length });
-+        }
-+        let mut seed_path = std::path::PathBuf::from(&path);
-+        seed_path.set_file_name("seed.csv");
-+        let mut seed = BufWriter::new(std::fs::File::create(seed_path).expect("create seed trace"));
-+        writeln!(seed,"bios_tick,icount,time").expect("seed header");
-+        let mut file = BufWriter::new(std::fs::File::create(path).expect("create frame trace"));
-+        writeln!(file,"CMTRACE1,{}",ranges.len()).expect("write trace");
-+        for r in &ranges {
-+            writeln!(file,"range,{},{:x},{}",if r.relative {'x'} else {'l'},r.address,r.length).expect("write trace");
-+        }
-+        writeln!(file,"frame,ticks,previous,delta,limit_time,limit_flag,object,person,x,y,z,heading,pitch,body,kblatch,bios_shift,object_z,camera_u,camera_v,camera_z,camera_angle,horizon,scene,keys,input_keys,ranges...").expect("write trace");
-+        let actors = std::env::var_os("CM_ACTOR_TRACE").map(|path| {
-+            let mut out = BufWriter::new(std::fs::File::create(path).expect("create actor trace"));
-+            writeln!(out,"frame,ticks,rng0,rng1,rng2,person,object,x,y,z,heading,state,status,hp,target,animation,cursor,active").expect("actor header");
-+            out
-+        });
-+        let actor_clocks = std::env::var_os("CM_ACTOR_CLOCK_TRACE").map(|path| {
-+            let mut out = BufWriter::new(std::fs::File::create(path).expect("create actor clock trace"));
-+            writeln!(out,"frame,fast_ticks,normal_ticks").expect("actor clock header");
-+            out
-+        });
-+        let rng = std::env::var_os("CM_RNG_TRACE").map(|path| {
-+            let mut out = BufWriter::new(std::fs::File::create(path).expect("create RNG trace"));
-+            writeln!(out,"sequence,frame,operation,caller,bound,rng0,rng1,rng2,ticks,normal_deadline,fast_deadline").expect("RNG header");
-+            out
-+        });
-+        let steering = std::env::var_os("CM_STEERING_TRACE").map(|path| {
-+            let mut out = BufWriter::new(std::fs::File::create(path).expect("create steering trace"));
-+            writeln!(out,"sequence,frame,object,x,y,heading,target,mode,collisions,flags,mask").expect("steering header");
-+            out
-+        });
-+        let events = std::env::var_os("CM_EVENT_TRACE").map(|path| {
-+            let mut out = BufWriter::new(std::fs::File::create(path).expect("create event input trace"));
-+            writeln!(out,"frame,ticks,object,person,x,y,z,object_z,heading,body,pitch,scene,mode,previous_mode,stance,keys").expect("event input header");
-+            out
-+        });
-+        let collision = std::env::var_os("CM_COLLISION_TRACE").map(|path| {
-+            let mut out = BufWriter::new(std::fs::File::create(path).expect("create collision trace"));
-+            writeln!(out,"sequence,frame,object,proposed_x,proposed_y,source_x,source_y,source_floor,source_z,source_height,source_radius,node,candidate,targetable,flags,x,y,floor,z,height,radius,active").expect("collision header");
-+            out
-+        });
-+        let collision_object = std::env::var("CM_COLLISION_OBJECT").unwrap_or_default().parse().unwrap_or(0);
-+        Some(Self { file, ranges, pending: None, frame: 0, this: 0, actors, actor_clocks,
-+                    actor_fast_tick: None, seed, rng, rng_calls: 0,
-+                    steering, steering_calls: 0, events, collision, collision_object, collision_calls: 0 })
-+    }
-+
-+    fn hex(file: &mut BufWriter<std::fs::File>, bytes: &[u8]) {
-+        for b in bytes { write!(file,"{b:02x}").expect("write trace"); }
-+    }
-+
-+    fn flush_pending(&mut self) {
-+        if let Some(p) = self.pending.take() {
-+            for (i,n) in p.words.iter().enumerate() {
-+                write!(self.file,"{}{n}",if i == 0 {""} else {","}).expect("write trace");
-+            }
-+            write!(self.file,",").expect("write trace"); Self::hex(&mut self.file,&p.keys);
-+            write!(self.file,",").expect("write trace"); Self::hex(&mut self.file,&p.input_keys);
-+            for bytes in p.ranges { write!(self.file,",").expect("write trace"); Self::hex(&mut self.file,&bytes); }
-+            writeln!(self.file).expect("write trace");
-+            self.file.flush().expect("flush trace");
-+        }
-+    }
-+
-+    pub fn observe(&mut self, c: &Cpu, time: f64) {
-+        match c.eip {
-+            p if p == rt(0x348D0) && self.actor_clocks.is_some() => {
-+                let frame = self.frame.checked_sub(1).expect("UpdateObjects before first frame");
-+                assert!(self.actor_fast_tick.is_none(), "unpaired actor clock sample");
-+                self.actor_fast_tick = Some((frame, c.rd32(rt(0x207473))));
-+            }
-+            p if p == rt(0x348F7) => {
-+                if let Some(out) = &mut self.actor_clocks {
-+                    let (frame, fast) = self.actor_fast_tick.take().expect("missing fast actor clock");
-+                    assert!(frame == self.frame - 1, "actor clock samples cross frames");
-+                    writeln!(out,"{},{},{}",frame,fast,c.rd32(rt(0x207473))).expect("write actor clocks");
-+                    out.flush().expect("flush actor clocks");
-+                }
-+            }
-+            p if p == rt(0x435EC) && c.r[EDX] == self.collision_object => {
-+                if let Some(out) = &mut self.collision {
-+                    let x = c.r[EAX]; let obj = c.r[EDX];
-+                    let px = c.rd32(c.r[EBX]) as i32; let py = c.rd32(c.r[ECX]) as i32;
-+                    let mut row = |node: u32, candidate: u32| {
-+                        let signed = |off, id| c.rd32(x+off+id*4) as i32 as i64;
-+                        let values = [self.collision_calls as i64,self.frame as i64-1,obj as i64,
-+                            px as i64,py as i64,signed(0x61418,obj),signed(0x64080,obj),
-+                            signed(0x78D8C,obj),signed(0x66CE8,obj),signed(0x6C5B8,obj),
-+                            c.rd16(x+0x74AF0+obj*2) as i16 as i64,node as i64,candidate as i64,
-+                            c.rd8(x+0x7D028+candidate) as i64,c.rd32(x+0x5E7B0+candidate*4) as i64,
-+                            signed(0x61418,candidate),signed(0x64080,candidate),signed(0x78D8C,candidate),
-+                            signed(0x66CE8,candidate),signed(0x6C5B8,candidate),
-+                            c.rd16(x+0x74AF0+candidate*2) as i16 as i64,c.rd8(x+0x7DB42+candidate) as i64];
-+                        for (i,v) in values.iter().enumerate() {
-+                            write!(out,"{}{v}",if i==0 {""} else {","}).expect("write collision trace");
-+                        }
-+                        writeln!(out).expect("write collision trace");
-+                    };
-+                    row(0,0);
-+                    let tx = [px.wrapping_sub(0x4000)>>16,px.wrapping_add(0x4000)>>16];
-+                    let ty = [py.wrapping_sub(0x4000)>>16,py.wrapping_add(0x4000)>>16];
-+                    let chain = c.rd32(x+0xD7240);
-+                    for iy in 0..2 {
-+                        if iy==1 && ty[0]==ty[1] {continue;}
-+                        for ix in 0..2 {
-+                            if ix==1 && tx[0]==tx[1] {continue;}
-+                            if !(0..32).contains(&tx[ix]) || !(0..32).contains(&ty[iy]) {continue;}
-+                            let mut node = (ty[iy]*32+tx[ix]) as u32; let mut count=0;
-+                            while node!=0 {
-+                                assert!(node<12392 && count<12392,"invalid collision chain");
-+                                let candidate = c.rd16(chain+node*4+2) as u32;
-+                                assert!(candidate<2842,"invalid collision candidate");
-+                                row(node,candidate);
-+                                node=c.rd16(chain+node*4) as u32; count+=1;
-+                            }
-+                        }
-+                    }
-+                    self.collision_calls+=1;
-+                }
-+            }
-+            p if p == rt(MOVE_WORLD_ENTRY) => {
-+                if let Some(out) = &mut self.events {
-+                    let frame = self.frame.checked_sub(1).expect("MoveWorld before first traced frame");
-+                    let x = c.r[EAX];
-+                    assert!(x == self.this, "MoveWorld this differs from current frame");
-+                    let obj = c.rd32(x+0x130D04);
-+                    assert!(obj < 2842, "invalid event input player object");
-+                    let signed = |off| c.rd32(x+off) as i32;
-+                    write!(out,"{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},",
-+                        frame,c.rd32(rt(0x207473)),obj,c.rd32(x+0x130D08),
-+                        signed(0x61418+obj*4),signed(0x64080+obj*4),signed(0x78D8C+obj*4),
-+                        signed(0x66CE8+obj*4),c.rd16(x+0x7E65C+obj*2),signed(0x130D1C),
-+                        signed(0xE33F8),signed(0x130CEC),signed(0x14480C),signed(0x144810),
-+                        signed(0x144B34))
-+                        .expect("write event input trace");
-+                    Self::hex(out,c.read_bytes(rt(0x207C54),128));
-+                    writeln!(out).expect("write event input trace");
-+                    out.flush().expect("flush event input trace");
-+                }
-+            }
-+            p if p == rt(0x46507) => {
-+                if let Some(out) = &mut self.steering {
-+                    let x = c.r[ESI];
-+                    let obj = c.rd32(c.r[ESP]+0x60);
-+                    let ox = c.rd32(x+0x61418+obj*4) as i32;
-+                    let oy = c.rd32(x+0x64080+obj*4) as i32;
-+                    let tile = ((ox >> 16)+(oy >> 16)*32) as u32;
-+                    writeln!(out,"{},{},{},{},{},{},{},{},{},{},{}",self.steering_calls,
-+                        self.frame as i64-1,obj,ox,oy,c.rd16(x+0x7E65C+obj*2),c.rd16(x+0x7FC90+obj*2),
-+                        c.rd8(x+0x812C4+obj),c.rd32(c.r[ESP]+0x64),c.rd32(x+0x144B18),
-+                        c.rd16(c.rd32(x+0xCA098)+tile*2)).expect("write steering trace");
-+                    self.steering_calls += 1;
-+                }
-+            }
-+            p if p == rt(0x6731C) || p == rt(0x68AD0) => {
-+                if let Some(out) = &mut self.rng {
-+                    writeln!(out,"{},{},{},{:x},{},{},{},{},{},{},{}",self.rng_calls,
-+                        self.frame as i64 - 1,if p == rt(0x6731C) {"RND"} else {"RANDOM"},
-+                        crate::le::link(c.rd32(c.r[ESP])),if p == rt(0x6731C) {c.r[EAX] as i32} else {0},
-+                        c.rd16(rt(0x9747F)),c.rd16(rt(0x97481)),c.rd16(rt(0x97483)),
-+                        c.rd32(rt(0x207473)),if self.this == 0 {0} else {c.rd32(self.this+0x144B60)},
-+                        if self.this == 0 {0} else {c.rd32(self.this+0x144B64)})
-+                        .expect("write RNG call");
-+                    self.rng_calls += 1;
-+                }
-+            }
-+            p if p == rt(0x68ABF) => {
-+                writeln!(self.seed,"{},{},{}",c.rd16(0x46C),c.icount,time).expect("write seed source");
-+                self.seed.flush().expect("flush seed source");
-+            }
-+            p if p == rt(FRAME_ENTRY) => {
-+                self.flush_pending();
-+                self.this = c.r[EAX];
-+                let x = self.this;
-+                if let Some(out) = &mut self.actors {
-+                    let count = c.rd32(x+0x130D24);
-+                    assert!(count <= 2842,"invalid actor trace count");
-+                    for i in 0..count {
-+                        let p = c.rd32(x+0x13141C+i*4);
-+                        assert!(p != 0,"null actor trace record");
-+                        let obj = c.rd16(p) as u32;
-+                        assert!(obj < 2842,"invalid traced actor object");
-+                        writeln!(out,"{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}",
-+                            self.frame,c.rd32(rt(0x207473)),
-+                            c.rd16(rt(0x9747F)),c.rd16(rt(0x97481)),c.rd16(rt(0x97483)),
-+                            i,obj,c.rd32(x+0x61418+obj*4) as i32,c.rd32(x+0x64080+obj*4) as i32,
-+                            c.rd32(x+0x78D8C+obj*4) as i32,c.rd16(x+0x7E65C+obj*2),
-+                            c.rd16(p+0x1C) as i16,c.rd16(p+0x36) as i16,c.rd16(p+0x38) as i16,
-+                            c.rd32(p+8) as i32,c.rd8(p+0xBC),c.rd8(p+0xBD),c.rd8(x+0x7DB42+obj))
-+                            .expect("write actor trace");
-+                    }
-+                    out.flush().expect("flush actor trace");
-+                }
-+                if self.frame == 0 {
-+                    if let Some(prefix) = std::env::var_os("CM_FRAME_SNAPSHOT") {
-+                        let mut path = std::path::PathBuf::from(&prefix);
-+                        path.set_extension("xox");
-+                        std::fs::write(&path,c.read_bytes(x,0x144B80)).expect("write Xox snapshot");
-+                        path.set_extension("persons");
-+                        let mut persons = BufWriter::new(std::fs::File::create(path).expect("create PERSON snapshot"));
-+                        let count = c.rd32(x+0x130D24);
-+                        assert!(count <= 2842,"invalid PERSON count");
-+                        persons.write_all(b"CMPERSON").expect("write PERSON header");
-+                        persons.write_all(&count.to_le_bytes()).expect("write PERSON count");
-+                        for i in 0..count {
-+                            let p = c.rd32(x+0x13141C+i*4);
-+                            persons.write_all(&i.to_le_bytes()).expect("write PERSON index");
-+                            persons.write_all(&p.to_le_bytes()).expect("write PERSON address");
-+                            assert!(p != 0,"null PERSON in snapshot");
-+                            persons.write_all(c.read_bytes(p,0xC0)).expect("write PERSON");
-+                        }
-+                        persons.flush().expect("flush PERSON snapshot");
-+                    }
-+                }
-+                let obj = c.rd32(x+0x130D04);
-+                assert!(obj < 2842, "invalid traced player object");
-+                let ticks = c.rd32(rt(0x207473));
-+                let previous = c.rd32(x+0x144B68);
-+                let limit = c.rd32(rt(0x1E3948));
-+                let signed = |off| c.rd32(x+off) as i32 as i64;
-+                let keys: [u8;128] = c.read_bytes(rt(0x207C54),128).try_into().unwrap();
-+                let words = [self.frame as i64,ticks as i64,previous as i64,
-+                    ticks.wrapping_sub(previous).min(2) as i64,limit as i64,
-+                    if ticks.wrapping_sub(limit)>=2 {ticks.wrapping_sub(limit) as i64} else {0},
-+                    obj as i64,c.rd32(x+0x130D08) as i64,signed(0x61418+obj*4),signed(0x64080+obj*4),
-+                    signed(0x78D8C+obj*4),c.rd16(x+0x7E65C+obj*2) as i64,signed(0xE33F8),signed(0x130D1C),
-+                    c.rd8(rt(0x97462)) as i64,c.rd8(0x417) as i64,signed(0x66CE8+obj*4),
-+                    signed(0xE33E8),signed(0xE33EC),signed(0xE33F0),c.rd16(x+0xE33F4) as i64,
-+                    signed(0xE33FC),signed(0x130CEC)];
-+                let ranges = self.ranges.iter().map(|r| c.read_bytes(
-+                    if r.relative {x+r.address} else {rt(r.address)},r.length).to_vec()).collect();
-+                self.pending = Some(Pending { words, keys, input_keys: keys, ranges });
-+                self.frame += 1;
-+            }
-+            p if p == rt(FRAME_DELTA_READY) => {
-+                if let Some(row) = &mut self.pending {
-+                    row.words[3] = c.rd32(self.this+0x144B6C) as i32 as i64;
-+                }
-+            }
-+            p if p == rt(KEYBOARD_ENTRY) => {
-+                if let Some(row) = &mut self.pending {
-+                    row.input_keys.copy_from_slice(c.read_bytes(rt(0x207C54),128));
-+                    row.words[14] = c.rd8(rt(0x97462)) as i64;
-+                    row.words[15] = c.rd8(0x417) as i64;
-+                }
-+            }
-+            _ => {}
-+        }
-+    }
-+}
-+
-+impl Drop for FrameTrace {
-+    fn drop(&mut self) {
-+        self.flush_pending();
-+        if let Some(out) = &mut self.actor_clocks { out.flush().expect("flush actor clocks"); }
-+        if let Some(out) = &mut self.rng { out.flush().expect("flush RNG trace"); }
-+        if let Some(out) = &mut self.steering { out.flush().expect("flush steering trace"); }
-+        if let Some(out) = &mut self.collision { out.flush().expect("flush collision trace"); }
-+        if let Some(out) = &mut self.events { out.flush().expect("flush event input trace"); }
-+    }
-+}
 diff --git a/crates/game/src/frontend.rs b/crates/game/src/frontend.rs
 index b28668a..4e25654 100644
 --- a/crates/game/src/frontend.rs
@@ -800,3 +484,366 @@ index cfdf063..d8fbaf4 100644
              (e(c[0]) << 16) | (e(c[1]) << 8) | e(c[2])
          });
          if self.mode == 3 {
+diff --git a/crates/game/src/frame_trace.rs b/crates/game/src/frame_trace.rs
+new file mode 100644
+index 0000000..2b6bd22
+--- /dev/null
++++ b/crates/game/src/frame_trace.rs
+@@ -0,0 +1,357 @@
++use std::io::{BufWriter, Write};
++use x86::{Cpu, EAX, EBX, ECX, EDX, ESI, ESP};
++use crate::le::rt;
++
++const FRAME_ENTRY: u32 = 0x01B9DC;
++const FRAME_DELTA_READY: u32 = 0x01BA1F;
++const KEYBOARD_ENTRY: u32 = 0x012DD4;
++const MOVE_WORLD_ENTRY: u32 = 0x037CF4;
++const WORLD_BYTES: u32 = 0x144B74;
++const RANGE_MAX: usize = 8;
++const RANGE_BYTES_MAX: usize = 65536;
++
++struct Range { relative: bool, address: u32, length: usize }
++struct Pending {
++    words: [i64; 23], keys: [u8; 128], input_keys: [u8; 128],
++    ranges: Vec<Vec<u8>>,
++}
++
++/// Read-only observer: no guest opcode writes, hooks, registers or time changes.
++pub struct FrameTrace {
++    file: BufWriter<std::fs::File>, ranges: Vec<Range>,
++    pending: Option<Pending>, frame: u32, this: u32,
++    actors: Option<BufWriter<std::fs::File>>,
++    actor_clocks: Option<BufWriter<std::fs::File>>, actor_fast_tick: Option<(u32, u32)>,
++    seed: BufWriter<std::fs::File>,
++    rng: Option<BufWriter<std::fs::File>>, rng_calls: u64,
++    steering: Option<BufWriter<std::fs::File>>, steering_calls: u64,
++    events: Option<BufWriter<std::fs::File>>,
++    items: Option<BufWriter<std::fs::File>>,
++    selectors: Option<BufWriter<std::fs::File>>,
++    collision: Option<BufWriter<std::fs::File>>, collision_object: u32, collision_calls: u64,
++}
++
++impl FrameTrace {
++    pub fn open() -> Option<Self> {
++        let path = std::env::var_os("CM_FRAME_TRACE")?;
++        assert!(std::env::var_os("CM_ORIGINAL").is_some(), "frame traces require original mode");
++        let spec = std::env::var("CM_FRAME_RANGES").unwrap_or_default();
++        let mut ranges = Vec::new();
++        let mut total = 0;
++        for text in spec.split(',').filter(|s| !s.is_empty()) {
++            let p: Vec<_> = text.split(':').collect();
++            assert!(p.len() == 3 && matches!(p[0], "x"|"l"), "range must be x|l:HEX:DECIMAL");
++            let address = u32::from_str_radix(p[1].trim_start_matches("0x"),16).expect("range address");
++            let length: usize = p[2].parse().expect("range length");
++            let relative = p[0] == "x";
++            assert!(length > 0 && address.checked_add(length as u32).is_some_and(|end|
++                end <= if relative { WORLD_BYTES } else { 0x20AB80 }), "range outside game image");
++            total += length;
++            assert!(ranges.len() < RANGE_MAX && total <= RANGE_BYTES_MAX, "too much trace memory");
++            ranges.push(Range { relative, address, length });
++        }
++        let mut seed_path = std::path::PathBuf::from(&path);
++        seed_path.set_file_name("seed.csv");
++        let mut seed = BufWriter::new(std::fs::File::create(seed_path).expect("create seed trace"));
++        writeln!(seed,"bios_tick,icount,time").expect("seed header");
++        let mut file = BufWriter::new(std::fs::File::create(path).expect("create frame trace"));
++        writeln!(file,"CMTRACE1,{}",ranges.len()).expect("write trace");
++        for r in &ranges {
++            writeln!(file,"range,{},{:x},{}",if r.relative {'x'} else {'l'},r.address,r.length).expect("write trace");
++        }
++        writeln!(file,"frame,ticks,previous,delta,limit_time,limit_flag,object,person,x,y,z,heading,pitch,body,kblatch,bios_shift,object_z,camera_u,camera_v,camera_z,camera_angle,horizon,scene,keys,input_keys,ranges...").expect("write trace");
++        let actors = std::env::var_os("CM_ACTOR_TRACE").map(|path| {
++            let mut out = BufWriter::new(std::fs::File::create(path).expect("create actor trace"));
++            writeln!(out,"frame,ticks,rng0,rng1,rng2,person,object,x,y,z,heading,state,status,hp,target,animation,cursor,active").expect("actor header");
++            out
++        });
++        let actor_clocks = std::env::var_os("CM_ACTOR_CLOCK_TRACE").map(|path| {
++            let mut out = BufWriter::new(std::fs::File::create(path).expect("create actor clock trace"));
++            writeln!(out,"frame,fast_ticks,normal_ticks").expect("actor clock header");
++            out
++        });
++        let rng = std::env::var_os("CM_RNG_TRACE").map(|path| {
++            let mut out = BufWriter::new(std::fs::File::create(path).expect("create RNG trace"));
++            writeln!(out,"sequence,frame,operation,caller,bound,rng0,rng1,rng2,ticks,normal_deadline,fast_deadline").expect("RNG header");
++            out
++        });
++        let steering = std::env::var_os("CM_STEERING_TRACE").map(|path| {
++            let mut out = BufWriter::new(std::fs::File::create(path).expect("create steering trace"));
++            writeln!(out,"sequence,frame,object,x,y,heading,target,mode,collisions,flags,mask").expect("steering header");
++            out
++        });
++        let events = std::env::var_os("CM_EVENT_TRACE").map(|path| {
++            let mut out = BufWriter::new(std::fs::File::create(path).expect("create event input trace"));
++            writeln!(out,"frame,ticks,object,person,x,y,z,object_z,heading,body,pitch,scene,mode,previous_mode,stance,keys").expect("event input header");
++            out
++        });
++        let items = std::env::var_os("CM_ITEM_TRACE").map(|path| {
++            let mut out = BufWriter::new(std::fs::File::create(path).expect("create item input trace"));
++            writeln!(out,"frame,ticks,type,object,source").expect("item input header");
++            out
++        });
++        let selectors = std::env::var_os("CM_SELECTOR_TRACE").map(|path| {
++            let mut out = BufWriter::new(std::fs::File::create(path).expect("create selector input trace"));
++            writeln!(out,"frame,ticks,action,mouse,joystick,hand_x,hand_y").expect("selector input header");
++            out
++        });
++        let collision = std::env::var_os("CM_COLLISION_TRACE").map(|path| {
++            let mut out = BufWriter::new(std::fs::File::create(path).expect("create collision trace"));
++            writeln!(out,"sequence,frame,object,proposed_x,proposed_y,source_x,source_y,source_floor,source_z,source_height,source_radius,node,candidate,targetable,flags,x,y,floor,z,height,radius,active").expect("collision header");
++            out
++        });
++        let collision_object = std::env::var("CM_COLLISION_OBJECT").unwrap_or_default().parse().unwrap_or(0);
++        Some(Self { file, ranges, pending: None, frame: 0, this: 0, actors, actor_clocks,
++                    actor_fast_tick: None, seed, rng, rng_calls: 0,
++                    steering, steering_calls: 0, events, items, selectors, collision, collision_object, collision_calls: 0 })
++    }
++
++    fn hex(file: &mut BufWriter<std::fs::File>, bytes: &[u8]) {
++        for b in bytes { write!(file,"{b:02x}").expect("write trace"); }
++    }
++
++    fn flush_pending(&mut self) {
++        if let Some(p) = self.pending.take() {
++            for (i,n) in p.words.iter().enumerate() {
++                write!(self.file,"{}{n}",if i == 0 {""} else {","}).expect("write trace");
++            }
++            write!(self.file,",").expect("write trace"); Self::hex(&mut self.file,&p.keys);
++            write!(self.file,",").expect("write trace"); Self::hex(&mut self.file,&p.input_keys);
++            for bytes in p.ranges { write!(self.file,",").expect("write trace"); Self::hex(&mut self.file,&bytes); }
++            writeln!(self.file).expect("write trace");
++            self.file.flush().expect("flush trace");
++        }
++    }
++
++    pub fn observe(&mut self, c: &Cpu, time: f64) {
++        match c.eip {
++            p if p == rt(0x42700) &&
++                matches!(crate::le::link(c.rd32(c.r[ESP])),0x43898|0x43B0A|0x43D7E|0x43FF0) => {
++                if let Some(out) = &mut self.items {
++                    let frame = self.frame.checked_sub(1).expect("CollItem before first traced frame");
++                    let x = c.r[EAX];
++                    assert!(x == self.this, "CollItem this differs from current frame");
++                    let source = c.rd32(x+0x130D04);
++                    assert!(c.r[EBX] < 2842 && source < 2842, "invalid item input object");
++                    writeln!(out,"{},{},{},{},{}",frame,c.rd32(rt(0x207473)),
++                        c.r[EDX] as i32,c.r[EBX],source).expect("write item input trace");
++                    out.flush().expect("flush item input trace");
++                }
++            }
++            p if p == rt(0x1B580) => {
++                if let Some(out) = &mut self.selectors {
++                    let frame = self.frame.checked_sub(1).expect("ProcessSelector before first traced frame");
++                    let x = c.r[EAX];
++                    assert!(x == self.this, "ProcessSelector this differs from current frame");
++                    writeln!(out,"{},{},0,{},{},{},{}",frame,c.rd32(rt(0x207473)),
++                        c.rd32(x+0xE3510),c.rd32(x+0xE3518),
++                        c.rd32(x+0x144AA8) as i32,c.rd32(x+0x144AAC) as i32).expect("write selector input trace");
++                    out.flush().expect("flush selector input trace");
++                }
++            }
++            p if p == rt(0x50A8F) || p == rt(0x515F8) => {
++                if self.frame != 0 {
++                    if let Some(out) = &mut self.selectors {
++                        writeln!(out,"{},{},{},0,0,0,0",self.frame-1,c.rd32(rt(0x207473)),
++                            if p == rt(0x50A8F) {1} else {2}).expect("write selector UI action");
++                        out.flush().expect("flush selector UI action");
++                    }
++                }
++            }
++            p if p == rt(0x348D0) && self.actor_clocks.is_some() => {
++                let frame = self.frame.checked_sub(1).expect("UpdateObjects before first frame");
++                assert!(self.actor_fast_tick.is_none(), "unpaired actor clock sample");
++                self.actor_fast_tick = Some((frame, c.rd32(rt(0x207473))));
++            }
++            p if p == rt(0x348F7) => {
++                if let Some(out) = &mut self.actor_clocks {
++                    let (frame, fast) = self.actor_fast_tick.take().expect("missing fast actor clock");
++                    assert!(frame == self.frame - 1, "actor clock samples cross frames");
++                    writeln!(out,"{},{},{}",frame,fast,c.rd32(rt(0x207473))).expect("write actor clocks");
++                    out.flush().expect("flush actor clocks");
++                }
++            }
++            p if p == rt(0x435EC) && c.r[EDX] == self.collision_object => {
++                if let Some(out) = &mut self.collision {
++                    let x = c.r[EAX]; let obj = c.r[EDX];
++                    let px = c.rd32(c.r[EBX]) as i32; let py = c.rd32(c.r[ECX]) as i32;
++                    let mut row = |node: u32, candidate: u32| {
++                        let signed = |off, id| c.rd32(x+off+id*4) as i32 as i64;
++                        let values = [self.collision_calls as i64,self.frame as i64-1,obj as i64,
++                            px as i64,py as i64,signed(0x61418,obj),signed(0x64080,obj),
++                            signed(0x78D8C,obj),signed(0x66CE8,obj),signed(0x6C5B8,obj),
++                            c.rd16(x+0x74AF0+obj*2) as i16 as i64,node as i64,candidate as i64,
++                            c.rd8(x+0x7D028+candidate) as i64,c.rd32(x+0x5E7B0+candidate*4) as i64,
++                            signed(0x61418,candidate),signed(0x64080,candidate),signed(0x78D8C,candidate),
++                            signed(0x66CE8,candidate),signed(0x6C5B8,candidate),
++                            c.rd16(x+0x74AF0+candidate*2) as i16 as i64,c.rd8(x+0x7DB42+candidate) as i64];
++                        for (i,v) in values.iter().enumerate() {
++                            write!(out,"{}{v}",if i==0 {""} else {","}).expect("write collision trace");
++                        }
++                        writeln!(out).expect("write collision trace");
++                    };
++                    row(0,0);
++                    let tx = [px.wrapping_sub(0x4000)>>16,px.wrapping_add(0x4000)>>16];
++                    let ty = [py.wrapping_sub(0x4000)>>16,py.wrapping_add(0x4000)>>16];
++                    let chain = c.rd32(x+0xD7240);
++                    for iy in 0..2 {
++                        if iy==1 && ty[0]==ty[1] {continue;}
++                        for ix in 0..2 {
++                            if ix==1 && tx[0]==tx[1] {continue;}
++                            if !(0..32).contains(&tx[ix]) || !(0..32).contains(&ty[iy]) {continue;}
++                            let mut node = (ty[iy]*32+tx[ix]) as u32; let mut count=0;
++                            while node!=0 {
++                                assert!(node<12392 && count<12392,"invalid collision chain");
++                                let candidate = c.rd16(chain+node*4+2) as u32;
++                                assert!(candidate<2842,"invalid collision candidate");
++                                row(node,candidate);
++                                node=c.rd16(chain+node*4) as u32; count+=1;
++                            }
++                        }
++                    }
++                    self.collision_calls+=1;
++                }
++            }
++            p if p == rt(MOVE_WORLD_ENTRY) => {
++                if let Some(out) = &mut self.events {
++                    let frame = self.frame.checked_sub(1).expect("MoveWorld before first traced frame");
++                    let x = c.r[EAX];
++                    assert!(x == self.this, "MoveWorld this differs from current frame");
++                    let obj = c.rd32(x+0x130D04);
++                    assert!(obj < 2842, "invalid event input player object");
++                    let signed = |off| c.rd32(x+off) as i32;
++                    write!(out,"{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},",
++                        frame,c.rd32(rt(0x207473)),obj,c.rd32(x+0x130D08),
++                        signed(0x61418+obj*4),signed(0x64080+obj*4),signed(0x78D8C+obj*4),
++                        signed(0x66CE8+obj*4),c.rd16(x+0x7E65C+obj*2),signed(0x130D1C),
++                        signed(0xE33F8),signed(0x130CEC),signed(0x14480C),signed(0x144810),
++                        signed(0x144B34))
++                        .expect("write event input trace");
++                    Self::hex(out,c.read_bytes(rt(0x207C54),128));
++                    writeln!(out).expect("write event input trace");
++                    out.flush().expect("flush event input trace");
++                }
++            }
++            p if p == rt(0x46507) => {
++                if let Some(out) = &mut self.steering {
++                    let x = c.r[ESI];
++                    let obj = c.rd32(c.r[ESP]+0x60);
++                    let ox = c.rd32(x+0x61418+obj*4) as i32;
++                    let oy = c.rd32(x+0x64080+obj*4) as i32;
++                    let tile = ((ox >> 16)+(oy >> 16)*32) as u32;
++                    writeln!(out,"{},{},{},{},{},{},{},{},{},{},{}",self.steering_calls,
++                        self.frame as i64-1,obj,ox,oy,c.rd16(x+0x7E65C+obj*2),c.rd16(x+0x7FC90+obj*2),
++                        c.rd8(x+0x812C4+obj),c.rd32(c.r[ESP]+0x64),c.rd32(x+0x144B18),
++                        c.rd16(c.rd32(x+0xCA098)+tile*2)).expect("write steering trace");
++                    self.steering_calls += 1;
++                }
++            }
++            p if p == rt(0x6731C) || p == rt(0x68AD0) => {
++                if let Some(out) = &mut self.rng {
++                    writeln!(out,"{},{},{},{:x},{},{},{},{},{},{},{}",self.rng_calls,
++                        self.frame as i64 - 1,if p == rt(0x6731C) {"RND"} else {"RANDOM"},
++                        crate::le::link(c.rd32(c.r[ESP])),if p == rt(0x6731C) {c.r[EAX] as i32} else {0},
++                        c.rd16(rt(0x9747F)),c.rd16(rt(0x97481)),c.rd16(rt(0x97483)),
++                        c.rd32(rt(0x207473)),if self.this == 0 {0} else {c.rd32(self.this+0x144B60)},
++                        if self.this == 0 {0} else {c.rd32(self.this+0x144B64)})
++                        .expect("write RNG call");
++                    self.rng_calls += 1;
++                }
++            }
++            p if p == rt(0x68ABF) => {
++                writeln!(self.seed,"{},{},{}",c.rd16(0x46C),c.icount,time).expect("write seed source");
++                self.seed.flush().expect("flush seed source");
++            }
++            p if p == rt(FRAME_ENTRY) => {
++                self.flush_pending();
++                self.this = c.r[EAX];
++                let x = self.this;
++                if let Some(out) = &mut self.actors {
++                    let count = c.rd32(x+0x130D24);
++                    assert!(count <= 2842,"invalid actor trace count");
++                    for i in 0..count {
++                        let p = c.rd32(x+0x13141C+i*4);
++                        assert!(p != 0,"null actor trace record");
++                        let obj = c.rd16(p) as u32;
++                        assert!(obj < 2842,"invalid traced actor object");
++                        writeln!(out,"{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}",
++                            self.frame,c.rd32(rt(0x207473)),
++                            c.rd16(rt(0x9747F)),c.rd16(rt(0x97481)),c.rd16(rt(0x97483)),
++                            i,obj,c.rd32(x+0x61418+obj*4) as i32,c.rd32(x+0x64080+obj*4) as i32,
++                            c.rd32(x+0x78D8C+obj*4) as i32,c.rd16(x+0x7E65C+obj*2),
++                            c.rd16(p+0x1C) as i16,c.rd16(p+0x36) as i16,c.rd16(p+0x38) as i16,
++                            c.rd32(p+8) as i32,c.rd8(p+0xBC),c.rd8(p+0xBD),c.rd8(x+0x7DB42+obj))
++                            .expect("write actor trace");
++                    }
++                    out.flush().expect("flush actor trace");
++                }
++                if self.frame == 0 {
++                    if let Some(prefix) = std::env::var_os("CM_FRAME_SNAPSHOT") {
++                        let mut path = std::path::PathBuf::from(&prefix);
++                        path.set_extension("xox");
++                        std::fs::write(&path,c.read_bytes(x,0x144B80)).expect("write Xox snapshot");
++                        path.set_extension("persons");
++                        let mut persons = BufWriter::new(std::fs::File::create(path).expect("create PERSON snapshot"));
++                        let count = c.rd32(x+0x130D24);
++                        assert!(count <= 2842,"invalid PERSON count");
++                        persons.write_all(b"CMPERSON").expect("write PERSON header");
++                        persons.write_all(&count.to_le_bytes()).expect("write PERSON count");
++                        for i in 0..count {
++                            let p = c.rd32(x+0x13141C+i*4);
++                            persons.write_all(&i.to_le_bytes()).expect("write PERSON index");
++                            persons.write_all(&p.to_le_bytes()).expect("write PERSON address");
++                            assert!(p != 0,"null PERSON in snapshot");
++                            persons.write_all(c.read_bytes(p,0xC0)).expect("write PERSON");
++                        }
++                        persons.flush().expect("flush PERSON snapshot");
++                    }
++                }
++                let obj = c.rd32(x+0x130D04);
++                assert!(obj < 2842, "invalid traced player object");
++                let ticks = c.rd32(rt(0x207473));
++                let previous = c.rd32(x+0x144B68);
++                let limit = c.rd32(rt(0x1E3948));
++                let signed = |off| c.rd32(x+off) as i32 as i64;
++                let keys: [u8;128] = c.read_bytes(rt(0x207C54),128).try_into().unwrap();
++                let words = [self.frame as i64,ticks as i64,previous as i64,
++                    ticks.wrapping_sub(previous).min(2) as i64,limit as i64,
++                    if ticks.wrapping_sub(limit)>=2 {ticks.wrapping_sub(limit) as i64} else {0},
++                    obj as i64,c.rd32(x+0x130D08) as i64,signed(0x61418+obj*4),signed(0x64080+obj*4),
++                    signed(0x78D8C+obj*4),c.rd16(x+0x7E65C+obj*2) as i64,signed(0xE33F8),signed(0x130D1C),
++                    c.rd8(rt(0x97462)) as i64,c.rd8(0x417) as i64,signed(0x66CE8+obj*4),
++                    signed(0xE33E8),signed(0xE33EC),signed(0xE33F0),c.rd16(x+0xE33F4) as i64,
++                    signed(0xE33FC),signed(0x130CEC)];
++                let ranges = self.ranges.iter().map(|r| c.read_bytes(
++                    if r.relative {x+r.address} else {rt(r.address)},r.length).to_vec()).collect();
++                self.pending = Some(Pending { words, keys, input_keys: keys, ranges });
++                self.frame += 1;
++            }
++            p if p == rt(FRAME_DELTA_READY) => {
++                if let Some(row) = &mut self.pending {
++                    row.words[3] = c.rd32(self.this+0x144B6C) as i32 as i64;
++                }
++            }
++            p if p == rt(KEYBOARD_ENTRY) => {
++                if let Some(row) = &mut self.pending {
++                    row.input_keys.copy_from_slice(c.read_bytes(rt(0x207C54),128));
++                    row.words[14] = c.rd8(rt(0x97462)) as i64;
++                    row.words[15] = c.rd8(0x417) as i64;
++                }
++            }
++            _ => {}
++        }
++    }
++}
++
++impl Drop for FrameTrace {
++    fn drop(&mut self) {
++        self.flush_pending();
++        if let Some(out) = &mut self.actor_clocks { out.flush().expect("flush actor clocks"); }
++        if let Some(out) = &mut self.rng { out.flush().expect("flush RNG trace"); }
++        if let Some(out) = &mut self.steering { out.flush().expect("flush steering trace"); }
++        if let Some(out) = &mut self.collision { out.flush().expect("flush collision trace"); }
++        if let Some(out) = &mut self.events { out.flush().expect("flush event input trace"); }
++        if let Some(out) = &mut self.items { out.flush().expect("flush item input trace"); }
++        if let Some(out) = &mut self.selectors { out.flush().expect("flush selector input trace"); }
++    }
++}

@@ -159,6 +159,10 @@ def main():
                         help="record every original RND/RANDOM call site and pre-call RNG words")
     parser.add_argument("--event-trace", action="store_true",
                         help="record read-only MoveWorld entry inputs keyed by frame")
+    parser.add_argument("--item-trace", action="store_true",
+                        help="record read-only root CollItem inputs from Sim contacts")
+    parser.add_argument("--selector-trace", action="store_true",
+                        help="record selector device inputs and completed UI save/load actions")
     parser.add_argument("--watch", action="append", default=[], metavar="LINK_HEX",
                         help="read-only byte write-watch; heap addresses use runtime minus 0x400000")
     parser.add_argument("--steering-trace", action="store_true",
@@ -187,7 +191,7 @@ def main():
         total += length
     if len(args.trace_range) > 8 or total > 65536:
         raise ValueError("frame traces allow eight ranges / 65536 bytes total")
-    if (args.trace_range or args.snapshot or args.actor_trace or args.rng_trace or args.steering_trace or args.event_trace or args.collision_object is not None) and not args.frame_trace:
+    if (args.trace_range or args.snapshot or args.actor_trace or args.rng_trace or args.steering_trace or args.event_trace or args.item_trace or args.selector_trace or args.collision_object is not None) and not args.frame_trace:
         raise ValueError("--trace-range/--snapshot/--actor-trace/--rng-trace require --frame-trace")
     path = Path(args.scenario)
     if not path.is_file():
@@ -219,6 +223,10 @@ def main():
                 env["CM_RNG_TRACE"] = str(destination / "rng.csv")
             if args.event_trace:
                 env["CM_EVENT_TRACE"] = str(destination / "events-input.csv")
+            if args.item_trace:
+                env["CM_ITEM_TRACE"] = str(destination / "items-input.csv")
+            if args.selector_trace:
+                env["CM_SELECTOR_TRACE"] = str(destination / "selectors-input.csv")
             if args.steering_trace:
                 env["CM_STEERING_TRACE"] = str(destination / "steering.csv")
             if args.collision_object is not None:
@@ -260,6 +268,8 @@ def main():
                 "seed_trace": "seed.csv" if args.frame_trace else None,
                 "rng_trace": "rng.csv" if args.rng_trace else None,
                 "event_trace": "events-input.csv" if args.event_trace else None,
+                "item_trace": "items-input.csv" if args.item_trace else None,
+                "selector_trace": "selectors-input.csv" if args.selector_trace else None,
                 "watch_links": watches,
                 "steering_trace": "steering.csv" if args.steering_trace else None,
                 "collision_object": args.collision_object,

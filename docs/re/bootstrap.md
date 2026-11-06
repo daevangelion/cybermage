@@ -256,3 +256,26 @@ position is not generally its input. The Events comparator requires both files,
 checks independently computed switch/vehicle identity before accepting the
 Sim-owned position observations, and compares event outputs at the next
 pre-frame checkpoint. See `docs/re/events.md` for the Earthmother route result.
+
+### Inventory and selector inputs
+
+`--item-trace` writes `items-input.csv` with
+`frame,ticks,type,object,source`. CollItem042700 is sampled only for the four
+direct CollObject callers (return addresses43898/43B0A/43D7E/43FF0), excluding
+recursive bundle grants. Type/object come from EDX/EBX; source is the current
+player object. The reducer independently checks the prop's cached disk item
+definition, then calls its real pickup implementation.
+
+`--selector-trace` writes `selectors-input.csv` with
+`frame,ticks,action,mouse,joystick,hand_x,hand_y`. Action0 samples the device
+flags (+E3510/+E3518) and virtual hand coordinates at ProcessSelector01B580.
+It records no selector count, index, map, inventory or HP outputs. Actions1/2
+are completed external UI save/load operations, observed before the original
+six count/index resets at050A8F/0515F8; their device fields are zero.
+The often-cited050AC3/05162C are displacement bytes, not instruction boundaries.
+Initial pre-frame load is handled by the real save codec, not a replayed reset.
+Enter and shortcut confirmation still call ProcessSelector; only a newly
+opening selector or an early Escape cancellation lacks that action0 row.
+
+Both options require `--frame-trace`. All observations remain read-only and
+use the same source/patch/binary provenance checks as MoveWorld observations.
