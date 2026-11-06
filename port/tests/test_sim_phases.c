@@ -73,6 +73,20 @@ static void cap(const char *data)
     s.ai = NULL; s.primary_fire = 1; s.kb_scan_status[0x39] = 3;
     assert(!sim_frame(&s, &w, &input, 2));
     assert(!s.primary_fire && s.kb_scan_status[0x39] == 3);
+    arena(data);
+    s.pc_mode = 5; s.unk_144b34 = -0x3000; s.unk_144b3c = 0;
+    s.body_height = 0x7000;
+    s.kb_scan_status[0x48] = 12;
+    /* ProcessInputEvents01485D: running requests standing even after a
+     * forced crouch has reached its minimum and cleared the stance request. */
+    assert(!sim_frame(&s, &w, &input, 2));
+    assert(s.running && s.unk_144b3c == 1 && s.unk_144b34 == -0x2800);
+    arena(data);
+    s.pc_mode = 2; s.unk_144b34 = -0x3000; s.unk_144b3c = 0;
+    s.body_height = 0x7000;
+    s.kb_scan_status[0x48] = 12; s.kb_scan_status[0x39] = 3;
+    assert(!sim_frame(&s, &w, &input, 2));
+    assert(!s.running && !s.unk_144b3c && s.unk_144b34 == -0x3000);
     puts("sim primary/cap/binding checks and explicit pulse consumer checks matched");
 }
 
