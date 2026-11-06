@@ -14,6 +14,9 @@ static void combat_init(ai_state *a, world *w, world_person *p)
     p->unk_0088 = m->unk_009E[choice].sides;
     p->unk_008C = m->unk_009E[choice].add;
     p->unk_0060 = m->unk_00D0;
+    /* Original LoadPERSONS leaves this accuracy counter uninitialized.
+     * Normal play deliberately uses zero; see architecture_port.md. */
+    p->unk_0024 = 0;
     p->unk_0064 = p->unk_0068 = p->unk_006C = p->unk_0070 = 0;
     p->unk_007C = p->unk_0080 = 0;
 }

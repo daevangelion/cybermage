@@ -1,4 +1,5 @@
 #include "ai.h"
+#include "events.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -8,6 +9,7 @@ static world w;
 static ai_state a;
 static sim_state simulation;
 static ui_save_state save;
+static events_state player;
 
 int main(int argc, char **argv)
 {
@@ -76,9 +78,29 @@ int main(int argc, char **argv)
         rsc_close(&w.scenes);
     }
     if (argc == 3) {
+        char path[CM_WORLD_PATH_MAX];
+        cm_file file = {0};
+        cm_exe exe;
+        int n = snprintf(path, sizeof(path), "%s/CM_HI.EXE", argv[2]);
+        assert(n >= 0 && (size_t)n < sizeof(path));
+        assert(platform_file_read(&file, path) == 0);
+        assert(cm_exe_init(&exe, &file, path) == 0);
         assert(ai_load_tables(&a, argv[2]) == 0);
         assert(a.tables_loaded && a.missile_types[1].fxo == 3);
         assert(a.missile_types[2].speed == 0x40000 && a.fire_missile[0] == 2);
+        world_rng_init(&w.rng, 44);
+        assert(ai_init_pc(&player, &simulation, &w.rng, &exe, 1, 0) == 0);
+        assert(ai_init_pc(&player, &simulation, &w.rng, &exe, 1, 400) == 0);
+        assert(w.rng.word[0] == 3438 && w.rng.word[1] == 28802 && w.rng.word[2] == 6207);
+        assert(player.PCBetPick == -1 && player.JackPot == 10000);
+        assert(player.items[0].type == 120 && player.items[0].quantity == 0);
+        assert(player.max_ammo[0] == 250 && player.energy == 40 && player.cash == 85);
+        assert(player.SAVELife == 40 && player.SAVELifeMax == 40 && simulation.pc_mode == 5);
+        ai_restore_pc_info(&player, &w);
+        assert((int16_t)w.persons[0].unk_0038 == 40 && w.persons[0].status == 0);
+        assert(ai_init_pc(&player, &simulation, &w.rng, &exe, 11, 500) == 0);
+        assert(player.SAVELife == 100 && player.energy == 100 && player.cash == 60);
+        platform_file_release(&file);
         puts("Original executable combat tables loaded");
     }
     w.object_count = 64;
@@ -96,6 +118,22 @@ int main(int argc, char **argv)
     assert(a.missiles[3].speed == 300 && w.object_count == 64 && w.fxo_count == 30);
     save.unk_135ECC[1] = 64;
     assert(ai_save_import(&a, &w, &save) == -1);
+    a.difficulty = 1;
+    w.person_count = 3;
+    w.persons[1].status = 0;
+    w.persons[1].unk_0038 = (int32_t)(20u << 16 | 10u);
+    w.persons[2].status = 2;
+    w.persons[2].unk_0038 = (int32_t)(20u << 16);
+    assert(ai_set_difficulty(&a, &w, 2) == 0);
+    assert((int16_t)w.persons[1].unk_0038 == 21 &&
+           (int16_t)((uint32_t)w.persons[1].unk_0038 >> 16) == 41);
+    assert(ai_set_difficulty(&a, &w, 0) == 0);
+    assert((int16_t)w.persons[1].unk_0038 == 5 &&
+           (int16_t)((uint32_t)w.persons[1].unk_0038 >> 16) == 10);
+    assert(w.persons[2].unk_0038 == (int32_t)(20u << 16));
+    assert(ai_set_difficulty(&a, &w, 3) == -1);
+    ai_start_clock(&a, 300);
+    assert(a.animation_deadline == 300 && a.fast_animation_deadline == 300);
     puts("AI data tests passed");
     return 0;
 }

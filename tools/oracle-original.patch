@@ -130,12 +130,12 @@ index cfdf063..d8fbaf4 100644
          if self.mode == 3 {
 diff --git a/crates/game/src/frame_trace.rs b/crates/game/src/frame_trace.rs
 new file mode 100644
-index 0000000..460a5c0
+index 0000000..3ff2577
 --- /dev/null
 +++ b/crates/game/src/frame_trace.rs
-@@ -0,0 +1,188 @@
+@@ -0,0 +1,212 @@
 +use std::io::{BufWriter, Write};
-+use x86::{Cpu, EAX, ESP};
++use x86::{Cpu, EAX, ESI, ESP};
 +use crate::le::rt;
 +
 +const FRAME_ENTRY: u32 = 0x01B9DC;
@@ -158,6 +158,7 @@ index 0000000..460a5c0
 +    actors: Option<BufWriter<std::fs::File>>,
 +    seed: BufWriter<std::fs::File>,
 +    rng: Option<BufWriter<std::fs::File>>, rng_calls: u64,
++    steering: Option<BufWriter<std::fs::File>>, steering_calls: u64,
 +}
 +
 +impl FrameTrace {
@@ -196,10 +197,16 @@ index 0000000..460a5c0
 +        });
 +        let rng = std::env::var_os("CM_RNG_TRACE").map(|path| {
 +            let mut out = BufWriter::new(std::fs::File::create(path).expect("create RNG trace"));
-+            writeln!(out,"sequence,frame,operation,caller,bound,rng0,rng1,rng2").expect("RNG header");
++            writeln!(out,"sequence,frame,operation,caller,bound,rng0,rng1,rng2,ticks,normal_deadline,fast_deadline").expect("RNG header");
 +            out
 +        });
-+        Some(Self { file, ranges, pending: None, frame: 0, this: 0, actors, seed, rng, rng_calls: 0 })
++        let steering = std::env::var_os("CM_STEERING_TRACE").map(|path| {
++            let mut out = BufWriter::new(std::fs::File::create(path).expect("create steering trace"));
++            writeln!(out,"sequence,frame,object,x,y,heading,target,mode,collisions,flags,mask").expect("steering header");
++            out
++        });
++        Some(Self { file, ranges, pending: None, frame: 0, this: 0, actors, seed, rng, rng_calls: 0,
++                    steering, steering_calls: 0 })
 +    }
 +
 +    fn hex(file: &mut BufWriter<std::fs::File>, bytes: &[u8]) {
@@ -221,12 +228,28 @@ index 0000000..460a5c0
 +
 +    pub fn observe(&mut self, c: &Cpu, time: f64) {
 +        match c.eip {
++            p if p == rt(0x46507) => {
++                if let Some(out) = &mut self.steering {
++                    let x = c.r[ESI];
++                    let obj = c.rd32(c.r[ESP]+0x60);
++                    let ox = c.rd32(x+0x61418+obj*4) as i32;
++                    let oy = c.rd32(x+0x64080+obj*4) as i32;
++                    let tile = ((ox >> 16)+(oy >> 16)*32) as u32;
++                    writeln!(out,"{},{},{},{},{},{},{},{},{},{},{}",self.steering_calls,
++                        self.frame as i64-1,obj,ox,oy,c.rd16(x+0x7E65C+obj*2),c.rd16(x+0x7FC90+obj*2),
++                        c.rd8(x+0x812C4+obj),c.rd32(c.r[ESP]+0x64),c.rd32(x+0x144B18),
++                        c.rd16(c.rd32(x+0xCA098)+tile*2)).expect("write steering trace");
++                    self.steering_calls += 1;
++                }
++            }
 +            p if p == rt(0x6731C) || p == rt(0x68AD0) => {
 +                if let Some(out) = &mut self.rng {
-+                    writeln!(out,"{},{},{},{:x},{},{},{},{}",self.rng_calls,
++                    writeln!(out,"{},{},{},{:x},{},{},{},{},{},{},{}",self.rng_calls,
 +                        self.frame as i64 - 1,if p == rt(0x6731C) {"RND"} else {"RANDOM"},
 +                        crate::le::link(c.rd32(c.r[ESP])),if p == rt(0x6731C) {c.r[EAX] as i32} else {0},
-+                        c.rd16(rt(0x9747F)),c.rd16(rt(0x97481)),c.rd16(rt(0x97483)))
++                        c.rd16(rt(0x9747F)),c.rd16(rt(0x97481)),c.rd16(rt(0x97483)),
++                        c.rd32(rt(0x207473)),if self.this == 0 {0} else {c.rd32(self.this+0x144B60)},
++                        if self.this == 0 {0} else {c.rd32(self.this+0x144B64)})
 +                        .expect("write RNG call");
 +                    self.rng_calls += 1;
 +                }
@@ -320,5 +343,6 @@ index 0000000..460a5c0
 +    fn drop(&mut self) {
 +        self.flush_pending();
 +        if let Some(out) = &mut self.rng { out.flush().expect("flush RNG trace"); }
++        if let Some(out) = &mut self.steering { out.flush().expect("flush steering trace"); }
 +    }
 +}

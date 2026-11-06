@@ -119,7 +119,14 @@ def main():
                         help="record original object/PERSON state and RNG words each frame")
     parser.add_argument("--rng-trace", action="store_true",
                         help="record every original RND/RANDOM call site and pre-call RNG words")
+    parser.add_argument("--watch", action="append", default=[], metavar="LINK_HEX",
+                        help="read-only byte write-watch; heap addresses use runtime minus 0x400000")
+    parser.add_argument("--steering-trace", action="store_true",
+                        help="record original NewMONBound decision inputs")
     args = parser.parse_args()
+    watches = [int(value, 16) for value in args.watch]
+    if any(value < 0 or value > 0xFFBFFFFF for value in watches):
+        raise ValueError("watch link address overflows runtime relocation")
     total = 0
     for item in args.trace_range:
         fields = item.split(":")
@@ -132,7 +139,7 @@ def main():
         total += length
     if len(args.trace_range) > 8 or total > 65536:
         raise ValueError("frame traces allow eight ranges / 65536 bytes total")
-    if (args.trace_range or args.snapshot or args.actor_trace or args.rng_trace) and not args.frame_trace:
+    if (args.trace_range or args.snapshot or args.actor_trace or args.rng_trace or args.steering_trace) and not args.frame_trace:
         raise ValueError("--trace-range/--snapshot/--actor-trace/--rng-trace require --frame-trace")
     path = Path(args.scenario)
     if not path.is_file():
@@ -146,6 +153,8 @@ def main():
     destination.mkdir(parents=True, exist_ok=True)
     env = {k: v for k, v in os.environ.items() if not k.startswith("CM_")}
     env["CM_ORIGINAL"] = "1"
+    if watches:
+        env["CM_WATCH"] = ",".join(f"{value:x}" for value in watches)
     if states:
         env["CM_DUMP"] = f"{states[0][0]:x}:{states[0][1]}"
     for index, time in enumerate(captures):
@@ -158,6 +167,8 @@ def main():
                 env["CM_ACTOR_TRACE"] = str(destination / "actors.csv")
             if args.rng_trace:
                 env["CM_RNG_TRACE"] = str(destination / "rng.csv")
+            if args.steering_trace:
+                env["CM_STEERING_TRACE"] = str(destination / "steering.csv")
         # Each checkpoint replays from boot: no saved user configuration or stale saves.
         with tempfile.TemporaryDirectory(prefix="oracle-", dir=destination) as temp:
             root = Path(temp)
@@ -184,6 +195,8 @@ def main():
                 "actor_trace": "actors.csv" if args.actor_trace else None,
                 "seed_trace": "seed.csv" if args.frame_trace else None,
                 "rng_trace": "rng.csv" if args.rng_trace else None,
+                "watch_links": watches,
+                "steering_trace": "steering.csv" if args.steering_trace else None,
                 "exe_sha256": hashlib.sha256((assets / "CM_HI.EXE").read_bytes()).hexdigest(),
                 "binary_sha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
                 "patch_sha256": hashlib.sha256((ROOT / "tools/oracle-original.patch").read_bytes()).hexdigest()}

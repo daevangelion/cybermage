@@ -49,8 +49,10 @@ physical clipping. `move.c` owns animation/bob/recoil and DragonFly, delegating
 physical movement to Sim. H2HTarget 0x19EA4 returns PERSON indices (zero on miss),
 unlike SetAutoTarget's object indices (minus one on miss).
 
-Save restore uses data-only `ai_load_scene_definitions` and `ai_load_tables`,
-then `ai_save_import`, never `ai_init`: saved object pools already exist.
+Save restore builds the original scene and pools before overlaying saved fields.
+When those pools are already constructed, data-only `ai_load_scene_definitions`
+and `ai_load_tables` may precede `ai_save_import`. Never run `ai_init` after the
+saved PERSON/object overlay: it would reroll attributes and append extra pools.
 The explicit save bridge covers the twelve 48-byte missile records, ten 28-byte
 SoulFire records and gem countdown; Events owns event/inventory serialization.
 
@@ -166,20 +168,49 @@ including the adjacent original WeaponTrajectory bytes, and the consumer permits
 indices0..33. This reproduces the executable's actual reads instead of clamping
 to5, fabricating a radius, or making normal fire fail.
 
-Focused regression target for the integration owner:
+Focused regression (observed passing, strict C99):
 
 ```
-tools/run_capped.sh make -C port -f tests/projectiles.mk B=build/projectiles check-projectiles
+tools/run_capped.sh make -C port -f tests/projectiles.mk B=build/AudioProjectile check-projectiles
 ```
 
 It uses the real supplied EXE tables with explicit synthetic world inputs to
 check radial dice/resistance/freeze, player muzzle/slot exhaustion, and single
-impact damage/state3-to4. It does not establish full-firefight parity. Builds
-and test execution for this chunk are left to the consolidated integration gate;
-the earlier actor trace above has no damaged NPCs and must not be presented as
-projectile verification. For frame-trace firefights include Xox135ECC:576
-(12 missile records), object position/shape arrays and PERSON HP/armor/RNG,
-with genuine fire press/hold/release input and the unchanged original assets.
+impact damage/state3-to4. The manual-muzzle fixture explicitly disables autoaim;
+a separate no-target fixture checks the original autoaim reset.
+Six Python comparator controls cover post-frame alignment, a changed active
+field, inactive stale payloads, missing frames, truncated spans and no-activity
+rejection.
+
+`tools/scenarios/projectile-fire.txt` holds original Space(scan39) for1.5s,
+then releases it. With unchanged original assets and measured BIOS seed44:
+
+```
+tools/oracle.sh projectile-fire --frame-trace --snapshot \
+  --trace-range x:135ecc:576 --trace-range x:62518:48 \
+  --trace-range x:65180:48 --trace-range x:79e8c:48 \
+  --trace-range x:7eedc:24
+tools/run_capped.sh make -C port B=build/AudioProjectile
+tools/run_capped.sh port/build/AudioProjectile/cybermage --headless \
+  --data orig/retail --replay captures/projectile-fire/frames.csv \
+  --state-dump captures/projectile-fire/native --user out/audio-projectile-user
+tools/run_capped.sh .venv/bin/python tools/compare_projectiles.py \
+  captures/projectile-fire/frames.csv captures/projectile-fire/native
+```
+
+Observed:155 frames, native player-state MATCH,616 projectile checkpoints
+compared,17 active checkpoints, types9 and10, **no field divergence**.
+Original pre-frameN+1 is compared with native post-frameN; the terminal native
+frame has no next original checkpoint and is excluded. Active slot fields
+checked exactly: state/type/animation/lifetime/vertical/speed/target and
+XY/floor-Z/heading. Inactive slots compare active state only (stale payloads
+are not live game state). The geometry spans cover the12 original pool objects
+1088..1099; native state dumps currently expose the first4 slots.
+
+This proves the captured spell-flight/impact path, not all52 dispatch types or
+full-firefight parity. The earlier actor trace above has no damaged NPCs and
+must not be presented as projectile verification. Broader firefights need
+all12 native missile records and PERSON HP/armor/RNG checkpoints.
 
 ## Player input / hand checkpoint
 

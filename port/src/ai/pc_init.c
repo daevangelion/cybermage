@@ -18,6 +18,7 @@ int ai_init_pc(events_state *e, sim_state *s, world_rng *rng,
     memset(e->ammo, 0, sizeof(e->ammo));
     memset(e->spells, 0, sizeof(e->spells));
     e->weapon = 0; e->hh_weapon = 0; e->spell = 0;
+    e->item_spell = 0; e->weapon_slot = 0; e->hh_dice = 0;
     for (i = 0; i < 12; ++i) e->max_ammo[i] = (int16_t)ammo_size[i];
     for (i = 0; i < EVENTS_ARMOR_MAX; ++i) e->armor[i] = e->max_armor[i] = 30;
     e->energy = e->max_energy = start_scene == 11 ? 100 : 40;

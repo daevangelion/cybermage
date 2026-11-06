@@ -139,3 +139,11 @@ int32_t ai_do_dice(world_rng *rng, ai_dice d)
         result += world_rnd(rng, d.sides) + 1;
     return result;
 }
+
+/* Xox::StartClock, CM_HI.EXE 0x1ED2D..0x1ED3E. */
+void ai_start_clock(ai_state *a, uint32_t timer_ticks)
+{
+    a->timer_ticks = timer_ticks;
+    a->animation_deadline = timer_ticks;
+    a->fast_animation_deadline = timer_ticks;
+}

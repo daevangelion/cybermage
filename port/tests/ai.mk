@@ -14,9 +14,9 @@ $(B)/test_ai: tests/test_ai.c $(OBJECTS)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 $(B)/ai_trace: ../tools/ai_trace.c $(OBJECTS)
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -Wl,--wrap=ai_monster_blocked -o $@ $^ $(LDLIBS)
 
-$(B)/%.o: src/%.c
+$(B)/%.o: src/%.c $(wildcard include/*.h)
 	@mkdir -p $(@D)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -MMD -MP -c -o $@ $<
 
