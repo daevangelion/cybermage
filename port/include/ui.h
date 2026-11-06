@@ -157,6 +157,7 @@ int ui_draw_player_hand(const cm_ui *ui, world *w, uint8_t *dst,
                         int mode, int weapon, unsigned frame,
                         ui_view view);
 struct ai_state;
+int ui_draw_vehicle_muzzle(const cm_ui *ui, const struct ai_state *a, uint8_t *dst);
 int ui_draw_live_hand(const cm_ui *ui, world *w, uint8_t *dst,
                        int mode, const struct events_state *events,
                        const struct ai_state *actors, ui_view view);

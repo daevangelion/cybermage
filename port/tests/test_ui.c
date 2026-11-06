@@ -1,6 +1,7 @@
 #include "ui.h"
 #include "events.h"
 #include "ai.h"
+#include "render.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -32,6 +33,27 @@ static ui_action press(unsigned scan)
     cm_input in = {0};
     in.pressed[scan] = 1;
     return ui_input(&ui, &in, ui.ticks + 1);
+}
+
+static void vehicle_frame(rsc *hipak,const char *out,unsigned person,
+                            int kind,unsigned frame)
+{
+    unsigned old_person=w.player_person,old_object=w.player_object;
+    const world_object *o=&w.objects[w.persons[person].object];
+    world_camera camera={0};
+    ui_view view;
+    w.player_person=person;w.player_object=(unsigned)w.persons[person].object;
+    camera.u=o->x;camera.v=o->y;camera.z=o->floor_z+o->z+o->z/2;
+    camera.angle=o->heading;
+    assert(ui_game_view(&ui,7,kind,&view) == 0);
+    assert(render_load(&w,hipak) == 0);
+    assert(render_set_view(view.x,view.y,view.width,view.height) == 0);
+    assert(render_draw(&w,&camera,screen) == 0);
+    assert(ui_draw_backdrop(&ui,screen,7,kind,view) == 0);
+    assert(ui_draw_vehicle(&ui,&w,screen,kind,0,0) == 0);
+    assert(platform_dump(out,frame,screen,palette) == 0);
+    render_unload();
+    w.player_person=old_person;w.player_object=old_object;
 }
 
 int main(int argc, char **argv)
@@ -144,6 +166,11 @@ int main(int argc, char **argv)
         assert(ui_draw_backdrop(&ui,screen,7,1,view) == 0);
         assert(ui_draw_vehicle(&ui,&w,screen,1,10,6550) == 0);
         assert(platform_dump(argv[1],8,screen,palette) == 0);
+        actors.pc.muzzle_mode=3;actors.pc.muzzle_count=0;
+        assert(ui_draw_vehicle_muzzle(&ui,&actors,screen) == 0);
+        actors.pc.muzzle_count=3;
+        assert(ui_draw_vehicle_muzzle(&ui,&actors,screen) == -1);
+        actors.pc.muzzle_mode=actors.pc.muzzle_count=0;
         ui.ACarX[0]=-1;
         assert(ui_draw_vehicle(&ui,&w,screen,1,0,0) == -1);
         ui.ACarX[0]=INT32_MIN;
@@ -153,9 +180,20 @@ int main(int argc, char **argv)
         ui.ACarX[0]=x; ui.ACarY[0]=INT32_MAX;
         assert(ui_draw_vehicle(&ui,&w,screen,1,0,0) == -1);
         ui.ACarY[0]=y;
+        {
+            uint16_t width=ui.acar[0].width;
+            const char *label=ui.strings[147];
+            ui.acar[0].width=CM_WIDTH;
+            assert(ui_draw_vehicle(&ui,&w,screen,1,0,0) == -1);
+            ui.acar[0].width=width;
+            ui.strings[147]="THIS SUPPLIED SPEED UNIT LABEL DOES NOT FIT IN THE DISPLAY BUFFER";
+            assert(ui_draw_vehicle(&ui,&w,screen,1,0,0) == -1);
+            ui.strings[147]=label;
+        }
         w.persons[w.player_person].unk_0038=0;
         assert(ui_draw_vehicle(&ui,&w,screen,0,0,0) == -1);
         w.persons[w.player_person].unk_0038=hp;
+        vehicle_frame(&hipak,argv[1],84,0,7);
     }
     assert(w.objects[936].x == (int32_t)cm_u32(original.data + 0x4C87 + 936 * 4));
     assert(w.objects[936].heading == cm_u16(original.data + 0x10941 + 936 * 2));
@@ -256,6 +294,13 @@ int main(int argc, char **argv)
         events.SlotVisitTime=10000;events.JackPot=500;
         assert(ui_shop_step(&ui,&events,&w,&input,14) == 1 && ui.shop_kind == 4);
         assert(events.JackPot==500);
+        cash=events.cash;events.cash=INT32_MIN;ui.bet_amount=1;
+        input.pressed[28]=1;
+        assert(ui_shop_step(&ui,&events,&w,&input,25) == 1 && ui.bet_amount==1);
+        memset(&input,0,sizeof input);input.pressed[2]=1;
+        assert(ui_shop_step(&ui,&events,&w,&input,36) == 1 && ui.bet_amount==11);
+        events.cash=cash;ui.bet_amount=0;
+        memset(&input,0,sizeof input);ui.gambling_next=0;
         input.pressed[2] = 1;
         assert(ui_shop_step(&ui,&events,&w,&input,25) == 1);
         assert(ui.bet_amount == 1);
@@ -291,6 +336,9 @@ int main(int argc, char **argv)
         }
         assert(ui_shop_draw(&ui,&events,&w,screen) == 0);
         assert(platform_dump(argv[1],9,screen,palette) == 0);
+        events.SlotVisitTime=-1000;events.JackPot=500;ui.ticks=2000;
+        assert(ui_gambling_open(&ui,&events,&w) == 1);
+        assert(events.JackPot>=515 && events.JackPot<=529);
         input.pressed[1] = 1;
         assert(ui_shop_step(&ui,&events,&w,&input,200) == 1 && !ui.shop_kind);
     }
@@ -329,6 +377,21 @@ int main(int argc, char **argv)
             assert(ui_render_bells_and_whistles(&ui, screen, &hud) == 0);
         }
         assert(platform_dump(argv[1], 2, screen, palette) == 0);
+        memset(screen,9,sizeof screen);
+        assert(ui_render_bells_and_whistles(&ui,screen,&hud) == 0);
+        memcpy(encoded,screen,sizeof screen);
+        memset(screen,9,sizeof screen);ui.vdu=2;
+        assert(ui_render_bells_and_whistles(&ui,screen,&hud) == 0);
+        for(i=0;i<34;++i) {
+            assert(memcmp(screen+(10+i)*CM_WIDTH+10,
+                          encoded+(436+i)*CM_WIDTH+10,206) == 0);
+            assert(memcmp(screen+(10+i)*CM_WIDTH+424,
+                          encoded+(436+i)*CM_WIDTH+424,206) == 0);
+        }
+        ui.vdu=0;memcpy(encoded,screen,sizeof screen);
+        assert(ui_render_bells_and_whistles(&ui,screen,&hud) == 0);
+        assert(memcmp(encoded,screen,sizeof screen) == 0);
+        ui.vdu=1;
         if (argc == 3) {
             cm_file rendered = {0};
             assert(platform_file_read(&rendered, argv[2]) == 0);
@@ -372,13 +435,36 @@ int main(int argc, char **argv)
         assert(events.events[28].value[3]==59 && events.events[243].value[1]==0);
         memset(&input,0,sizeof input);events.shop_requested.kind=2;
         assert(ui_shop_step(&ui,&events,&w,&input,245) == 0 && !ui.shop_kind);
-        w.persons[57].status=2;events.shop_requested.kind=2;
+        w.persons[58].status=w.persons[59].status=w.persons[60].status=2;
+        events.shop_requested.kind=2;
         assert(ui_shop_step(&ui,&events,&w,&input,256) == 1);
         assert(events.cash==cash-1+3 && events.PCBet==0 && events.PCBetPick==-1);
+        {
+            unsigned pick;
+            for(pick=0;pick<2;++pick) {
+                events.PCBet=0;events.PCBetPick=-1;
+                ui.shop_kind=2;ui.bet_amount=0;ui.gambling_next=0;
+                memset(&input,0,sizeof input);input.mouse_pressed=1;
+                input.mouse_x=ui.arena_x[3]*2+2;input.mouse_y=ui.arena_y[3]*2+2;
+                assert(ui_shop_step(&ui,&events,&w,&input,300+pick*100) == 1 && ui.bet_amount==1);
+                input.mouse_x=ui.arena_x[1]*2+2;input.mouse_y=ui.arena_y[1]*2+2;
+                assert(ui_shop_step(&ui,&events,&w,&input,311+pick*100) == 1 && ui.bet_amount==0);
+                input.mouse_x=ui.arena_x[3]*2+2;input.mouse_y=ui.arena_y[3]*2+2;
+                assert(ui_shop_step(&ui,&events,&w,&input,322+pick*100) == 1 && ui.bet_amount==1);
+                input.mouse_x=(pick?233:37)*2+2;input.mouse_y=159*2+2;
+                assert(ui_shop_step(&ui,&events,&w,&input,333+pick*100) == 1 &&
+                       !ui.shop_kind && events.PCBetPick==(int)pick);
+            }
+        }
         assert(events_arena_start(NULL,&w) == -1);
         assert(events_arena_start(&events,NULL) == -1);
         world_close(&w);
     }
+    assert(world_load_scene(&w,"orig/retail",9) == 0);
+    assert(ai_init(&actors,&w) == 0);
+    assert(world_finalize_scene(&w) == 0);
+    vehicle_frame(&hipak,argv[1],11,1,8);
+    world_close(&w);
     printf("UI menus, settings, vehicle layouts, retail slots/arena, malformed inputs; GAMENAME288 and SAVE010 %u-byte exact roundtrips verified\n",original.size);
     platform_file_release(&original); platform_file_release(&names);
     platform_file_release(&strings); rsc_close(&hipak);

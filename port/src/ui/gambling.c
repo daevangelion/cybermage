@@ -193,6 +193,7 @@ int ui_gambling_step(cm_ui *ui,events_state *e,world *w,const cm_input *in)
                 ui->shop_kind=0;snd_song_end();
             }
         } else if((int32_t)(ui->ticks-(uint32_t)e->SlotWaitTime)>0) {
+            if(e->cash<=0) return 1;
             if(ui->bet_amount>e->cash) ui->bet_amount=e->cash;
             if(ui->bet_amount>0) {
                 events_cash_add(e,-ui->bet_amount);ui->slot_spinning=1;

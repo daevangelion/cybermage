@@ -260,7 +260,10 @@ CarWinInfo from the supplied executable. Backdrops HIPAK1/2/3 are doubled
 outside the live view. TankMonitor1566C draws the 120-pixel maximum health
 bar from TankBar95B40 at262,6 and percentage410,4. ACarMonitor157AC draws
 HIPAK23's five static transparent/doubled components at ACarX/Y95AE8/95B14,
-plus armor percentage, speed and altitude text. VDU13A7F cycles hidden,
+plus armor percentage, speed and altitude text. Its two muzzle banks5..7/8..10
+use the same checked raster path; Port owns advancing the draw-time counters.
+Negative on-foot muzzle sequences draw after the base hand(18CE9..18D90).
+VDU13A7F cycles hidden,
 bottom436 and top10;191B5 suppresses the on-foot monitors inside vehicles.
 
 `ui_apply_settings` applies brightness then contrast in six-bit DAC space
@@ -286,6 +289,28 @@ yet been reached either. No guest state injection or oracle-image backdrop
 is used to claim coverage. The UI probe dumps static tank/aircar layouts and
 tests both branches plus malformed coordinates/health, settings values,
 retail slot combinations and the real scene2 arena spawn/settlement.
+Frames7/8 now contain the actual software-rendered world from tank PERSON84
+in scene1 and aircar PERSON11 in scene9, composed with cockpit art; these are
+static port probes, **not original-execution entry scenarios**. Frames9/10
+show the retail slot/arena modals. All four were opened and inspected.
+
+Latest UI3 checks, all exit0 under `tools/run_capped.sh`:
+
+```
+make -C port -f tests/ui.mk B=build/UI3 check
+make -C port B=build/UI3
+make -C port -f tests/ui.mk B=build/UI3-ubsan \
+  CFLAGS='-O1 -g -fsanitize=undefined -fno-sanitize-recover=all -std=c99 -pedantic -Wall -Wextra -Werror' \
+  LDFLAGS=-fsanitize=undefined check
+```
+
+The focused probe includes all seven payout/loss classes with the retail
+slotcomb table, future/wrapped visit timers, negative cash followed by numeric
+input, both arena bet buttons through the actual mouse hit boxes, clear/digit
+mouse input, fight spawning, unresolved-fight refusal and winning settlement.
+VDU top/bottom rectangles compare equal after translation over identical
+underlays; off mode leaves the canvas unchanged. Expected malformed-input
+diagnostics are deliberate negative tests, not runtime fallback behavior.
 
 - SetGammaBright5253C adds the signed brightness to each6-bit DAC component,
   clipping0..63. SetGammaContrast52598 averages the three already-brightened

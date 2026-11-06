@@ -104,7 +104,11 @@ int ui_draw_live_hand(const cm_ui *ui, world *w, uint8_t *dst,
         return cm_fail("hand graphics",(uint32_t)frame,"live pose exceeds table");
     if (mode != 2 && a->pc.muzzle_mode > 0 &&
         player_hand(ui,w,dst,mode,weapon,(unsigned)frame%9,view,a,1)) return -1;
-    return player_hand(ui,w,dst,mode,weapon,(unsigned)frame,view,a,0);
+    if (player_hand(ui,w,dst,mode,weapon,(unsigned)frame,view,a,0)) return -1;
+    /* CM_HI.EXE18CE9..18D90: negative flashes overlay the completed hand. */
+    if (mode != 2 && a->pc.muzzle_mode < 0)
+        return player_hand(ui,w,dst,mode,weapon,(unsigned)frame%9,view,a,1);
+    return 0;
 }
 
 unsigned ui_cursor_pose(int aim_x, int aim_y, int pressed)

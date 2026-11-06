@@ -1,4 +1,5 @@
 #include "ui.h"
+#include "ai.h"
 
 #include <stdio.h>
 
@@ -63,6 +64,19 @@ static int vehicle_text(const cm_ui *ui, uint8_t *dst, int anchor,
     if (gfx_text_width(&ui->fonts[3],s,&width)) return -1;
     return ui_text_mode(dst,&ui->fonts[3],anchor-(right?width:width/2),y,
                         s,174,1,0,1);
+}
+
+/* ACarMonitor157C5..159A1: two three-frame banks, before static side art. */
+int ui_draw_vehicle_muzzle(const cm_ui *ui, const ai_state *a, uint8_t *dst)
+{
+    unsigned i, frame;
+    if (a->pc.muzzle_mode<=0) return 0;
+    if (a->pc.muzzle_count<0 || a->pc.muzzle_count>=3)
+        return cm_fail("aircar muzzle",(uint32_t)a->pc.muzzle_count,"invalid flash frame");
+    frame=(unsigned)a->pc.muzzle_count;
+    for (i=5+frame;i<=8+frame;i+=3)
+        if (acar_bitmap(dst,ui->ACarX[i],ui->ACarY[i],&ui->acar[i])) return -1;
+    return 0;
 }
 
 int ui_draw_vehicle(const cm_ui *ui, const world *w, uint8_t *dst,
