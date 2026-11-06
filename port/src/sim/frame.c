@@ -35,9 +35,10 @@ static int keyboard(sim_state *s, world *w)
         keys[s->kb_map] = 0;
         if (!vehicle) s->automap ^= 1; /* Keyboard012FF9..01303B. */
     }
-    if (down(s, s->kb_vdu, s->kb_vdu_bit * 2)) {
-        keys[s->kb_vdu] = 0;
-        s->vdu_request = 1;
+    if (!vehicle && down(s, s->kb_exit, s->kb_exit_bit * 2)) {
+        keys[s->kb_exit] = 0;
+        events_fly_landing(s, &w->objects[w->player_object]);
+        s->unk_131418 = 0; /* Keyboard013335..0133E7. */
     }
     if(s->pc_mode==3) {
         s->movement_request=s->yaw_request=0;
@@ -71,6 +72,10 @@ static int keyboard(sim_state *s, world *w)
     if (vehicle) {
         s->yaw_request = right ? -SIM_YAW_MAX : left ? SIM_YAW_MAX : 0;
         return 0;
+    }
+    if (down(s, s->kb_vdu, s->kb_vdu_bit * 2)) {
+        keys[s->kb_vdu] = 0;
+        s->vdu_request = 1;
     }
     if (right) {
         if (side) {

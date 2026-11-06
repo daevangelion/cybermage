@@ -1285,7 +1285,7 @@ int events_input(events_state *e, sim_state *s, ai_state *a, world *w)
         if(s->pc_mode==7 && (s->kb_scan_status[exit] & (exit_bit * 2))) {
             s->kb_scan_status[exit]=0;e->tank_flag=-1;
         }
-        if (s->pc_mode!=7 && (s->kb_scan_status[hand] & (hand_bit | hand_bit * 2))) {
+        if (s->pc_mode!=7 && (s->kb_scan_status[hand] & (hand_bit * 2))) {
             s->kb_scan_status[hand] = 0;
             if (events_switch_search(e,s,a,w)) return -1;
         }

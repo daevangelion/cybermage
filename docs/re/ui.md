@@ -285,6 +285,9 @@ literal as in HandleKeyboardEvents. Modern semantic transport keeps its own
 canonical action keys, independent of CMDATA rebinding. AutoMap's original
 142BF8 toggle is retained in SAVE's 7B7+12 word; its DOS artwork remains distinct
 from the explicitly Enhanced live-topology overlay.
+Hand/use tests the latched `mask*2`, not held bits (013633..013656).
+Exit also lands on foot and clears the flight height (013335..0133E7); VDU's
+0139F0 consumer is bypassed by the separate hand/vehicle keyboard branches.
 
 Main reads the real user file before InitPC or a replay's slot load. Leaving
 the real Options screen writes it; a failed write is an error, not a silent

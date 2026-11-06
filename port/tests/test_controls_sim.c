@@ -172,6 +172,24 @@ static void selector_arena(void)
     w.persons[0].unk_0038 = 40 << 16 | 17;
 }
 
+static void configured_classic(void)
+{
+    cm_input in = {0};
+    selector_arena();
+    s.kb_hand = 0x14; s.kb_hand_bit = 4;
+    s.kb_scan_status[0x14] = 4; /* Extended held, but no latched press. */
+    assert(!events_input(&e, &s, &a, &w));
+    assert(s.kb_scan_status[0x14] == 4);
+    s.kb_scan_status[0x14] = 8;
+    assert(!events_input(&e, &s, &a, &w));
+    assert(!s.kb_scan_status[0x14]);
+    s.kb_exit = 0x15; s.kb_exit_bit = 4;
+    s.flight_mode = 1; s.unk_131418 = 1000;
+    s.kb_scan_status[0x15] = 8;
+    assert(!sim_frame(&s, &w, &in, 2));
+    assert(!s.flight_mode && !s.unk_131418 && !s.kb_scan_status[0x15]);
+}
+
 static void modern_selector(void)
 {
     cm_controls controls;
@@ -302,6 +320,7 @@ int main(int argc, char **argv)
     data_dir = argv[1];
     classic_mouse();
     vehicle_secondary();
+    configured_classic();
     modern_selector();
     arena();
     w.object_count = w.person_count = 1;
