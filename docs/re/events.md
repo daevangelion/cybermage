@@ -85,11 +85,11 @@ overrides are disabled by the original oracle wrapper.
 Focused reducer comparison:
 
 ```
-tools/run_capped.sh make -C port -f tests/events.mk B=build/Events check build/Events/events_trace
-tools/run_capped.sh port/build/Events/events_trace orig/retail captures/events-door/frames.csv
+tools/run_capped.sh make -C port -f tests/events.mk B=build/Events2 check build/Events2/events_trace
+tools/run_capped.sh port/build/Events2/events_trace orig/retail captures/events-door/frames.csv
 ```
 
-The latest run matched252 pre-frame checkpoints and2,806,272 event/switch bytes.
+The original door run matched252 pre-frame checkpoints and2,806,272 event/switch bytes.
 The comparator supplies recorded player position, clock and key observations as
 **inputs to the event reducer**. It independently initializes events from retail
 scene records and computes every compared event value. No expected event output
@@ -100,13 +100,12 @@ movement/AI/pixel parity. There are251 observed frame-to-frame result edges.
 invalid slot rejection, sorted weapon/power selection, free/full auto-slot search,
 strict vehicle distance and heading acceptance, original BuyItem consumable
 stacking, inventory selling, saved event511 round-trip and descending-flat
-maximum4000 rider movement. The two printed ERROR diagnostics are intentional
-negative tests (invalid inventory slot and absent prop placement).
+maximum4000 rider movement. The three printed ERROR diagnostics are intentional
+negative tests (invalid inventory slot, absent prop placement and invalid actor mapping).
 
-All event sources compiled under strictC99. An earlier integrated build linked;
-the latest integrated link is blocked outside this slice by missing
-`ai_pc_input` and `ai_pc_hand2hand`. The focused event tests link and run against
-the current other subsystem sources.
+StrictC99 focused tests and the complete desktop target linked successfully with
+`B=build/Events2`. Running `port/build/Events2/test_events orig/retail` also loaded
+all11 retail scenes and applied80 cosmetic ticks to each without an error.
 
 All90 MoveWorld dispatch types now have implementations. The continuation adds
 types38(03B87E),40(03BA5A),41(03BB70),42(03BC15),46(03C572),
@@ -134,6 +133,36 @@ threshold/expiry. These are source-grounded unit checks, not90-type runtime
 oracle parity. Vehicle entry/exit still needs the real-oracle route comparison;
 the supplied retail SAVE010.DAT is the initial scene1 position, not a vehicle
 save. No vehicle-debug override, coordinate patch or fabricated save is used.
+
+## Extended original-input reducer comparison
+
+`events-ladder.txt` and `events-corridor.txt` retain the original first-switch
+path, then recenter with C, continue forward with Control jump, and turn in the
+post-door brown corridor. They were captured with the zero-hook original wrapper:
+
+```
+tools/oracle.sh events-corridor --frame-trace \
+  --trace-range x:139190:1536 --trace-range x:139d90:32768 \
+  --trace-range x:142b78:128 --trace-range l:206820:8 \
+  --trace-range x:14480c:8 --snapshot
+tools/run_capped.sh port/build/Events2/events_trace orig/retail captures/events-corridor/frames.csv
+```
+
+Ladder matched425 checkpoints /14,638,700 independently computed bytes;
+corridor matched592 checkpoints /20,390,848 bytes. Corridor ended in scene1,
+object936/person0, x640939,y1310719,floor_z131072,heading33792. Only switch51
+changed in these routes; neither reached another scene or a vehicle.
+The corridor has591 observed result edges; its final row is a pre-frame state.
+
+The comparator now checks computed player object/person identity **before**
+position inputs, and optional tankFlag/PCTankHand/hand-mode observations.
+It compares event type/enable bytes when recorded, loads the first recorded scene
+from its retail records, and requires a computed scene request for any subsequent
+scene change. No later-scene route has yet exercised that transition path.
+It rejects traces missing complete loaded event-state/payload/switch-state ranges.
+Controlled negatives rejected both an empty-range trace (previously accepted
+with zero compared bytes) and a changed tankFlag byte at frame0; the unchanged
+corridor trace still matched. The negative copies live only under ignored captures.
 
 Integration contracts: `events_init` now resets scene metadata, **preserving**
 player inventory/status. AI's `ai_init_pc` owns original boot/new-game

@@ -2,6 +2,7 @@
 #include "ai.h"
 #include "audio.h"
 #include <assert.h>
+#include <stdio.h>
 #include <string.h>
 
 static world w;
@@ -116,7 +117,24 @@ static void cosmetics(void)
     assert(events_step(&e,&s,&a,&w)==0 && w.objects[2].texture==13);
 }
 
-int main(void)
+static void retail_cosmetics(const char *data)
+{
+    unsigned scene,tick;
+    memset(&w,0,sizeof(w));memset(&e,0,sizeof(e));sim_init(&s,0);
+    for(scene=1;scene<=11;++scene) {
+        assert(world_load_scene(&w,data,scene)==0);
+        assert(ai_init(&a,&w)==0 && world_finalize_scene(&w)==0);
+        assert(events_init(&e,&w)==0 && events_load_tables(&e,data)==0);
+        for(tick=1;tick<=80;++tick) {
+            e.ticks=(scene-1)*80+tick;
+            assert(events_cosmetics(&e,&s,&a,&w)==0);
+        }
+        world_close(&w);
+    }
+    puts("retail cosmetics: all 11 scenes, 80 ticks each");
+}
+
+int main(int argc, char **argv)
 {
     unsigned i;
     memset(&w, 0, sizeof(w));
@@ -199,5 +217,6 @@ int main(void)
     assert(events_countdown(&e,&s,&a,&w)==0 && e.autoDestruct==5 && e.autoDMsgTimer==2561);
     e.ticks=16800;
     assert(events_countdown(&e,&s,&a,&w)==0 && !e.autoDestruct && e.pc_dead_man==1);
+    if(argc==2) retail_cosmetics(argv[1]);
     return 0;
 }

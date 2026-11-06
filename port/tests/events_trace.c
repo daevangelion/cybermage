@@ -10,6 +10,37 @@ static events_state e;
 static sim_state s;
 static ai_state a;
 
+static int covers(const cm_replay *replay, uint32_t address, uint32_t length)
+{
+    unsigned i;
+    for(i=0;i<replay->range_count;++i) {
+        const cm_trace_range *r=&replay->ranges[i];
+        uint32_t offset;
+        if(!r->relative || address<r->address) continue;
+        offset=address-r->address;
+        if(offset<=r->length && length<=r->length-offset) return 1;
+    }
+    return 0;
+}
+
+static int required_ranges(const cm_replay *replay)
+{
+    if(covers(replay,0x139390,e.event_count+1) &&
+       covers(replay,0x139D90,(e.event_count+1)*64) &&
+       covers(replay,0x142B78,e.switch_count)) return 0;
+    return cm_fail("events_trace",0,"trace must contain all loaded event states, payloads and switch states");
+}
+
+static int load_scene(const char *data, unsigned scene)
+{
+    world_close(&w);
+    if(world_load_scene(&w,data,scene) || ai_init(&a,&w) ||
+       world_finalize_scene(&w) || sim_start_scene(&s,&w) ||
+       events_init(&e,&w) || events_load_tables(&e,data)) return -1;
+    a.events=&e;
+    return 0;
+}
+
 static unsigned byte_at(const char *hex, unsigned i)
 {
     unsigned n=0,j;
@@ -24,13 +55,24 @@ int main(int argc, char **argv)
     unsigned rows=0,checks=0,vehicle_rows=0;
     int status;
     if(argc!=3) return 2;
-    if(world_load_scene(&w,argv[1],1) || world_finalize_scene(&w) || ai_init(&a,&w) ||
-       events_init(&e,&w) || snd_open(argv[1]) || replay_open(&replay,argv[2])) return 1;
     sim_init(&s,0);
+    if(snd_open(argv[1]) || replay_open(&replay,argv[2])) return 1;
+    status=replay_next(&replay,&f);
+    if(status<=0 || load_scene(argv[1],(unsigned)f.values[CM_TRACE_SCENE]) ||
+       required_ranges(&replay)) return 1;
     snd_enable(0,0); /* Same original -x no-sound setting as the oracle. */
     a.events=&e;
-    while((status=replay_next(&replay,&f))>0) {
+    while(status>0) {
         unsigned r,i;
+        if((unsigned)f.values[CM_TRACE_SCENE]!=w.scene) {
+            unsigned scene=(unsigned)f.values[CM_TRACE_SCENE];
+            if(!e.scene_requested.pending || e.scene_requested.scene!=(int32_t)scene) {
+                fprintf(stderr,"event scene request divergence frame=%u observed=%u computed=%d pending=%d\n",
+                    rows,scene,e.scene_requested.scene,e.scene_requested.pending);
+                return 1;
+            }
+            if(load_scene(argv[1],scene) || required_ranges(&replay)) return 1;
+        }
         /* Player/clock/key observations are reducer inputs. Event outputs never
          * get imported from the oracle. This is not integrated player parity. */
         if(w.player_object!=(unsigned)f.values[CM_TRACE_OBJECT] ||
@@ -63,7 +105,8 @@ int main(int argc, char **argv)
                 else if(at>=0x14480C && at<0x144810) actual=(uint32_t)s.pc_mode>>((at-0x14480C)*8)&255;
                 else continue;
                 if(actual!=byte_at(f.range_hex[r],i)) {
-                    fprintf(stderr,"event divergence frame=%u Xox+%x expected=%u actual=%u\n",rows,at,byte_at(f.range_hex[r],i),actual);
+                    fprintf(stderr,"event divergence frame=%u %s%x expected=%u actual=%u\n",
+                        rows,range->relative?"Xox+":"link:",at,byte_at(f.range_hex[r],i),actual);
                     return 1;
                 }
                 ++checks;
@@ -74,6 +117,7 @@ int main(int argc, char **argv)
         memcpy(s.kb_scan_status,f.input_keys,sizeof(s.kb_scan_status));
         if(events_step(&e,&s,&a,&w)) return 1;
         ++rows;
+        status=replay_next(&replay,&f);
     }
     replay_close(&replay); snd_close(); world_close(&w);
     if(status<0) return 1;

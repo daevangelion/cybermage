@@ -48,16 +48,18 @@ int events_cosmetics(events_state *e, sim_state *s, ai_state *a, world *w)
     int due=(int32_t)e->ticks>(int32_t)e->waterTimer;
     if(scene==1 || scene==4 || scene==6 || scene==7 || scene==9 || scene==11) {
         if(due) {
-            if((unsigned)e->waterFlag>=12 || panel_alias(e,w,0,(unsigned)e->waterFlag)) return -1;
-            if(scene==1 && (unsigned)e->waterFlag>=9)
-                return cm_fail("MoveWorld/water",0,"invalid secondary water phase");
+            if((unsigned)e->waterFlag>=(scene==1?9u:12u))
+                return cm_fail("MoveWorld/water",(uint32_t)e->waterFlag,"invalid water phase");
+            if(panel_alias(e,w,0,(unsigned)e->waterFlag)) return -1;
             if(scene==1 && panel_alias(e,w,3,3+(unsigned)e->waterFlag)) return -1;
             e->waterFlag=(e->waterFlag+1)%3;e->waterTimer=e->ticks+(scene==6 || scene==7?4u:6u);
         }
     } else if(scene==5) {
         if(e->switches[3].state==1) {
             if(due) {
-                if((unsigned)e->waterFlag>=4 || panel_alias(e,w,0,(unsigned)e->waterFlag)) return -1;
+                if((unsigned)e->waterFlag>=12)
+                    return cm_fail("MoveWorld/water",(uint32_t)e->waterFlag,"invalid water phase");
+                if(panel_alias(e,w,0,(unsigned)e->waterFlag)) return -1;
                 e->waterFlag=(e->waterFlag+1)%4;e->waterTimer=e->ticks+4;
             }
         } else if(panel_alias(e,w,0,0)) return -1;
@@ -73,7 +75,9 @@ int events_cosmetics(events_state *e, sim_state *s, ai_state *a, world *w)
     }
     if((scene==9 || scene==10) && (int32_t)e->ticks>(int32_t)e->miscTimer) {
         unsigned count=scene==9?3:2;
-        if((unsigned)e->miscFlag>=9 || panel_alias(e,w,3,3+(unsigned)e->miscFlag)) return -1;
+        if((unsigned)e->miscFlag>=9)
+            return cm_fail("MoveWorld/water",(uint32_t)e->miscFlag,"invalid secondary phase");
+        if(panel_alias(e,w,3,3+(unsigned)e->miscFlag)) return -1;
         e->miscFlag=(e->miscFlag+1)%(int32_t)count;e->miscTimer=e->ticks+(scene==9?4u:2u);
         if(scene==9) {
             unsigned object;
