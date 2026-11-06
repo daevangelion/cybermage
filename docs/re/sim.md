@@ -285,3 +285,19 @@ entry/heal RNG words/deadlines, crouch/swim entry and exit, healing and harmful
 water with real retail audio/tables. `test_sim_collision` and hostile-save
 regressions passed in the same focused gate. Original multi-frame water parity
 remains a separate Sim2 oracle gate.
+
+`tools/run_capped.sh .venv/bin/python tools/sim_swim_original.py
+port/build/Sim2/test_sim_swim_original` compared160 frames of the unmodified
+retail `01CAC0..01CD80` block with `sim_swim_step`:117 wet frames and7 entries,
+including jump/flight/vehicle exclusions and wet/dry transitions. Swim flag,
+stance, bob request, body height, entry deadline and all3 RNG words matched
+at every frame; HP remained40 because scene1 water damage is zero. The sound-off
+fixture does not cover the conditional splash RNG or harmful/healing water.
+This uses reduced scene1 geometry with real water panel45 at
+(22,18) and dry panel81 at(26,18), explicit BIOS seed44 and the oracle's no-sound
+input. It is an isolated rule comparison, not a boot/playthrough-water claim.
+Passing argument7 runs the same160-frame reduced fixture with scene7's30/29
+panel/art, healing damage-1, alternate body flag and initial HP30/40. It also
+matched all frames, including native original RND10 healing and RND60 deadline
+resets. Positive damage and enabled-sound shared-slot tests remain native-only
+regressions, not original-executed parity claims.
