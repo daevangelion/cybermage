@@ -486,18 +486,19 @@ static int actor_state(ai_state *a, sim_state *s, world *w, unsigned id,
     }
 }
 
-int ai_update_objects(ai_state *a, sim_state *s, world *w, uint32_t timer_ticks)
+int ai_update_objects(ai_state *a, sim_state *s, world *w,
+                       uint32_t timer_ticks, uint32_t fast_ticks)
 {
     unsigned id;
     int tick = 0, fast = 0, water_damage = 0;
     if (!a->tables_loaded)
         return cm_fail("UpdateObjects", 0, "combat tables not loaded");
     a->timer_ticks = timer_ticks;
+    if ((int32_t)fast_ticks > (int32_t)a->fast_animation_deadline) {
+        fast = 1; a->fast_animation_deadline = fast_ticks + 3;
+    }
     if ((int32_t)timer_ticks > (int32_t)a->animation_deadline) {
         tick = 1; a->animation_deadline = timer_ticks + 4;
-    }
-    if ((int32_t)timer_ticks > (int32_t)a->fast_animation_deadline) {
-        fast = 1; a->fast_animation_deadline = timer_ticks + 3;
     }
     if (a->swim_damage && (int32_t)timer_ticks > a->mon_swim_damage_time) {
         water_damage = 1;

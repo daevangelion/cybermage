@@ -11,6 +11,59 @@ static sim_state simulation;
 static ui_save_state save;
 static events_state player;
 
+static void explicit_undefined_input(void)
+{
+    uint8_t bytes[12 + 2 * 200] = {0};
+    world_person expected[2];
+    memset(&w, 0, sizeof w);
+    w.person_count = 2; w.object_count = 8;
+    w.persons[0].object = 3; w.persons[1].object = 7;
+    w.persons[0].unk_0038 = 40; w.persons[1].unk_0038 = 18;
+    memcpy(bytes, "CMPERSON", 8);
+    bytes[8] = 2;
+    bytes[20] = 3;
+    bytes[212] = 1; bytes[220] = 7;
+    bytes[56] = 0xFE; bytes[57] = bytes[58] = bytes[59] = 0xFF;
+    bytes[256] = 0x34; bytes[257] = 0x12;
+    bytes[76] = 99; /* Original HP is deliberately not imported. */
+    memcpy(expected, w.persons, sizeof expected);
+    expected[0].unk_0024 = -2; expected[1].unk_0024 = 0x1234;
+    assert(ai_import_person_undefined(&w, bytes, sizeof bytes) == 0);
+    assert(memcmp(w.persons, expected, sizeof expected) == 0);
+    w.persons[0].unk_0024 = 72; w.persons[1].unk_0024 = 73;
+    bytes[220] = 9;
+    assert(ai_import_person_undefined(&w, bytes, sizeof bytes) == -1);
+    assert(w.persons[0].unk_0024 == 72 && w.persons[1].unk_0024 == 73);
+    bytes[220] = 7;
+    assert(ai_import_person_undefined(&w, bytes, sizeof bytes - 1) == -1);
+    bytes[212] = 2;
+    assert(ai_import_person_undefined(&w, bytes, sizeof bytes) == -1);
+    bytes[212] = 1; bytes[8] = 3;
+    assert(ai_import_person_undefined(&w, bytes, sizeof bytes) == -1);
+    bytes[8] = 2; bytes[0] = 'X';
+    assert(ai_import_person_undefined(&w, bytes, sizeof bytes) == -1);
+    assert(ai_import_person_undefined(&w, NULL, 0) == -1);
+}
+
+static void independent_actor_clocks(void)
+{
+    memset(&w, 0, sizeof w);
+    memset(&a, 0, sizeof a);
+    a.tables_loaded = 1;
+    ai_start_clock(&a, 320);
+    w.persons[0].unk_005C = 2;
+    /* IRQ0 may advance between the original fast and normal timer reads. */
+    assert(ai_update_objects(&a, &simulation, &w, 321, 320) == 0);
+    assert(a.animation_deadline == 325 && a.fast_animation_deadline == 320);
+    assert(a.timer_ticks == 321 && w.persons[0].unk_005C == 1);
+    assert(ai_update_objects(&a, &simulation, &w, 325, 325) == 0);
+    assert(a.animation_deadline == 325 && a.fast_animation_deadline == 328);
+    assert(w.persons[0].unk_005C == 1);
+    assert(ai_update_objects(&a, &simulation, &w, 326, 326) == 0);
+    assert(a.animation_deadline == 330 && a.fast_animation_deadline == 328);
+    assert(w.persons[0].unk_005C == 0);
+}
+
 static void target_without_pixels(void)
 {
     unsigned i;
@@ -254,6 +307,8 @@ int main(int argc, char **argv)
     ai_start_clock(&a, 300);
     assert(a.animation_deadline == 300 && a.fast_animation_deadline == 300);
     target_without_pixels();
+    independent_actor_clocks();
+    explicit_undefined_input();
     puts("AI data tests passed");
     return 0;
 }

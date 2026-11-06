@@ -1,9 +1,37 @@
 #include "ai.h"
 #include <limits.h>
+#include <string.h>
 
 static int32_t signed_word(uint32_t value)
 {
     return value <= INT32_MAX ? (int32_t)value : -1 - (int32_t)(UINT32_MAX - value);
+}
+
+/* Explicit verification input, never scene initialization or game-save loading.
+ * CMPERSON records are index, ignored original address, then 0xC0 disk bytes.
+ * Import only the original uninitialized field, not positions, HP or RNG. */
+int ai_import_person_undefined(world *w, const uint8_t *data, uint32_t size)
+{
+    enum { HEADER = 12, RECORD = 200, PERSON_DATA = 8, UNDEFINED = 0x24 };
+    uint32_t count, i;
+    if (!w || !data || size < HEADER || memcmp(data, "CMPERSON", 8))
+        return cm_fail("oracle PERSON", 0, "invalid snapshot header");
+    count = cm_u32(data + 8);
+    if (count != w->person_count || count > CM_OBJECT_MAX ||
+        size != HEADER + count * RECORD)
+        return cm_fail("oracle PERSON", 8, "snapshot actor count/size mismatch");
+    /* Validate every identity before mutating any actor. */
+    for (i = 0; i < count; ++i) {
+        const uint8_t *record = data + HEADER + i * RECORD;
+        int object = w->persons[i].object;
+        if (object < 0 || (unsigned)object >= w->object_count ||
+            cm_u32(record) != i || cm_u16(record + PERSON_DATA) != (unsigned)object)
+            return cm_fail("oracle PERSON", HEADER + i * RECORD, "snapshot actor identity mismatch");
+    }
+    for (i = 0; i < count; ++i)
+        w->persons[i].unk_0024 = signed_word(cm_u32(data + HEADER + i * RECORD +
+                                                   PERSON_DATA + UNDEFINED));
+    return 0;
 }
 
 static int saved_pc_valid(const uint32_t *p)

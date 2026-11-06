@@ -154,7 +154,7 @@ def main():
     parser.add_argument("--snapshot", action="store_true",
                         help="dump initialized Xox and PERSON records at first gameplay frame")
     parser.add_argument("--actor-trace", action="store_true",
-                        help="record original object/PERSON state and RNG words each frame")
+                        help="record original actor state/RNG and separate IRQ0 animation clock inputs")
     parser.add_argument("--rng-trace", action="store_true",
                         help="record every original RND/RANDOM call site and pre-call RNG words")
     parser.add_argument("--event-trace", action="store_true",

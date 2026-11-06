@@ -100,6 +100,7 @@ typedef struct {
 typedef struct {
     int32_t fire, cooldown, latch; /* Xox+144AB0/144AB4/144AB8 */
     int32_t hand_x, hand_y; /* +144AA8/+144AAC */
+    int32_t bob_phase; /* +144AD4 */
     int32_t sword_aim_step, sword_frame; /* +144A44/+144A4C */
     int32_t muzzle_frame, muzzle_mode, muzzle_count; /* +144A5C/60/64 */
     int32_t underwater, shot_count, loop_sound; /* +144A24/2C/28 */
@@ -150,6 +151,16 @@ typedef struct ai_state {
     ai_pc_rules pc_rules;
 } ai_state;
 
+/* Shared Xox player feedback: flash+1444E8, effect state+1444EC. */
+static inline void ai_pc_set_flash(ai_state *a, int32_t value, int only_if_clear)
+{
+    if(!only_if_clear || !a->pc_flash) a->pc_flash=value;
+}
+static inline void ai_pc_set_shake(ai_state *a, int32_t value)
+{
+    a->pc.unk_1444EC=value;
+}
+
 int ai_init(ai_state *a, world *w);
 void ai_start_clock(ai_state *a, uint32_t timer_ticks);
 int ai_set_difficulty(ai_state *a, world *w, unsigned difficulty);
@@ -161,17 +172,22 @@ int ai_load_tables(ai_state *a, const char *asset_dir);
 int ai_pc_load_tables(ai_state *a, const cm_exe *exe);
 int ai_reset_aim(ai_state *a, const sim_state *s);
 int ai_pc_equip(ai_state *a, const sim_state *s, const world *w);
+void ai_pc_hand_bob(ai_state *a, const sim_state *s);
 int ai_pc_input(ai_state *a, sim_state *s, world *w);
 int ai_pc_hand2hand(ai_state *a, sim_state *s, world *w);
 void ai_pc_draw_advance(ai_state *a, const sim_state *s);
 int ai_load_scene_definitions(ai_state *a, world *w);
 int ai_save_import(ai_state *a, world *w, const ui_save_state *save);
 void ai_save_export(const ai_state *a, ui_save_state *save);
+/* Replay-only, caller opts in and logs provenance; imports PERSON +0x24 only. */
+int ai_import_person_undefined(world *w, const uint8_t *data, uint32_t size);
 int ai_init_persons(ai_state *a, world *w);
 int ai_set_person(ai_state *a, world *w, unsigned person, unsigned type,
                    unsigned state, int32_t x, int32_t y, int32_t z,
                    int32_t floor_z, uint16_t heading);
-int ai_update_objects(ai_state *a, sim_state *s, world *w, uint32_t timer_ticks);
+/* Original samples IRQ0 separately for the fast and normal animation gates. */
+int ai_update_objects(ai_state *a, sim_state *s, world *w,
+                       uint32_t normal_ticks, uint32_t fast_ticks);
 int ai_monster_blocked(ai_state *a, sim_state *s, world *w, unsigned object,
                        unsigned collisions);
 int ai_init_missiles(ai_state *a, world *w);

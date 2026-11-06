@@ -106,16 +106,20 @@ gameplay to hide the divergence.
 ## Actor oracle
 
 ```
-tools/oracle.sh combat-actors --frame-trace --actor-trace --snapshot
+tools/oracle.sh combat-actors --frame-trace --actor-trace --rng-trace --snapshot
 make -C port -f tests/ai.mk B=build/AI build/AI/ai_trace check
-port/build/AI/ai_trace orig/retail captures/combat-actors/frames.csv BIOS_TICK
+port/build/AI/ai_trace orig/retail captures/combat-actors/frames.csv BIOS_TICK \
+  --actor-clocks captures/combat-actors/actor-clocks.csv \
+  --import-undefined captures/combat-actors/scene-start.persons \
+  --rng-trace captures/combat-actors/native-rng.csv
 .venv/bin/python tools/compare_actors.py ORIGINAL.csv NATIVE.csv
 ```
 
 The native harness loads the original assets independently; it does not install
-checkpoint coordinates, HP, actor state or RNG state. Its replay currently steps
-Sim then UpdateObjects; it is an actor-isolation harness, not a complete
-replacement for the game frame's missile/event/player-fire ordering.
+checkpoint coordinates, HP or RNG state. Its replay steps Sim (including
+missile/SoulFire updates), player fire, events, UpdateObjects, Hand2Hand and the
+pixel-free end-frame target query. The one undefined-field input is explicit
+and documented below.
 
 First measured comparison: 23,560 actor checkpoints / 155 frames. First divergence
 is frame 0, PERSON 0 HP (original 40, native 22); first NPC divergence is frame 0,
@@ -164,6 +168,39 @@ floor/z/height/radius = 0/6400/6400/7680, flags 0x60080800.
 Original steering then receives collision-count/flags 0/0, native receives 1/2.
 This isolates Sim's NPC pickup contact branch; no candidate coordinates or
 collision outcomes are substituted by the harness.
+
+After the Sim pickup correction, all checkpoints through frame 153 match.
+First difference is frame 154 PERSON 2's animation cursor, with
+the causal steering mismatch at frame 153 PERSON 69/object 1005. Its old
+coordinates match, but the native proposes a 6144-unit step versus original
+256, with heights 24780 versus 23936: an animation gate, not collision geometry.
+The original RNG observer already sees tick 321 at frame 10 where the frame-entry
+input/native sees 320. At frame 153, original normal deadline is 620, native 624,
+although both then read current tick 620.
+
+IRQ0 can advance between HandleNextFrame and UpdateObjects, and even between
+the latter's fast read at 0x348D0 and normal read at 0x348F7. `--actor-trace`
+therefore also records `actor-clocks.csv` with `frame,fast_ticks,normal_ticks`.
+These are external clock inputs, not deadlines, gate outcomes or actor state.
+The native harness takes this file only through explicit `--actor-clocks`;
+it rejects malformed, reordered, missing or extra completed-frame samples.
+The unstepped terminal checkpoint may have no completed clock pair.
+The AI API accepts separate normal/fast ticks in original fast-then-normal
+evaluation order. Focused tests cover an IRQ between reads and strict `>`
+deadline comparisons; no synthetic RNG calls or deadline overrides are used.
+
+Measured clock-aligned receipt: `captures/combat-clock` matches all 23,560
+actor checkpoints across 155 frames (positions, animation/state, HP and RNG).
+`compare_rng.py --through-frame 153` matches initialization plus all 3,864
+logical RNG calls in completed frames 0..153, including bound and all three
+pre-call words. This uses the explicitly logged undefined-field input above;
+151 NPCs are active and 37 move, but none loses HP. It is not a firefight verdict.
+
+`combat-fight.txt` opens the scene-1 door, jumps through the corridor, reaches
+hostile actors and turns while firing. The initial spell is semi-automatic:
+the scenario supplies genuine Space make/break pulses rather than a held key,
+which otherwise emits only one shot. The earlier held-fire capture damages the
+player but no NPC and is not a successful firefight-parity gate.
 
 ## Player projectiles and radial effects
 
