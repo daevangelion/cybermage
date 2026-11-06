@@ -501,3 +501,13 @@ Native `sim_move_person` previously adjusted only body height and stance,
 omitting that entire sound/RNG/hit producer. The regression uses a bounded
 ceiling fixture and checks the muted sound's actual RNG draw, no-repeat
 contact and stronger-flash preservation; it does not fit a route coordinate.
+
+Named `f0186a3` independently passes the full build/check and controls gates,
+including this collision regression. The complete Regen-carry349 trace now
+matches player, actors and RNG. Fence-jump/out first differs later, at RNG100
+then player101. Original `ProcessInputEvents01485D` sets standing request
+`+144B3C=1` while running. Without that producer, native body height remains
+13312 after reaching the forced-crouch minimum; the original rises through
+14540,15768 and19452, then contacts the ceiling again at frame99 and consumes
+the actual `047AD6` sound draw. This is a distinct missing stance producer,
+not grounds to add an artificial RNG call.
