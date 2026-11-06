@@ -10,7 +10,7 @@ int r_column(render_state *s,const render_texture *tex,uint32_t base,
     uint32_t off=base;
     uint8_t *dst;
     if (count<=0) return 0;
-    if (x<0 || x>=s->width || y<0 || y>s->height-count || !map || !tex->data)
+    if (x<0 || x>=s->width || y<0 || y>s->height-count || !map || !tex->data || !s->framebuffer)
         return r_fail(s,"invalid column bounds",base);
     dst=s->framebuffer+(s->y+y)*CM_RENDER_WIDTH+s->x+x;
     if (mode<R_COLUMN_PACK) {

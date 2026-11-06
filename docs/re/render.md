@@ -49,6 +49,10 @@ bounded16MiB pool. PANEL directories have no encoding tag and mix raw/packed
 images; the selected drawer, not payload-length guessing, validates their bytes.
 `LoadBackDrop1FB24` interleaves four consecutive256x128 HIPAK resources into
 one1024x128 backdrop. No renderer code calls SDL or the OS.
+Texture source revisions/aliases refresh existing entries as well as appended
+ones; rotated replacements reuse their original decoded storage. Live fog and
+revisioned active-shade overrides are read from world at frame preparation,
+without renderer writes back into game state.
 
 Default view:400x300 at(120,90), original ConWinInfo entry2 (95A68). Full framebuffer
 is640x480 indexed8; presentation/DAC conversion belongs to platform/UI.

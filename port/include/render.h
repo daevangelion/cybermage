@@ -25,6 +25,8 @@ typedef struct {
     uint32_t size;
     int32_t width, height; /* Half extents; column-major, as TEX_W/TEX_H. */
     int32_t frame_half_w, frame_base, frame_depth, frame_height;
+    const uint8_t *source;
+    uint32_t source_size,revision,decoded_offset,decoded_capacity;
 } render_texture;
 typedef struct { int32_t x[4], y[4]; uint8_t visible[4]; } render_quad;
 enum { RENDER_WALL, RENDER_FLAT, RENDER_PROP };
@@ -52,6 +54,7 @@ typedef struct {
     world_span backdrop;
     uint8_t sky_fill, sky_fog, fog_on, parity;
     int32_t curve, shade_bias, shade_shift, shade_scale;
+    uint32_t shade_override_revision;
     world_object generated[CM_RENDER_DYNAMIC_MAX];
     unsigned generated_count, node_count, cell_count;
     unsigned command_count;
@@ -77,6 +80,7 @@ typedef struct {
 
 /* State/assets are retained, no allocation or world mutation during a frame. */
 int render_load(const world *w, rsc *hipak);
+int render_sync_textures(const world *w);
 void render_unload(void);
 int render_set_view(int x, int y, int width, int height);
 render_state *render_get_state(void);

@@ -83,6 +83,12 @@ int r_prepare(const world *w,const world_camera *c,render_state *s)
         c->pitch < -240 || c->pitch > 240)
         return r_fail(s,"camera outside map",0);
     s->camera=*c;
+    s->fog_on=w->fog_on;s->sky_fill=w->sky_fill;s->sky_fog=w->sky_fog;
+    if (s->shade_override_revision!=w->shade_override.revision) {
+        s->shade_override_revision=w->shade_override.revision;
+        s->shade_bias=w->shade_override.bias;s->shade_shift=w->shade_override.shift;
+        s->shade_scale=w->shade_override.scale;
+    }
     s->camera.u=(c->u&~255)+128; s->camera.v=(c->v&~255)+128;
     s->horizon=s->height/2-r_mul(c->pitch,s->height/2)/240;
     a=(uint16_t)-c->angle>>5;

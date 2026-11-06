@@ -10,6 +10,7 @@ void render_unload(void)
     render_state *s=render_get_state();
     memset(s->textures,0,sizeof s->textures);
     s->textures_loaded=s->decoded_bytes=0;
+    s->shade_override_revision=0;
     s->visible_world=NULL;
     s->shade_maps=s->fixed_maps=s->fog_maps=NULL;
     s->backdrop.data=NULL;s->backdrop.size=0;
@@ -28,10 +29,12 @@ int r_sync_textures(const world *w,render_state *s)
     unsigned i,used=s->decoded_bytes;
     if (w->texture_count>CM_RENDER_TEXTURES) return r_fail(s,"texture table full",w->texture_count);
     if (w->texture_count<s->textures_loaded) return r_fail(s,"texture table changed without reload",w->texture_count);
-    for (i=s->textures_loaded;i<w->texture_count;++i) {
+    for (i=0;i<w->texture_count;++i) {
         const world_texture *in=&w->textures[i];
         render_texture *out=&s->textures[i];
         uint32_t width,height,bytes;
+        if (i<s->textures_loaded && out->revision==in->revision &&
+            out->source==in->pixels.data && out->source_size==in->pixels.size) continue;
         if (in->width<=0 || in->height<=0 || in->width>16384 || in->height>16384 || !in->pixels.data)
             return r_fail(s,"invalid texture descriptor",i);
         width=(uint32_t)in->height*2;height=(uint32_t)in->width*2;
@@ -43,7 +46,8 @@ int r_sync_textures(const world *w,render_state *s)
          * encoding tag: map/object flags select the drawer, which bounds
          * checks the borrowed span. LoadPANELS never transforms its bytes. */
         if (in->kind==WORLD_TEX_PANEL) {
-            s->textures_loaded=i+1;
+            out->revision=in->revision;out->source=in->pixels.data;out->source_size=in->pixels.size;
+            if (i>=s->textures_loaded) s->textures_loaded=i+1;
             continue;
         }
         if (in->packed) {
@@ -60,17 +64,26 @@ int r_sync_textures(const world *w,render_state *s)
             if (bytes>out->size) return r_fail(s,"plain texture truncated",i);
             if (in->rotate) {
                 unsigned x,y;
-                if (bytes>R_DECODE_BYTES-used) return r_fail(s,"decoded texture pool full",i);
-                out->data=decoded+used;out->size=bytes;
+                if (bytes>out->decoded_capacity) {
+                    if (bytes>R_DECODE_BYTES-used) return r_fail(s,"decoded texture pool full",i);
+                    out->decoded_offset=used;out->decoded_capacity=bytes;used+=bytes;
+                }
+                out->data=decoded+out->decoded_offset;out->size=bytes;
                 /* RotateObjL9066390 = transpose + reverse columns. */
                 for (x=0;x<width;++x) for (y=0;y<height;++y)
-                    decoded[used+x*height+y]=in->pixels.data[y*width+width-1-x];
-                used+=bytes;
+                    decoded[out->decoded_offset+x*height+y]=in->pixels.data[y*width+width-1-x];
             }
         }
-        s->textures_loaded=i+1;s->decoded_bytes=used;
+        if (i>=s->textures_loaded) s->textures_loaded=i+1;
+        s->decoded_bytes=used;
+        out->revision=in->revision;out->source=in->pixels.data;out->source_size=in->pixels.size;
     }
     return 0;
+}
+
+int render_sync_textures(const world *w)
+{
+    return r_sync_textures(w,render_get_state());
 }
 
 int render_load(const world *w,rsc *hipak)

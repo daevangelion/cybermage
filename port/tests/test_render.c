@@ -95,7 +95,8 @@ int main(void)
         const uint8_t bad[]={4,0,12};
         const uint8_t masked[]={254,255,2,0,12,13};
         uint8_t increment[256];
-        render_texture t={data,sizeof data,2,1,0,0,0,0};
+        render_texture t={0};
+        t.data=data;t.size=sizeof data;t.width=2;t.height=1;
         state->framebuffer=framebuffer;
         assert(r_column(state,&t,0,0,0,4,65536,0,shades,2)==0);
         for (i=0;i<4;++i) assert(framebuffer[(90+i)*640+120]==12+i);
@@ -135,8 +136,13 @@ int main(void)
     assert(framebuffer[100*640+320]==9);
     assert(framebuffer[240*640+320]==7);
     assert(framebuffer[380*640+320]==5);
+    map.shade_override.bias=7;map.shade_override.shift=13;map.shade_override.scale=2;
+    map.shade_override.revision=1;map.fog_on=1;
+    assert(render_visibility(&map,&map.camera,&visible)==0);
+    assert(state->shade_bias==7 && state->shade_shift==13 && state->shade_scale==2 && state->fog_on==1);
     {
         const uint8_t raw[]={1,2,3,4};
+        const uint8_t replacement[]={4,3,2,1};
         const uint8_t packed[]={8,0,0,0,12,0,0,0,2,0,1,2,2,0,3,4};
         world_texture *t=&map.textures[0];
         t->kind=WORLD_TEX_PROP;t->width=t->height=1;t->rotate=1;
@@ -144,9 +150,13 @@ int main(void)
         assert(r_sync_textures(&map,state)==0);
         assert(state->textures[0].data[0]==2 && state->textures[0].data[1]==4);
         assert(state->textures[0].data[2]==1 && state->textures[0].data[3]==3);
+        t->pixels.data=replacement;t->revision=1;
+        assert(r_sync_textures(&map,state)==0 && state->decoded_bytes==4);
+        assert(state->textures[0].data[0]==3 && state->textures[0].data[1]==1);
         t=&map.textures[1];t->kind=WORLD_TEX_ANIM;t->width=t->height=1;t->packed=1;
         t->pixels.data=packed;t->pixels.size=sizeof packed;map.texture_count=2;
         assert(r_sync_textures(&map,state)==0 && state->textures_loaded==2);
+        state->framebuffer=framebuffer;
         assert(r_column(state,&state->textures[1],8,0,0,2,65536,0,shades,2)==0);
         assert(framebuffer[90*640+120]==1 && framebuffer[91*640+120]==2);
         t=&map.textures[2];*t=map.textures[1];t->pixels.size=4;map.texture_count=3;
