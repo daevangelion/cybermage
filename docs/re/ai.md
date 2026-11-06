@@ -28,6 +28,15 @@ water u16 +B6; animation state u8 +BC, cursor u8 +BD.
 
 ## Target visibility
 
+Rerun the existing1299-frame combat capture after fixing the frame795 movement
+divergence (do not inject oracle coordinates or target results):
+
+```
+tools/run_capped.sh make -C port B=build/AimFix
+tools/run_capped.sh port/build/AimFix/cybermage --headless --data orig/retail --bios-seed 44 --replay captures/AimFix-target-combat/frames.csv --state-dump captures/AimFix-target-combat/native --user out/AimFix-combat-user
+tools/run_capped.sh .venv/bin/python tools/compare_targets.py captures/AimFix-target-combat/frames.csv captures/AimFix-target-combat/native
+```
+
 The independent `target` module supplies ordered clipped projected props in the
 original 640x480 framebuffer coordinates, without pixels or world writes.
 `target_query` takes an explicit original view rectangle and drawing camera;

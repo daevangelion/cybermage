@@ -38,6 +38,12 @@ target collection: original packed
 prop drawers append only after x/y clipping succeeds, targetable byte7D028 is1,
 and clipped x0+left<=320<=x0+right. Mask props never append.
 
+`vis_prepare`/`vis_build_lists` in `src/vis` own the only pixel-free ray angles,
+tile traversal, generated geometry and list ordering. Both software rendering
+and targeting use caller-owned `vis_state` scratch; neither depends on the
+other. The renderer consumes the shared ordered lists, not a separate copy of
+the raycast/order implementation.
+
 Renderer state includes view rectangle, integral projection/trig-derived steps,
 angle tables, temporary generated geometry, cell/object lists, colormap pointers,
 and borrowed framebuffer. No per-frame allocation. The original pointer tables
@@ -94,6 +100,16 @@ bounds reads or infinite packed-run walks.
 Other scenes, moving props, exact painter tie cases and extreme pitch have not
 been oracle-compared. The near-zero claim is limited to the two named views;
 synthetic primitive tests are not retail-parity evidence for those other cases.
+
+After extracting the shared `vis` core, `captures/AimFix-render-newgame` and
+`AimFix-render-turn` are byte-identical in RGB to the prior renderer-only
+checkpoints:0 changed pixels, and still0 mismatches outside the documented glove
+footprints against the original. `AimFix-title` matches the original title
+0/307200. The complete newgame replay's last completed frame115 also matches the
+fresh original checkpoint0/307200. Original trace row116/tick542 is in flight
+when the screenshot is taken; comparing native post-frame116 incorrectly
+advances the glove glow once more and produces599 color differences. Use the
+completed-frame boundary, not the last trace entry.
 
 ## Enhanced GL backend
 
