@@ -515,3 +515,6 @@ not grounds to add an artificial RNG call.
 eligible running, before the input preparation phase. The named822f903
 regression fails before the producer is restored (assert134); its held-primary
 melee control verifies that an ineligible run does not force standing.
+The isolated4461e87 phase gate then passes `cap`, `hit`, `vehicle` and `keypad`
+with strict compilation; `gate-4461e87.json` records the red/green receipts.
+This focused result does not certify a later full fence or92-scenario replay.
