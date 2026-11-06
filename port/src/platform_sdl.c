@@ -703,9 +703,11 @@ int platform_poll(cm_input *input, unsigned frame)
     input->mouse_wheel = 0;
     input->touch_look_dx = input->touch_look_dy = 0;
     input->focus_lost = input->pad_disconnected = 0;
+    input->render_reset = 0;
     input->pad_pressed = input->pad_released = input->touch_pressed = 0;
     if (!is_headless || modern_controls) while (SDL_PollEvent(&e)) {
         switch (e.type) {
+        case SDL_RENDER_DEVICE_RESET: input->render_reset = 1; break;
         case SDL_QUIT: input->quit = 1; break;
         case SDL_KEYDOWN: case SDL_KEYUP: {
             unsigned code = dos_scan(e.key.keysym.scancode);

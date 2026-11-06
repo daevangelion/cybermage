@@ -27,6 +27,12 @@ int main(void)
     assert(waited == 25);
     now += 25;
     assert(platform_ticks(0) == 1);
+    event.type = SDL_RENDER_DEVICE_RESET;
+    assert(SDL_PushEvent(&event) == 1);
+    assert(!platform_poll(&input, 1));
+    assert(input.render_reset);
+    assert(!platform_poll(&input, 2));
+    assert(!input.render_reset);
     platform_shutdown();
     return 0;
 }

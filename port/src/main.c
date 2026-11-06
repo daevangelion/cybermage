@@ -964,15 +964,6 @@ int main(int argc, char **argv)
         int shop_modal = 0;
         int death_resume = 0;
         int movie_canvas = 0, drawable = 1;
-        if (gl_enabled) {
-            unsigned width, height;
-            platform_gl_size(&width, &height);
-            drawable = width && height;
-            if (drawable) {
-                if (render_gl_resize(width, height)) goto out;
-                gl_width = width; gl_height = height;
-            }
-        }
         if (modern) {
             controls_context context = !playing || ui.screen != UI_GAME ||
                 death_phase || events.selector_kind ? CONTROLS_MENU :
@@ -982,6 +973,16 @@ int main(int argc, char **argv)
                 platform_poll(&physical, frame)) goto out;
             controls_frame(&controls, context, &physical, &input);
         } else if (platform_poll(&input, frame)) goto out;
+        if (gl_enabled) {
+            unsigned width, height;
+            if (input.render_reset && render_gl_reset()) goto out;
+            platform_gl_size(&width, &height);
+            drawable = width && height;
+            if (drawable) {
+                if (render_gl_resize(width, height)) goto out;
+                gl_width = width; gl_height = height;
+            }
+        }
         if (snd_movie_active()) {
             int result;
             if (gl_enabled && (render_gl_clear(0) || gl_overlay_begin())) goto out;

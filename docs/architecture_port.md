@@ -16,6 +16,11 @@ actor-clocks.csv entries; only the unexecuted terminal checkpoint may omit them.
 GL validates light descriptors only when tile or object geometry uses them.
 Light0 ignores its descriptor and selects the default distance curve, as software
 does; event-written unused descriptors do not abort presentation.
+SDL_RENDER_DEVICE_RESET reaches both control modes. The GL renderer discards all
+lost-context names and geometry/image/revision caches without deleting invalid
+names, recreates programs/buffers/framebuffers, then reloads caller-owned indexed
+assets and palette before drawing. The runtime test destroys/recreates a real GL
+context and checks the same scene pixel after reset.
 
 `vis` owns the pixel-free original ray traversal and ordered scene lists.
 Dependency direction is `render_sw → vis ← target → world`; neither `vis` nor

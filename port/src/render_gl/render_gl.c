@@ -170,14 +170,12 @@ int render_gl_clear(uint8_t index)
     return error("GL clear");
 }
 
-int render_gl_open(int headless,unsigned width,unsigned height)
+static int create_objects(unsigned width,unsigned height)
 {
     unsigned i,drawable_width,drawable_height;
     GLint limit;
     const GLubyte *driver,*version;
     const uint8_t white=255,zero=0;
-    if (s.open) return cm_fail("GL",0,"renderer already open");
-    if (platform_gl_open(headless,width,height,&s.gles)) return -1;
     s.open=1;s.active=8;
     if (glr_api_load(&s.gl)) {render_gl_close();return -1;}
     s.api_loaded=1;
@@ -219,6 +217,31 @@ int render_gl_open(int headless,unsigned width,unsigned height)
     if (drawable_width && drawable_height) {width=drawable_width;height=drawable_height;}
     if (render_gl_resize(width,height) || error("GL initialization")) {render_gl_close();return -1;}
     return 0;
+}
+
+int render_gl_open(int headless,unsigned width,unsigned height)
+{
+    if (s.open) return cm_fail("GL",0,"renderer already open");
+    if (platform_gl_open(headless,width,height,&s.gles)) return -1;
+    return create_objects(width,height);
+}
+
+int render_gl_reset(void)
+{
+    const world *w=s.world;
+    const render_state *assets=s.assets;
+    unsigned width=s.width,height=s.height,loaded=s.loaded;
+    unsigned frame=s.frame;
+    int gles=s.gles;
+    const uint8_t *palette=s.palette_source;
+    if (!s.open) return cm_fail("GL reset",0,"context not open");
+    /* Context names are already invalid. Never delete them in the new context. */
+    memset(&s,0,sizeof s);
+    s.gles=gles;
+    if (create_objects(width,height)) return -1;
+    s.frame=frame;
+    if (loaded) return render_gl_load(w,assets,palette);
+    return palette ? render_gl_palette(palette):0;
 }
 
 static int ensure_image(unsigned variant)

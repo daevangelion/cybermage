@@ -39,6 +39,7 @@ typedef struct {
     uint32_t pad_buttons;
     uint32_t pad_pressed, pad_released;
     int focus_lost, pad_disconnected;
+    int render_reset;
     int16_t touch_move_x, touch_move_y;
     int touch_look_dx, touch_look_dy;
     uint32_t touch_buttons; /* CM_CONTROL_* bit positions. */

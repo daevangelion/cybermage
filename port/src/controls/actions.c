@@ -56,6 +56,7 @@ void controls_frame(cm_controls *c, controls_context context,
     memset(output, 0, sizeof *output);
     output->modern = 1;
     output->quit = in->quit;
+    output->render_reset = in->render_reset;
     output->mouse_present=in->mouse_present;
     output->joystick_present=in->joystick_present;
     output->mouse_x = in->mouse_x;

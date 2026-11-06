@@ -13,6 +13,7 @@ typedef struct {
 
 /* Enhanced presentation only. Visibility/targeting use the shared vis core. */
 int render_gl_open(int headless,unsigned width,unsigned height);
+int render_gl_reset(void); /* Rebuild after platform reports a lost context. */
 int render_gl_palette(const uint8_t palette[768]);
 int render_gl_load(const world *w,const render_state *assets,
                     const uint8_t palette[768]);
