@@ -282,12 +282,24 @@ int sim_frame(sim_state *s, world *w, const cm_input *input, uint32_t timer_tick
     s->unk_144aec = s->unk_144af0 = s->unk_144af4 = 0;
     jump = input->modern ? sim_modern_input(s, w, input) : keyboard(s, w);
     if (jump < 0) return -1;
+    /* HandleKeyboardEvents 013E39 samples B10 once, before acceleration. */
+    s->primary_fire = 0;
+    if (s->ai) {
+        unsigned key = s->ai->pc.kb_fire, mask = s->ai->pc.kb_fire_bit;
+        s->primary_fire = down(s, key, mask | mask * 2);
+        if (s->primary_fire) s->kb_scan_status[key] &= (uint8_t)~(mask * 2);
+    }
     if (!jump) s->unk_144b20 = 0;
     can_jump = !s->flight_mode && !s->unk_144b20 && !s->unk_144b1c && !s->unk_144b30 &&
                !s->unk_144b50 && s->unk_144b3c != -1;
-    running = can_jump && (input->modern ?
+    /* ProcessInputEvents 01476C/0147DD admits foot modes only; held
+     * primary melee clears eligibility at0148C4, unlike keySwing_Sword. */
+    running = can_jump && (s->pc_mode == 1 || s->pc_mode == 2 || s->pc_mode == 5) &&
+        !(s->pc_mode == 2 && s->primary_fire) && (input->modern ?
         input->run && s->movement_request > 0 : s->movement_request > RUN_THRESHOLD);
     s->running = running;
+    if (s->ai && s->ai->tables_loaded && s->ai->events &&
+        ai_pc_prepare_input(s->ai, s, w)) return -1;
     acceleration(s, running ? RUN_ACCEL_MAX : WALK_ACCEL_MAX);
     s->flight_action = 0;
     if (s->flight_mode) {
@@ -353,6 +365,10 @@ int sim_frame(sim_state *s, world *w, const cm_input *input, uint32_t timer_tick
         }
     }
     body(s, w, o);
+    /* Hit shake/aim 01CF71..01D1C0 precedes MovePerson: use the old
+     * heading for JumbleBound, not this frame's subsequently applied yaw. */
+    if (s->ai && s->ai->tables_loaded && s->ai->events &&
+        ai_pc_prepare_motion(s->ai, s, w)) return -1;
     if (s->pc_mode == 7 && s->vehicle_type != 1) {
         if (s->unk_144aec) s->unk_144aec = s->unk_144aec / 2 + 4;
         if (s->unk_144af0 > 0) s->unk_144af0 = s->unk_144af0 / 4 + 4;

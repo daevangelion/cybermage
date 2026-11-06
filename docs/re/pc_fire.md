@@ -12,8 +12,14 @@ Retail CM_HI.EXE v1.01F LE link addresses. Gameplay only; UI consumes state.
 - ProcessInputEvents0x1481E copies cooldown144AB4 to latch144AB8 before deriving
   fire144AB0. Keyboard fire is Space(scan39), mask1; HandleKeyboardEvents0x13E39
   consumes the bit2 edge but preserves held bit1. Defaults0x52644.
-  Sim samples primary144B10 once. With no primary, the logical keySwingSword206848
-  pulse supplies fire; it is not interchangeable with a held primary.
+  Sim samples keyboard primary144B10 once. With no primary, the consumer accepts
+  the logical keySwingSword206848 pulse; it is not interchangeable with primary.
+  At provider checkpoint5a3c5b3 this pulse is consumer-only: selector producers
+  0x134B8/0x134F9/0x13544/0x13627 are not yet connected. Manually supplied pulse
+  tests verify the consumer, not a live keyboard-to-selector path.
+  Mode3 confirm sources (Enter0x12F9F and kbHand0x12FD7, which clear keys and
+  bypass0x13E39) and classic Mouse0x144A6/Joystick0x146F9 remain separate input
+  producers; keyboard sampling alone is not evidence for those paths.
 - ResetAim0x12D60: mode1 uses CenterAim[hand_type144A40], mode5 index1, all others0.
 - EquipWeapon0x1040C: hand_type=weapon+2 unless mode5(index1); PCHandBound16x8
   and WeaponTrajectory16x2x8 are supplied executable tables, not compiled assets.

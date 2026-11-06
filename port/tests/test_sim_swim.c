@@ -92,6 +92,10 @@ int main(int argc, char **argv)
     expected = w.rng;
     assert(world_rnd(&expected, 6) > 0);
     (void)world_rnd(&expected, 60);
+    /* The same frame's newly raised fire flash enters 01CF71 before motion. */
+    (void)world_rnd(&expected, 4096);
+    (void)world_rnd(&expected, 8192);
+    (void)world_rnd(&expected, 2);
     assert(!sim_frame(&s, &w, &in, 100));
     assert((uint16_t)w.persons[0].unk_0038 == 40);
     assert(a.pc_flash == 2);

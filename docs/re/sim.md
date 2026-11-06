@@ -410,3 +410,33 @@ shutdown assertion failed (`artifact://2230`). Strict app/test builds and the
 complete lifecycle fixture then exited0 (`artifact://2233`), including its
 existing load/save/death/Training/invalid-CLI negatives. These focused follow-on
 checks are separate from the named full-game cohort above.
+
+## Player input and movement phase boundaries
+
+Original keyboard013E39 samples primary fire into144B10 once and consumes
+the configured scan's edge bit. ProcessInputEvents01476C/0147DD only admits
+running in foot modes1/2/5; held primary melee clears that eligibility at0148C4
+before the48/96 acceleration limit is selected. The independent206848
+keySwing_Sword pulse does not clear it. Vehicle mode7 never gets the96 cap.
+
+Input/hand/loop processing belongs before acceleration and movement.
+The body adjustment is followed by hit shake and aim at01CF71..01D1C0.
+JumbleBound01D07D therefore uses the old heading, before MovePerson calls
+at01D437/01D62E/01D67B/01D707/01D743/01D792/01D825 apply this frame's yaw.
+Sim calls the explicit early `ai_pc_prepare_input` and pre-motion
+`ai_pc_prepare_motion` phases; the late PC update must not repeat either.
+
+The named7b427a9 Training guard replay first differed at frame30 despite exact
+RNG through all138 completed checkpoints. Measured push3943 and side0 with the
+old heading52992 produce(-3679,-1420), exactly the original endpoint
+(213330,2010170). Applying yaw first gives heading50944 and(-3885,-675),
+exactly the incorrect native endpoint(213124,2010915). This establishes phase
+order, not a fitted coordinate correction.
+
+The same named cohort's earned tank-west replay first differs at frame8:
+X353536/352768. Original forward displacement2688 is `(48/2+4)*96`;
+native3456 is `(64/2+4)*96`, from wrongly allowing mode7 to accelerate past48.
+`test_sim_phases` exercises pre-yaw hit/RNG, held versus pulsed melee, the
+vehicle acceleration cap and single-sampling of a non-default fire binding.
+The swing-pulse case supplies explicit input metadata and is consumer-only
+coverage; it does not establish selector/keyboard pulse-producer liveness.
