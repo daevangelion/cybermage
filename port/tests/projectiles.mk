@@ -3,6 +3,7 @@ include Makefile
 .PHONY: check-projectiles
 check-projectiles: $(B)/test_projectiles
 	$(B)/test_projectiles
+	$(abspath ../.venv/bin/python) tests/test_projectile_trace.py
 
 $(B)/test_projectiles: tests/test_projectiles.c $(filter-out $(B)/main.o,$(OBJECTS))
 	@mkdir -p $(@D)
