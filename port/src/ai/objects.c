@@ -71,7 +71,7 @@ static int choose_attack(ai_state *a, world *w, world_person *p,
 
 static int actor_attack(ai_state *a, sim_state *s, world *w, unsigned id,
                          int tick, int moving, int fire_moving, unsigned target,
-                         int32_t distance, int can_move)
+                         const int32_t *distance, int can_move)
 {
     world_person *p = &w->persons[id];
     const ai_monster *m = &a->monsters[p->type];
@@ -104,7 +104,9 @@ static int actor_attack(ai_state *a, sim_state *s, world *w, unsigned id,
     case 1: {
         int hit = 1;
         sound(w, p, m->sounds[3], 0x40000);
-        if (s->pc_mode != 7 && target && distance < m->unk_0060) {
+        if (s->pc_mode != 7 && target && !distance)
+            return cm_fail("UpdateObjects", id, "melee reads undefined original distance");
+        if (s->pc_mode != 7 && target && *distance < m->unk_0060) {
             hit = world_rnd(&w->rng, 2);
             if (overlap(o, &w->objects[target]) && (int16_t)p->unk_003C == 16) {
                 world_person *t = &w->persons[p->target];
@@ -229,10 +231,13 @@ static int actor_prepare_attack(ai_state *a, sim_state *s, world *w, unsigned id
 
 static int actor_state(ai_state *a, sim_state *s, world *w, unsigned id,
                         int tick, int moving, int fire_moving, int can_move,
-                        int melee, int spells, unsigned target, int32_t distance)
+                        int melee, int spells, unsigned target, const int32_t *target_distance)
 {
     world_person *p = &w->persons[id];
     const ai_monster *m = &a->monsters[p->type];
+    /* Other distance reads are guarded by an admitted target. Only state4
+     * restores a lost target, and it checks the call-local value separately. */
+    int32_t distance = target_distance ? *target_distance : p->distance;
     world_object *o = &w->objects[p->object];
     int special = w->scene == 3 && id == 82;
     int bp = s->bp_limit_flag != 0;
@@ -320,7 +325,7 @@ static int actor_state(ai_state *a, sim_state *s, world *w, unsigned id,
         }
         return 0;
     case 4:
-        return actor_attack(a, s, w, id, tick, moving, fire_moving, target, distance, can_move);
+        return actor_attack(a, s, w, id, tick, moving, fire_moving, target, target_distance, can_move);
     case 5:
         return actor_prepare_attack(a, s, w, id, tick, moving, target);
     case 6:
@@ -491,6 +496,8 @@ int ai_update_objects(ai_state *a, sim_state *s, world *w,
 {
     unsigned id;
     int tick = 0, fast = 0, water_damage = 0;
+    int distance_known = 0;
+    int32_t distance;
     if (!a->tables_loaded)
         return cm_fail("UpdateObjects", 0, "combat tables not loaded");
     a->timer_ticks = timer_ticks;
@@ -513,7 +520,7 @@ int ai_update_objects(ai_state *a, sim_state *s, world *w,
         int frame_tick, can_move = 1, moving = 1, fire_moving = 0;
         int melee, spells;
         unsigned target = 0;
-        int32_t distance = p->distance, min_range = 0;
+        int32_t min_range = 0;
         if (p->object < 0 || (unsigned)p->object >= w->object_count || ai_person_kind(a, w, id) < 0)
             return cm_fail("UpdateObjects", id, "invalid actor");
         o = &w->objects[p->object]; if (!o->active) continue;
@@ -651,11 +658,15 @@ int ai_update_objects(ai_state *a, sim_state *s, world *w,
             const world_person *t = &w->persons[p->target];
             int kind = ai_person_kind(a, w, (unsigned)p->target);
             target = (unsigned)t->object; distance = p->distance; p->unk_0030 = 0;
+            /* Original035240 writes one call-local stack slot. Lost-target
+             * state4 restores its target but retains the preceding actor's
+             * distance, not this actor's stale PERSON+0C value. */
+            distance_known = 1;
             if (kind == 5 || kind == 17 || kind == 6) melee = 0;
             if (target == w->player_object && distance < min_range) moving = 0;
         } else { ++p->unk_0030; target = 0; }
         if (actor_state(a, s, w, id, frame_tick, moving, fire_moving, can_move,
-                         melee, spells, target, distance)) return -1;
+                         melee, spells, target, distance_known ? &distance : NULL)) return -1;
     }
     return 0;
 }

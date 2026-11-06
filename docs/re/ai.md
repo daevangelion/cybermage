@@ -332,6 +332,35 @@ full-firefight parity. The earlier actor trace above has no damaged NPCs and
 must not be presented as projectile verification. Broader firefights need
 all12 native missile records and PERSON HP/armor/RNG checkpoints.
 
+### Lost-target melee range lifetime
+
+Water route's first HP/RNG divergence at native frame818 (tick1583) was NPC133
+melee, not a projectile or swimming. A native damage-entry breakpoint showed
+`actor_attack → DamagePerson(0,3,100,100)`. The first wrong RNG request was
+melee RND(2), where the original requested the attack-end RND(100), with the
+same pre-call words17871/21011/26122.
+
+Original035240 copies PERSON+0C to call-local `[esp+28]` only for an admitted
+target. If a later NPC loses its target,035C18 restores its last target but
+does not refresh that distance: melee035DD2 uses the preceding admitted NPC's
+distance. The port incorrectly initialized it from each NPC's own stale distance
+(15517 for the failing actor). `objects.c` now preserves the original call-local
+lifetime. No player-damage or RNG suppression was added.
+
+```
+tools/run_capped.sh make -C port -f tests/projectiles.mk \
+  B=build/AudioProjectile check-melee-distance
+```
+
+The two-NPC fixture executes unmodified original UpdateObjects, attack decisions,
+DamagePerson and RNG, intercepting visibility/movement/tracking/device boundaries
+identically on both sides. Before the fix, prior distance60000 gave original
+HP40/RNG1895,23161,4392 versus native HP37/RNG22354,16429,18877.
+After the fix, all4 comparisons match, including exact range boundary30720 and
+accepted30719/10000. If restored-target melee occurs before any admitted target
+has written the call-local distance, native fails closed: the original reads an
+uninitialized stack slot, for which no value is fabricated or imported.
+
 ## Player input / hand checkpoint
 
 `pc_fire.c` now supplies real `ai_pc_input` (before world/NPC updates) and
