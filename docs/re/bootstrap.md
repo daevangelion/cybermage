@@ -230,6 +230,18 @@ INT 33h consumable counters/mickeys, guest warps and programmed driver bounds.
 These are hardware and transport observations, not a claim that the native
 mouse replay comparison has passed.
 
+The final producer additionally canonicalizes a scripted `-0.0` timestamp to
+`0.0`, so equal-time make/release events retain their declaration order under
+the timestamp sort. Its regression failed before the parser correction; all
+four Rust mouse tests and the trusted release build then passed
+(`artifact://3310`). The complete patch still contains all six existing
+oracle members, including the draw/menu observers. Final binary:
+`63db872af4a47c820456176cc5945f4581107ea3748443565e6383e4725fd91a`;
+patch:
+`ad772577b40a93d3bc9b5b5cd3eaead6b5cbe9ae3d4bdd7bc169698c801fe4ea`.
+`captures/Controls-mouse-producer/profile.json` records every source-member hash.
+The earlier `48bd…/962e…` captures above retain their own producer identities.
+
 ## Frame traces
 
 ```
@@ -367,6 +379,35 @@ opening selector or an early Escape cancellation lacks that action0 row.
 
 Both options require `--frame-trace`. All observations remain read-only and
 use the same source/patch/binary provenance checks as MoveWorld observations.
+
+### Standing-gate recaptures
+
+`tools/recapture_gate.py` mechanically recaptures a manifest's `routes[].route`
+from each existing capture's recorded scenario, trace ranges and hash-checked
+original save imports. It never overwrites that capture. Supply an isolated
+named source archive with `orig/`, `.venv/` and `ref/` linked to their cached
+inputs, an empty cohort directory and the twelve core scenarios first:
+
+```
+tools/run_capped.sh .venv/bin/python tools/recapture_gate.py \
+  --root /absolute/project --source /absolute/named-source \
+  --cohort /absolute/new-cohort --manifest /absolute/manifest.json
+```
+
+The tool verifies/builds the original producer once, then freezes its executable
+and observer patch. An already frozen producer may instead be selected with
+`--oracle BINARY --oracle-receipt ORIGINAL_RUN_JSON`; both binary/patch hashes
+and the reference revision must match that receipt. Each of three workers runs
+through `run_capped.sh` using that immutable executable, never a concurrent
+reference rebuild. A barrier completes the twelve core captures before routes.
+
+Every new capture retains actual draw-clock/UI-action observations plus actor,
+RNG, item and selector inputs. `pairing.json` compares every old frame column,
+and hashes old/new actors, actor clocks, seed and event-input companions where
+available. Differences are recorded, not suppressed or presented as identity.
+`recapture-results.json` records each worker's exit and log. Only the separate
+named native replay gate can establish parity; a successful recapture is not
+a native MATCH. Delete raw images only after that native scenario passes.
 
 ### Draw clocks and menu actions
 
