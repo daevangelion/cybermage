@@ -194,6 +194,13 @@ passed afterward. The original1299-row combat replay then first diverged at
 frame885 (Y expected1061517, native1061226), rather than795. Target comparison
 still reports21 mismatches across1298 completed frames (13 original nonempty),
 first native917/original918, empty versus[1069]. This is not a target MATCH.
+With the explicit PERSON+24 input and measured actor clocks, the latest combat
+consumer matches player HP/RNG through original pre-frame922, including the
+first hit (HP39). First movement divergence is923, Y1063616/1064298;
+RNG also first differs there. Target comparison now reports19 mismatches over
+1298 completed frames,13 original nonempty, first926/927([] versus[1069]).
+The next investigation is the melee hit-flash producer gating the newly ported
+three-RND player-hit response; this is not yet a verified target MATCH.
 
 ## Integrated verification (Integrator)
 
@@ -310,6 +317,10 @@ actor HP and actor phase clocks, with `scene-start.persons` for the explicitly
 approved undefined-word input. Compare computed native state with:
 
 ```
+tools/run_capped.sh port/build/Sim2/cybermage --headless --data orig/retail \
+  --replay captures/scene1-water/frames.csv \
+  --import-undefined captures/scene1-water/scene-start.persons \
+  --state-dump captures/scene1-water/Sim2-native --user out/Sim2-water-user
 tools/run_capped.sh .venv/bin/python tools/compare_swim.py \
   captures/scene1-water/frames.csv captures/scene1-water/Sim2-native
 ```
@@ -318,3 +329,26 @@ The comparator excludes the unfinished terminal checkpoint, checks original
 pre-frameN+1 against native post-frameN, and rejects dry-only or missing-frame
 evidence. Its five controls cover alignment, changed RNG/swim, dry-only and
 missing checkpoints.
+
+The first full native consumer compared2032 completed frames with the explicitly
+logged PERSON+24-only import and measured actor phase clocks. It did **not**
+match:1214 mismatching checkpoints, first native818/original819 with HP40/38 and
+RNG(1895,23161,4392)/(22354,16429,18877). Position first diverged at840
+(Y1044843/1043343), and the displaced native route never reached water.
+Original wet coverage remains127 frames with HP40. This is an upstream
+combat-dependent failure, not successful full-route swim parity; the isolated
+original reducer gates above remain separately scoped.
+
+After the source-grounded NPC call-local melee-distance correction
+(`202c976`), the full real-route consumer **matched all2033 player entry
+records**. `compare_swim.py` compared2032 completed frames,127 original wet,
+with **zero mismatches** in position, swim flag/stance, shared deadline, HP and
+all3 RNG words. The only snapshot import was the explicitly logged PERSON+24;
+actor phase clocks were measured inputs. No coordinates, HP, swim state,
+deadlines or RNG words were installed from checkpoints. Scene1 has damage0:
+this is no-damage water entry/stay parity, not harmful/healing-water parity.
+
+The environmental-fire product also now uses explicit uint32 wrap for raw
+EventAction82 damage payloads, matching original IMUL/LEA01CE0C/01CE1A.
+The INTMAX×2 fixture failed under UBSan before the correction and passed after;
+it also checks the original minimum hit flash2 and signed deadline comparison.

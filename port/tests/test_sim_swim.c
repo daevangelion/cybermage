@@ -81,6 +81,27 @@ int main(int argc, char **argv)
     assert(!sim_swim_step(&s, &w));
     assert(s.swim_loop == -1 && a.pc_sound >= 0);
     assert(!snd_done(a.pc_sound, 3));
+    /* EventAction82 may supply the full signed damage word. Original IMUL/
+     * LEA at01CE06..01CE17 wraps before DamagePerson checks player aura. */
+    scene(1);
+    s.swim_check = 0;
+    s.fire_check = 1; s.fire_damage = INT32_MAX;
+    s.fire_tile_panel = 45; s.fire_tile_art = 44;
+    w.persons[0].unk_0074 = 1;
+    w.rng.word[0] = 1; w.rng.word[1] = 2; w.rng.word[2] = 3;
+    expected = w.rng;
+    assert(world_rnd(&expected, 6) > 0);
+    (void)world_rnd(&expected, 60);
+    assert(!sim_frame(&s, &w, &in, 100));
+    assert((uint16_t)w.persons[0].unk_0038 == 40);
+    assert(a.pc_flash == 2);
+    assert(!memcmp(expected.word, w.rng.word, sizeof expected.word));
+    expected = w.rng;
+    s.swim_damage_time = 0;
+    a.pc_flash = 0;
+    assert(!sim_frame(&s, &w, &in, UINT32_MAX));
+    assert(!a.pc_flash);
+    assert(!memcmp(expected.word, w.rng.word, sizeof expected.word));
     snd_close(); platform_shutdown();
     return 0;
 }

@@ -339,9 +339,14 @@ int sim_frame(sim_state *s, world *w, const cm_input *input, uint32_t timer_tick
         int touching = sim_coll_swim_flat(w, w->player_object,
                                           s->fire_tile_panel, s->fire_tile_art);
         if (touching < 0) return -1;
-        if (touching && s->fire_damage && timer_ticks > s->swim_damage_time) {
-            int32_t damage = s->fire_damage * (1 + world_rnd(&w->rng, 6));
+        if (touching && s->fire_damage &&
+            sim_wrap32(timer_ticks) > sim_wrap32(s->swim_damage_time)) {
+            int32_t damage;
             if (!s->ai) return cm_fail("FireDamage", w->player_person, "missing actor state");
+            /* 01CDE7 raises the same hit flash as swim damage. */
+            if (s->ai->pc_flash < 2) s->ai->pc_flash = 2;
+            damage = sim_wrap32((uint32_t)s->fire_damage *
+                (uint32_t)(1 + world_rnd(&w->rng, 6)));
             if (ai_damage_person(s->ai, w, w->player_person, damage, 100, 125)) return -1;
             s->swim_damage_time = timer_ticks + 40 + (uint32_t)world_rnd(&w->rng, 60);
         }
