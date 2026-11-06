@@ -6,6 +6,16 @@
 #define CM_FILE_MAX (128u * 1024u * 1024u)
 #define CM_KEY_COUNT 128
 #define CM_RAW_SCANS_MAX 256
+#define CM_TOUCH_MAX 32
+
+enum { CM_TOUCH_DOWN = 1, CM_TOUCH_MOVE, CM_TOUCH_UP };
+
+typedef struct {
+    int64_t id;
+    int x, y, dx, dy; /* 640x480 game coordinates; may lie in letterbox */
+    uint16_t pressure;
+    uint8_t phase, inside;
+} cm_touch;
 
 typedef struct {
     uint8_t raw_scans[CM_RAW_SCANS_MAX]; /* ordered IRQ9 bytes, including E0 */
@@ -16,6 +26,9 @@ typedef struct {
     int mouse_x, mouse_y;
     int mouse_dx, mouse_dy;
     unsigned mouse_buttons;
+    unsigned mouse_pressed, mouse_released;
+    cm_touch touches[CM_TOUCH_MAX];
+    unsigned touch_count;
     int quit;
 } cm_input;
 

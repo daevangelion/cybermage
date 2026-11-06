@@ -2,6 +2,8 @@
 
 #include <string.h>
 
+#define TEXT_LIMIT (32 * CM_WIDTH)
+
 /* CM_HI.EXE Video::SetPalette: VGA DAC values become RGB8 by shifting two. */
 int gfx_palette(uint8_t rgb[768], const uint8_t *data, uint32_t size,
                 const char *path)
@@ -49,24 +51,34 @@ int gfx_font(cm_font *f, const uint8_t *data, uint32_t size, const char *path)
     return 0;
 }
 
-int gfx_text_width(const cm_font *f, const char *text)
+int gfx_text_width(const cm_font *f, const char *text, int *width)
 {
-    int width = 0;
+    int64_t sum = 0;
+    unsigned count = 0;
     while (*text) {
         const uint8_t *p;
+        if (++count > TEXT_LIMIT)
+            return cm_fail(f->path, 0, "text exceeds character limit");
         if ((unsigned char)*text >= f->count)
             return cm_fail(f->path, 6, "text character exceeds font glyph count");
         p = f->data + 14 + (unsigned char)*text++ * f->stride;
-        width += cm_u16(p) + f->spacing;
+        sum += cm_u16(p) + f->spacing;
+        if (sum < -TEXT_LIMIT || sum > TEXT_LIMIT)
+            return cm_fail(f->path, 8, "text width exceeds draw limit");
     }
-    return width;
+    *width = (int)sum;
+    return 0;
 }
 
 static int text_draw(uint8_t *dst, const cm_font *f, int x, int y,
                      const char *text, int shadow)
 {
-    if (gfx_text_width(f, text) < 0)
+    int width;
+    if (gfx_text_width(f, text, &width))
         return -1;
+    if (x < -TEXT_LIMIT || x > TEXT_LIMIT ||
+        y < -TEXT_LIMIT || y > TEXT_LIMIT)
+        return cm_fail(f->path, 0, "text origin exceeds draw limit");
     while (*text) {
         const uint8_t *g = f->data + 14 + (unsigned char)*text++ * f->stride;
         unsigned width = cm_u16(g), yy, xx;

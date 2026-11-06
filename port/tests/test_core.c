@@ -49,6 +49,8 @@ static void test_gfx(void)
     uint8_t rgb[768];
     uint8_t image[4] = {1,2,3,4};
     cm_font f;
+    int width;
+    static char long_text[32 * CM_WIDTH + 2];
     unsigned at = 14 + 'A' * 6;
     font[0] = 2; /* maximum width */
     font[2] = 2; /* height */
@@ -60,8 +62,17 @@ static void test_gfx(void)
     font[at+4] = 0xff;
     font[at+5] = 43;
     assert(gfx_font(&f, font, 14 + 128 * 6, "font") == 0);
-    assert(gfx_text_width(&f, "AA") == 4);
-    assert(gfx_text_width(&f, "\200") == -1);
+    assert(gfx_text_width(&f, "AA", &width) == 0 && width == 4);
+    assert(gfx_text_width(&f, "\200", &width) == -1);
+    f.spacing = -3;
+    assert(gfx_text_width(&f, "A", &width) == 0 && width == -1);
+    assert(gfx_text(screen, &f, 0, 0, "A") == 0);
+    f.spacing = 0;
+    memset(long_text, 'A', sizeof long_text - 1);
+    assert(gfx_text_width(&f, long_text, &width) == -1);
+    f.spacing = -2;
+    assert(gfx_text_width(&f, long_text, &width) == -1);
+    f.spacing = 0;
     memset(screen, 9, sizeof screen);
     gfx_text(screen, &f, 0, 0, "A");
     assert(screen[0] == 42 && screen[1] == 9);

@@ -38,6 +38,13 @@ count (108 for scenes), `rsc.count` retains the original header count.
 All14 supplied retail/demo RSC files were listed successfully; extracting the
 first populated entry of each matched its checked source span byte-for-byte.
 
+Numeric tables in CM_HI.EXE are read by `cm_exe_init/cm_exe_table` (`exe.h`),
+not generated into C arrays. The reader borrows the caller's file bytes, selects
+the LE data object at0x90000, validates page dimensions/mappings and decodes
+little-endian signed words, including words crossing physical page boundaries.
+`cm_exe_bytes` exposes the same checked mapping for packed u8/u16 tables.
+Relocated pointers and executable code are not part of this API.
+
 ## HIPAK, palettes, fonts and title
 
 | Entry | Structure / consumer |
@@ -78,6 +85,10 @@ height32, color flag1, count128, spacing0, stride770. `TEXT_STR/TEXT_CH`
 color-font visible pixels keep their stored palette index. The port's raw blit
 skips FE/FF; title text uses original mode0, FF transparent and FE→index1.
 It does not yet implement every monochrome/remap TEXT_* mode.
+`gfx_text_width(font,text,&width)` returns status separately from its signed
+width (negative spacing can legally produce width−1). Character count and
+cumulative pixel advance are bounded to20480; accumulation uses int64_t before
+narrowing. This is a hostile-input draw bound, not a replacement font metric.
 
 ### Title composition
 

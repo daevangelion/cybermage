@@ -15,7 +15,7 @@ typedef struct {
 int gfx_palette(uint8_t rgb[768], const uint8_t *data, uint32_t size,
                 const char *path);
 int gfx_font(cm_font *f, const uint8_t *data, uint32_t size, const char *path);
-int gfx_text_width(const cm_font *f, const char *text);
+int gfx_text_width(const cm_font *f, const char *text, int *width);
 int gfx_text(uint8_t *dst, const cm_font *f, int x, int y, const char *text);
 int gfx_menu_text(uint8_t *dst, const cm_font *f, int x, int y,
                   const char *text);

@@ -21,12 +21,15 @@ static cm_error error;
 static char error_file[PATH_MAX_BYTES], error_message[512];
 static SDL_Window *window;
 static SDL_Surface *surface;
+static SDL_Surface *converted;
 static SDL_AudioDeviceID device;
 static uint64_t start;
 static int is_headless;
 static key_event events[KEY_EVENTS_MAX];
 static unsigned event_count, event_next;
 static uint8_t extended_held[CM_KEY_COUNT];
+static SDL_FingerID primary_finger;
+static int primary_down;
 
 int cm_fail(const char *file, uint32_t offset, const char *message)
 {
@@ -100,6 +103,14 @@ static void mix_callback(void *unused, Uint8 *out, int bytes)
 int platform_init(int headless)
 {
     SDL_AudioSpec spec, obtained;
+    Uint32 flags = SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI;
+    SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0");
+    SDL_SetHint(SDL_HINT_MOUSE_TOUCH_EVENTS, "0");
+#ifdef __ANDROID__
+    SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight");
+    SDL_SetHint(SDL_HINT_ANDROID_TRAP_BACK_BUTTON, "1");
+    flags = SDL_WINDOW_FULLSCREEN_DESKTOP | SDL_WINDOW_ALLOW_HIGHDPI;
+#endif
     is_headless = headless;
     if (SDL_Init(SDL_INIT_TIMER | (headless ? 0 : SDL_INIT_VIDEO | SDL_INIT_AUDIO)))
         return cm_fail("SDL", 0, SDL_GetError());
@@ -108,7 +119,7 @@ int platform_init(int headless)
         return audio_init(48000);
     window = SDL_CreateWindow("CyberMage", SDL_WINDOWPOS_CENTERED,
                               SDL_WINDOWPOS_CENTERED, 960, 720,
-                              SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
+                              flags);
     if (!window)
         return cm_fail("SDL", 0, SDL_GetError());
     surface = SDL_CreateRGBSurfaceWithFormat(0, CM_WIDTH, CM_HEIGHT, 8,
@@ -144,11 +155,90 @@ void platform_shutdown(void)
 {
     if (device) SDL_CloseAudioDevice(device);
     if (surface) SDL_FreeSurface(surface);
+    if (converted) SDL_FreeSurface(converted);
     if (window) SDL_DestroyWindow(window);
     device = 0;
     surface = NULL;
+    converted = NULL;
     window = NULL;
     SDL_Quit();
+}
+
+static SDL_Rect viewport(int w, int h)
+{
+    SDL_Rect rect = {0, 0, w, h};
+    if ((int64_t)w * CM_HEIGHT <= (int64_t)h * CM_WIDTH)
+        rect.h = w * CM_HEIGHT / CM_WIDTH;
+    else
+        rect.w = h * CM_WIDTH / CM_HEIGHT;
+    rect.x = (w - rect.w) / 2;
+    rect.y = (h - rect.h) / 2;
+    return rect;
+}
+
+static int pointer_point(int x, int y, int *game_x, int *game_y)
+{
+    SDL_Rect rect;
+    int w, h;
+    SDL_GetWindowSize(window, &w, &h);
+    rect = viewport(w, h);
+    if (!rect.w || !rect.h) return 0;
+    *game_x = (x - rect.x) * CM_WIDTH / rect.w;
+    *game_y = (y - rect.y) * CM_HEIGHT / rect.h;
+    return x >= rect.x && y >= rect.y &&
+           x < rect.x + rect.w && y < rect.y + rect.h;
+}
+
+static void mouse_button(cm_input *input, unsigned bit, int down)
+{
+    if (down) {
+        if (!(input->mouse_buttons & bit)) input->mouse_pressed |= bit;
+        input->mouse_buttons |= bit;
+    } else {
+        if (input->mouse_buttons & bit) input->mouse_released |= bit;
+        input->mouse_buttons &= ~bit;
+    }
+}
+
+static int touch_event(cm_input *input, const SDL_TouchFingerEvent *finger)
+{
+    cm_touch *touch;
+    SDL_Rect rect;
+    int w, h;
+    if (input->touch_count == CM_TOUCH_MAX)
+        return cm_fail("input", 0, "touch event queue overflow");
+    SDL_GetWindowSize(window, &w, &h);
+    rect = viewport(w, h);
+    if (!rect.w || !rect.h) return 0;
+    touch = &input->touches[input->touch_count++];
+    touch->id = finger->fingerId;
+    touch->inside = (uint8_t)pointer_point((int)(finger->x * w),
+                                         (int)(finger->y * h),
+                                         &touch->x, &touch->y);
+    touch->dx = (int)(finger->dx * w * CM_WIDTH / rect.w);
+    touch->dy = (int)(finger->dy * h * CM_HEIGHT / rect.h);
+    touch->pressure = finger->pressure <= 0 ? 0 :
+                      finger->pressure >= 1 ? 65535 :
+                      (uint16_t)(finger->pressure * 65535);
+    touch->phase = finger->type == SDL_FINGERDOWN ? CM_TOUCH_DOWN :
+                   finger->type == SDL_FINGERUP ? CM_TOUCH_UP : CM_TOUCH_MOVE;
+    if (touch->phase == CM_TOUCH_DOWN && !primary_down && touch->inside) {
+        primary_finger = finger->fingerId;
+        primary_down = 1;
+        input->mouse_x = touch->x;
+        input->mouse_y = touch->y;
+        mouse_button(input, SDL_BUTTON_LMASK, 1);
+    } else if (primary_down && primary_finger == finger->fingerId) {
+        input->mouse_x = touch->x;
+        input->mouse_y = touch->y;
+        input->mouse_dx += touch->dx;
+        input->mouse_dy += touch->dy;
+        if (touch->phase == CM_TOUCH_UP) {
+            mouse_button(input, SDL_BUTTON_LMASK, 0);
+            primary_down = 0;
+        }
+    }
+    return 0;
 }
 
 static int input_number(const char **p, unsigned base, unsigned limit, unsigned *v)
@@ -259,6 +349,7 @@ static unsigned dos_scan(SDL_Scancode sc)
         [87]=SDL_SCANCODE_F11, [88]=SDL_SCANCODE_F12
     };
     unsigned i;
+    if (sc == SDL_SCANCODE_AC_BACK) return 1;
     if (sc == SDL_SCANCODE_RCTRL) return 29;
     if (sc == SDL_SCANCODE_RALT) return 56;
     if (sc == SDL_SCANCODE_KP_ENTER) return 28;
@@ -319,6 +410,8 @@ int platform_poll(cm_input *input, unsigned frame)
     memset(input->pressed, 0, sizeof input->pressed);
     memset(input->released, 0, sizeof input->released);
     input->raw_count = 0;
+    input->touch_count = 0;
+    input->mouse_pressed = input->mouse_released = 0;
     input->mouse_dx = input->mouse_dy = 0;
     if (!is_headless) while (SDL_PollEvent(&e)) {
         switch (e.type) {
@@ -326,21 +419,29 @@ int platform_poll(cm_input *input, unsigned frame)
         case SDL_KEYDOWN: case SDL_KEYUP: {
             unsigned code = dos_scan(e.key.keysym.scancode);
             if (code && extended_key(e.key.keysym.scancode)) code |= 0xe000;
+            if (e.type == SDL_KEYDOWN && e.key.repeat &&
+                input->raw_count + (code > 255 ? 2u : 1u) > CM_RAW_SCANS_MAX - 2)
+                break;
             if (code && emit_key(input, code, e.type == SDL_KEYDOWN)) return -1;
             break;
         }
         case SDL_MOUSEMOTION: {
-            int w, h;
-            SDL_GetWindowSize(window, &w, &h);
-            if (w <= 0 || h <= 0) break;
-            input->mouse_x = e.motion.x * CM_WIDTH / w;
-            input->mouse_y = e.motion.y * CM_HEIGHT / h;
+            pointer_point(e.motion.x, e.motion.y, &input->mouse_x, &input->mouse_y);
             input->mouse_dx += e.motion.xrel;
             input->mouse_dy += e.motion.yrel;
             break;
         }
-        case SDL_MOUSEBUTTONDOWN: case SDL_MOUSEBUTTONUP:
-            input->mouse_buttons = SDL_GetMouseState(NULL, NULL);
+        case SDL_MOUSEBUTTONDOWN: case SDL_MOUSEBUTTONUP: {
+            int inside = pointer_point(e.button.x, e.button.y,
+                                       &input->mouse_x, &input->mouse_y);
+            if (e.button.button && e.button.button <= 32 &&
+                (inside || e.type == SDL_MOUSEBUTTONUP))
+                mouse_button(input, 1u << (e.button.button - 1),
+                             e.type == SDL_MOUSEBUTTONDOWN);
+            break;
+        }
+        case SDL_FINGERDOWN: case SDL_FINGERMOTION: case SDL_FINGERUP:
+            if (touch_event(input, &e.tfinger)) return -1;
             break;
         case SDL_WINDOWEVENT:
             if (e.window.event == SDL_WINDOWEVENT_FOCUS_LOST) {
@@ -349,7 +450,9 @@ int platform_poll(cm_input *input, unsigned frame)
                     if (input->held[i] &&
                         emit_key(input, i | (extended_held[i] ? 0xe000 : 0), 0))
                         return -1;
+                input->mouse_released |= input->mouse_buttons;
                 input->mouse_buttons = 0;
+                primary_down = 0;
             }
             break;
         default: break;
@@ -368,6 +471,7 @@ int platform_present(const uint8_t *pixels, const uint8_t *palette)
 {
     SDL_Color colors[256];
     SDL_Surface *dest;
+    SDL_Rect rect;
     unsigned i, row;
     if (is_headless) return 0;
     for (i = 0; i < 256; ++i) {
@@ -382,7 +486,17 @@ int platform_present(const uint8_t *pixels, const uint8_t *palette)
         memcpy((uint8_t *)surface->pixels + row * surface->pitch,
                pixels + row * CM_WIDTH, CM_WIDTH);
     dest = SDL_GetWindowSurface(window);
-    if (!dest || SDL_BlitScaled(surface, NULL, dest, NULL) ||
+    if (!dest) return cm_fail("SDL", 0, SDL_GetError());
+    if (!converted || converted->format->format != dest->format->format) {
+        if (converted) SDL_FreeSurface(converted);
+        converted = SDL_CreateRGBSurfaceWithFormat(0, CM_WIDTH, CM_HEIGHT,
+                     dest->format->BitsPerPixel, dest->format->format);
+        if (!converted) return cm_fail("SDL", 0, SDL_GetError());
+    }
+    rect = viewport(dest->w, dest->h);
+    if (SDL_BlitSurface(surface, NULL, converted, NULL) ||
+        SDL_FillRect(dest, NULL, SDL_MapRGB(dest->format, 0, 0, 0)) ||
+        SDL_BlitScaled(converted, NULL, dest, &rect) ||
         SDL_UpdateWindowSurface(window))
         return cm_fail("SDL", 0, SDL_GetError());
     return 0;
