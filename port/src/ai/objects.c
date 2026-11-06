@@ -12,6 +12,12 @@ static void word(int32_t *p, int16_t value)
 {
     *p = (int32_t)(((uint32_t)*p & UINT32_C(0xFFFF0000)) | (uint16_t)value);
 }
+static int16_t add_word(int16_t a, int32_t b)
+{
+    uint16_t bits = (uint16_t)((uint32_t)(uint16_t)a + (uint32_t)b);
+    return bits <= INT16_MAX ? (int16_t)bits :
+        (int16_t)(-1 - (int32_t)(UINT16_MAX - bits));
+}
 static void anim(world_person *p, unsigned state)
 {
     if (p->unk_00BC != state) { p->unk_00BC = (uint8_t)state; p->unk_0016 = 1; }
@@ -487,23 +493,26 @@ static int actor_state(ai_state *a, sim_state *s, world *w, unsigned id,
         p->unk_0060 = 0; p->unk_00BC = 0;
         return ai_move_object(a, s, w, id, tick, 0);
     case 14:
+        /* 036E3C..036EF1: cooldown expiry only arms a burst. A zero
+         * entry cooldown fires/counts shots, independently of animation-end. */
         if (p->status == 2) p->unk_00BC = 29;
         else if (p->unk_001E) {
-            if (bp) --p->unk_001E;
+            if (bp) p->unk_001E = add_word(p->unk_001E, -1);
             if (!p->unk_001E) {
                 if (target) {
-                    p->unk_0034 = (int16_t)(1 + world_rnd(&w->rng, m->unk_007E));
+                    p->unk_0034 = add_word(1, world_rnd(&w->rng, m->unk_007E));
                     p->unk_00BC = 18;
                 } else p->unk_001E = 1;
             }
-        } else if (target) {
-            if (ai_launch_missile(a, s, w, (unsigned)p->object, target, (unsigned)a->fire_missile[m->fire])) return -1;
-        } else { p->unk_00BC = 5; p->unk_0016 = 1; p->unk_001E = 1; }
-        if (p->unk_0018) {
-            --p->unk_0034;
-            if (!p->unk_0034) {
-                p->unk_001E = (int16_t)(m->unk_007C + world_rnd(&w->rng, 6));
-                p->unk_00BC = 5; p->unk_0016 = 1;
+        } else {
+            if (target) {
+                if (ai_launch_missile(a, s, w, (unsigned)p->object, target,
+                                      (unsigned)a->fire_missile[m->fire])) return -1;
+                p->unk_0034 = add_word(p->unk_0034, -1);
+            } else p->unk_0034 = 0;
+            if (p->unk_0034 <= 0) {
+                p->unk_001E = add_word(m->unk_007C, world_rnd(&w->rng, 6));
+                p->unk_00BC = 1;
             }
         }
         return ai_move_object(a, s, w, id, tick, 0);

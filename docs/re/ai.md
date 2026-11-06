@@ -59,6 +59,40 @@ World finalizes its three extra objects afterward. Set `a.events` after init.
 
 `objects.c` implements the original state dispatch 0..14, attack preparation,
 attack completion, pain, corpse/drop and special scene transitions.
+
+### State14: stationary burst shooter
+
+The dispatch table034888 selects036E3C. A nonzero entry cooldown only
+decrements on bp_limit_flag; while still nonzero it goes directly to
+MoveObject036EF1. On expiry, an admitted target arms `+34=1+RND(MONSTER+7E)`
+and animation18; without a target it resets cooldown1. Neither expiry path
+launches a shot or tests animation completion. Status2 sets animation29 and
+also goes directly to MoveObject.
+
+Only an **entry cooldown0** can launch. Each actual LaunchMissile decrements
+the signed16 burst word, independent of PERSON+18. No target sets burst0.
+A signed burst<=0 then reloads `MONSTER+7C+RND6` and sets animation1.
+These byte writes do not force the animation-reset word+16. Word ADD/DEC
+wraps before the signed test, including -32768 becoming32767 on decrement.
+
+`captures/AI-chamber-first-receipt.json` pins the genuine external Scene2
+slot1 save3065922c/config4b84f833 and frozen native8df96e0. Original PERSON76
+starts cooldown1, animation-end1, burst3, animation1. The former native
+animation-end tail wrongly counted down that burst during idle cooldown,
+then consumed an extra RND6 at native step2 and changed animation to5.
+This is established by the saved inputs, read-only native caller and original
+control flow; neither the original first RNG caller nor actual BP value was
+observed. Both possible BP branches skip that completion tail for this input.
+
+`check-state14` compares unmodified036E3C..036F01 with the private native
+state handler. Only matching MoveObject/LaunchMissile boundaries are intercepted.
+It covers dead status, BP0/1, target/no-target, animation-end0/1, signed cooldown
+and burst boundaries, zero/nonzero burst variance, RNG state, preserved reset
+word, shot/movement counts and forwarded animation tick. It is a state-handler
+comparison, not a whole-route or projectile-physics verdict.
+The focused run matched3841 original-x86 cases (192 launches,
+336 RNG-advancing cases); the existing210 actor-action cases also matched.
+
 `blocked.c` implements NewMONBound's steering half 0x46507..0x46A74; Sim owns
 physical clipping. `move.c` owns animation/bob/recoil and DragonFly, delegating
 physical movement to Sim. H2HTarget 0x19EA4 returns PERSON indices (zero on miss),

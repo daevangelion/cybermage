@@ -27,6 +27,10 @@ check-text-load: $(B)/test_text_load
 	$(B)/test_text_load $(B)/text-load-user
 	$(abspath ../.venv/bin/python) ../tools/text_load_original.py $(abspath $(B)/test_text_load)
 
+.PHONY: check-state14
+check-state14: $(B)/test_state14
+	$(abspath ../.venv/bin/python) ../tools/state14_original.py $(abspath $(B)/test_state14)
+
 $(B)/test_projectiles: tests/test_projectiles.c $(filter-out $(B)/main.o,$(OBJECTS))
 	@mkdir -p $(@D)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
@@ -50,3 +54,7 @@ $(B)/test_attack_prepare: tests/test_attack_prepare.c $(filter-out $(B)/main.o,$
 $(B)/test_text_load: tests/test_text_load.c src/main.c $(filter-out $(B)/main.o,$(OBJECTS))
 	@mkdir -p $(@D)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $< $(filter %.o,$^) $(LDLIBS)
+
+$(B)/test_state14: tests/test_state14.c src/ai/objects.c $(filter-out $(B)/main.o $(B)/ai/objects.o,$(OBJECTS))
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -Wl,--wrap=ai_move_object -Wl,--wrap=ai_launch_missile -o $@ $< $(filter %.o,$^) $(LDLIBS)
