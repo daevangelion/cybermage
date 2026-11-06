@@ -143,6 +143,15 @@ context ownership and dedicated grounded jump. No XInput dependency is used.
 SDL controller added events carry a device index; removed events carry an
 instance ID: <https://wiki.libsdl.org/SDL2/SDL_ControllerDeviceEvent>.
 
+The classic DOS mouse reducer also has focused tests in `test_controls_sim`:
+signed-16 mickey bounds and yaw gain, direct vertical speed, keyboard priority,
+button counts between polls, SDL right/middle distinction, original suppression
+ordering, right-button diagonal/walk behavior, and selected-device versus
+physical-driver gating. The old right-button mask fails the isolated behavioral
+negative control (`artifact://3103`); the configured reducer and the existing
+modern movement/look/aim/jump fixture pass in the integrated strict build
+(`artifact://3297`). This unit result is not a full original mouse replay verdict.
+
 ## Focused verification
 
 ```

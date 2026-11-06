@@ -105,6 +105,45 @@ static int keyboard(sim_state *s, world *w)
     return jump;
 }
 
+/* HandleMouseEvents 014334..014581. Device motion is not a keyboard request:
+ * vertical mickeys write the current effective speed, bypassing acceleration. */
+static void mouse_input(sim_state *s, const cm_input *input)
+{
+    int left = (input->mouse_buttons & 1) || input->mouse_press_count[0];
+    int right = (input->mouse_buttons & 4) || input->mouse_press_count[1];
+    int32_t delta;
+    if (s->ai && s->ai->pc.mouse_hand_flag) s->key_hand_y = s->mouse_hand_y;
+    if (!s->movement_request) {
+        delta = -(int32_t)input->mouse_mickey_y;
+        s->unk_144aec = delta < -48 ? -48 : delta > 48 ? 48 : delta;
+        if (s->unk_144aec) {
+            s->movement_angle = 0;
+            if (!s->unk_144afc) s->unk_144afc = 1;
+        }
+    }
+    if (!s->yaw_request) {
+        delta = -(int32_t)input->mouse_mickey_x;
+        if (delta < -32 || delta > 32) delta *= 2;
+        s->yaw_request = delta < -128 ? -128 : delta > 128 ? 128 : delta;
+    }
+    if (s->ai) {
+        /* Left is tested before right-release clears its suppression bit. */
+        if (left) {
+            if (!s->ai->pc.cursor_flags) s->primary_fire = 1;
+        } else s->ai->pc.cursor_flags &= ~1;
+        if (!right) s->ai->pc.cursor_flags &= ~2;
+    }
+    if (right) {
+        if (!s->movement_request) s->movement_angle = 0;
+        else if (down(s, s->kb_side_left, s->kb_side_left_bit) || down(s, 0x4f, 1))
+            s->movement_angle = 0x2000;
+        else if (down(s, s->kb_side_right, s->kb_side_right_bit) || down(s, 0x51, 1))
+            s->movement_angle = 0xe000;
+        s->movement_request = down(s, s->kb_side_toggle, s->kb_side_toggle_bit) ?
+                              MOVE_WALK : MOVE_FAST;
+    }
+}
+
 static void acceleration(sim_state *s, int maximum)
 {
     int32_t request = s->movement_request, previous = s->unk_144ae8;
@@ -315,12 +354,7 @@ int sim_frame(sim_state *s, world *w, const cm_input *input, uint32_t timer_tick
         s->primary_fire = down(s, key, mask | mask * 2);
         if (s->primary_fire) s->kb_scan_status[key] &= (uint8_t)~(mask * 2);
     }
-    if(s->mouse_present && s->ai) {
-        unsigned buttons=input->mouse_buttons | input->mouse_pressed;
-        if(!(buttons&1)) s->ai->pc.cursor_flags&=~1;
-        if(!(buttons&2)) s->ai->pc.cursor_flags&=~2;
-        if((buttons&1) && !s->ai->pc.cursor_flags) s->primary_fire=1;
-    }
+    if (s->mouse_present) mouse_input(s, input);
     if (!jump) s->unk_144b20 = 0;
     can_jump = !s->flight_mode && !s->unk_144b20 && !s->unk_144b1c && !s->unk_144b30 &&
                !s->unk_144b50 && s->unk_144b3c != -1;

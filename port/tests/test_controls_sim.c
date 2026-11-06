@@ -38,6 +38,94 @@ static void arena(void)
     assert(!sim_start_scene(&s, &w));
 }
 
+static void mouse_arena(void)
+{
+    arena();
+    s.input_device = 1; /* Selected configuration, independent of driver presence. */
+}
+
+static void classic_mouse(void)
+{
+    static const int16_t motion[] = {-32768, -33, -32, 0, 32, 33, 32767};
+    static const int32_t yaw[] = {128, 66, 32, 0, -32, -66, -128};
+    cm_input in = {0};
+    unsigned i;
+    mouse_arena();
+    in.mouse_present = 1;
+    in.mouse_buttons = 4; /* SDL right, not DOS button bit 2. */
+    a.pc.cursor_flags = 3;
+    assert(!sim_frame(&s, &w, &in, 2));
+    assert(a.pc.cursor_flags == 2 && s.running);
+    mouse_arena();
+    in.mouse_buttons = 2; /* Middle is not right. */
+    a.pc.cursor_flags = 3;
+    assert(!sim_frame(&s, &w, &in, 2));
+    assert(!a.pc.cursor_flags && !s.movement_request);
+    mouse_arena();
+    in.mouse_buttons = 0;
+    in.mouse_press_count[1] = 1;
+    a.pc.cursor_flags = 3;
+    assert(!sim_frame(&s, &w, &in, 2));
+    assert(a.pc.cursor_flags == 2 && s.movement_request > 0);
+    mouse_arena();
+    in.mouse_press_count[1] = 0;
+    in.mouse_buttons = 1;
+    a.pc.cursor_flags = 2;
+    assert(!sim_frame(&s, &w, &in, 2));
+    assert(!s.primary_fire && !a.pc.cursor_flags);
+    assert(!sim_frame(&s, &w, &in, 4));
+    assert(s.primary_fire);
+    mouse_arena();
+    in.mouse_buttons = 0;
+    in.mouse_press_count[0] = 1; /* A complete click between polls still fires. */
+    assert(!sim_frame(&s, &w, &in, 2));
+    assert(s.primary_fire);
+    in.mouse_press_count[0] = 0;
+    for (i = 0; i < sizeof motion / sizeof *motion; ++i) {
+        mouse_arena();
+        in.mouse_mickey_x = motion[i];
+        in.mouse_mickey_y = -100;
+        w.camera.pitch = 96;
+        assert(!sim_frame(&s, &w, &in, 2));
+        assert(s.yaw_request == yaw[i] && s.unk_144af0 == yaw[i]);
+        assert(s.unk_144aec == 48 && !s.movement_request && !s.unk_144ae8);
+        assert(w.camera.pitch == 96); /* DOS Y motion walks; it is not modern look. */
+    }
+    mouse_arena();
+    in.mouse_mickey_x = 100;
+    in.mouse_mickey_y = -100;
+    s.kb_scan_status[0x48] = s.kb_scan_status[0x4d] = 12;
+    assert(!sim_frame(&s, &w, &in, 2));
+    assert(s.yaw_request == -16 && s.unk_144af0 == -16);
+    assert(s.movement_request == 16 && s.unk_144aec == 8);
+    mouse_arena();
+    in.mouse_mickey_x = in.mouse_mickey_y = 0;
+    in.mouse_buttons = 4;
+    s.kb_scan_status[0x4f] = 1;
+    assert(!sim_frame(&s, &w, &in, 2));
+    assert(s.movement_angle == 0x2000); /* RMB turns side-left into forward-left. */
+    mouse_arena();
+    s.kb_scan_status[0x51] = 1;
+    assert(!sim_frame(&s, &w, &in, 2));
+    assert(s.movement_angle == 0xe000);
+    mouse_arena();
+    s.bios_shift = 2;
+    assert(!sim_frame(&s, &w, &in, 2));
+    assert(!s.running && s.movement_request > 0);
+    mouse_arena();
+    in.mouse_present = 0;
+    in.mouse_mickey_x = in.mouse_mickey_y = 100;
+    assert(!sim_frame(&s, &w, &in, 2));
+    assert(!s.movement_request && !s.yaw_request && !s.unk_144aec);
+    for (i = 0; i < 3; i += 2) {
+        arena();
+        s.input_device = (int32_t)i;
+        in.mouse_present = 1;
+        assert(!sim_frame(&s, &w, &in, 2));
+        assert(!s.mouse_present && !s.movement_request && !s.yaw_request && !s.unk_144aec);
+    }
+}
+
 static int32_t speed(int magnitude, int run)
 {
     cm_input input = {0};
@@ -59,6 +147,8 @@ int main(int argc, char **argv)
     cm_input in = {0};
     assert(argc == 2);
     data_dir = argv[1];
+    classic_mouse();
+    arena();
     w.object_count = w.person_count = 1;
     w.player_object = w.player_person = 0;
     s.pc_mode = 5;
