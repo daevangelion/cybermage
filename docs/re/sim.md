@@ -616,3 +616,14 @@ the source proof covers either BP outcome without inferring BP from tick0.
 Scene9's genuine188-record first bend from public slot2 fully matches21505
 actor/RNG checkpoints. These are external-fixture continuations, not earned
 transitions from our Scene1 route, and use actual package configuration4b84.
+
+The subsequent namedae2792a archive closes all three state14 mismatches:
+149/149 player and actor/RNG comparisons match after the full148-scenario gate
+and758-record Scene2 groundstreet. All five phase groups, six controls targets
+and full `make check` exit0. Audio's source replacement preserves the mutually
+exclusive cooldown/death/zero-entry branches, per-launch signed burst decrement
+and animation1 reload; no BP inference, saved-byte adaptation or RNG padding.
+The numeric Scene9 aperture28 descent is also matched; historical Temple
+capture names are not evidence of that scene's level identity. See
+[gate-ae2792a.json](gate-ae2792a.json) for commands and40,065 original records /
+6,058,542 actor checkpoints. No exit or complete campaign is claimed.
