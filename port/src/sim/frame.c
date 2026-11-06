@@ -1,4 +1,5 @@
 #include "sim_internal.h"
+#include "ai.h"
 
 #define MOVE_FAST 768
 #define MOVE_WALK 640
@@ -211,6 +212,52 @@ static void rise(sim_state *s)
     }
 }
 
+/* HandleNextFrame 01C402..01C73F, takeoff[] at0963A0. */
+static int flight(sim_state *s, world *w, world_object *o)
+{
+    static const int32_t takeoff[8] = {256,512,1024,2048,3072,4096,6144,8192};
+    int32_t maximum = w->unk_130D20 - SIM_QUARTER_TILE;
+    if (!s->flight_mode) return 0;
+    if (s->flight_active) {
+        if (s->flight_active < 1 || s->flight_active > 8)
+            return cm_fail("flight", (uint32_t)s->flight_active, "invalid takeoff index");
+        s->unk_131418 += takeoff[s->flight_active - 1];
+        if (++s->flight_active > 8) s->flight_active = 0;
+        s->flight_unk_144B48 = s->unk_144aec = 8;
+    } else {
+        if (s->flight_action >= 2) {
+            if (s->key_hand_y < 0) {
+                int32_t old_z = o->floor_z;
+                if (sim_coll_flat(w, w->player_object, o->x, o->y)) return -1;
+                s->unk_131418 = old_z > o->floor_z ? old_z - o->floor_z : 0;
+                o->floor_z = old_z;
+            }
+            s->unk_131418 += s->key_hand_y * (s->flight_mode == 2 ? 192 : 128);
+        }
+        if (s->flight_action == 2) s->unk_144aec = s->flight_unk_144B48;
+        else if (!s->flight_action || s->flight_action == 3) {
+            int32_t speed = s->unk_144aec;
+            if (s->flight_mode == 2 && speed == 48) speed *= 3;
+            else if (speed > 32) speed *= 2;
+            s->flight_unk_144B48 = s->unk_144aec = speed;
+            s->fly_throttle = s->unk_144ae8;
+            s->fly_curr_throttle = s->unk_144af8;
+        }
+    }
+    if (s->flight_mode == 1 || s->flight_mode == 3) {
+        if (s->unk_131418 <= 0x800) s->unk_131418 = 0x800;
+        if (s->flight_mode == 1 && s->unk_131418 > 0xa000) s->unk_131418 = 0xa000;
+        if (s->flight_mode == 3 && s->unk_131418 > maximum) s->unk_131418 = maximum;
+        if (!s->unk_144afc) s->unk_144afc = 1;
+    } else if (s->unk_131418 <= 0) {
+        s->unk_131418 = s->unk_144afc = 0;
+    } else {
+        if (s->unk_131418 > maximum) s->unk_131418 = maximum;
+        if (!s->unk_144afc) s->unk_144afc = 1;
+    }
+    return 0;
+}
+
 int sim_frame(sim_state *s, world *w, const cm_input *input, uint32_t timer_ticks)
 {
     world_object *o;
@@ -223,14 +270,42 @@ int sim_frame(sim_state *s, world *w, const cm_input *input, uint32_t timer_tick
     sim_input(s, input);
     sim_clock(s, timer_ticks);
     if (s->replay_delta >= 0) s->frame_ticks = s->replay_delta;
+    /* HandleNextFrame 01C1B5/01C1BC, before player movement and firing.
+     * Shots created later by player/NPC input wait until the next frame. */
+    if (s->ai) {
+        s->ai->timer_ticks = timer_ticks;
+        if (ai_update_missile(s->ai, s, w)) return -1;
+        ai_update_soul_fire(s->ai, s, w);
+    }
     /* HandleNextFrame 01C244..01C258 clears frame actions, not inertia.
      * In particular, zero momentum must not reuse last frame's speed. */
     s->unk_144aec = s->unk_144af0 = s->unk_144af4 = 0;
     jump = keyboard(s, w);
     if (!jump) s->unk_144b20 = 0;
-    can_jump = !s->unk_144b20 && !s->unk_144b1c && !s->unk_144b30 && s->unk_144b3c != -1;
+    can_jump = !s->flight_mode && !s->unk_144b20 && !s->unk_144b1c && !s->unk_144b30 &&
+               !s->unk_144b50 && s->unk_144b3c != -1;
     running = can_jump && s->movement_request > RUN_THRESHOLD;
     acceleration(s, running ? RUN_ACCEL_MAX : WALK_ACCEL_MAX);
+    s->flight_action = 0;
+    if (s->flight_mode) {
+        if (down(s, 0x11, 1)) {
+            if (s->key_hand_y < 8) s->key_hand_y = 8;
+            s->key_hand_y *= 2;
+            if (s->key_hand_y > 96) s->key_hand_y = 96;
+            s->flight_action = 3;
+        }
+        if (down(s, 0x2d, 1)) {
+            if (s->key_hand_y > -8) s->key_hand_y = -8;
+            s->key_hand_y *= 2;
+            if (s->key_hand_y < -96) s->key_hand_y = -96;
+            s->flight_action = 3;
+        }
+        if (jump) {
+            s->flight_action = 2;
+            s->unk_144ae8 = s->fly_throttle;
+            s->unk_144af8 = s->fly_curr_throttle;
+        }
+    }
     if (jump && running) {
         s->unk_144b34 = 0;
         s->body_height = o->z + o->z / 2 + 0x1000;
@@ -251,9 +326,28 @@ int sim_frame(sim_state *s, world *w, const cm_input *input, uint32_t timer_tick
         s->pc_mode = s->previous_pc_mode;
     }
     momentum(s);
+    if (flight(s, w, o)) return -1;
     if (s->unk_144b1c) jump_step(s);
     else rise(s);
+    /* HandleNextFrame 01CD80..01CE39; environmental fire uses the same
+     * floor/flat contact query as swimming, not projectile CollFire. */
+    if (s->fire_check && !s->unk_144b1c && !s->flight_mode && s->pc_mode != 7) {
+        int touching = sim_coll_swim_flat(w, w->player_object,
+                                          s->fire_tile_panel, s->fire_tile_art);
+        if (touching < 0) return -1;
+        if (touching && s->fire_damage && timer_ticks > s->swim_damage_time) {
+            int32_t damage = s->fire_damage * (1 + world_rnd(&w->rng, 6));
+            if (!s->ai) return cm_fail("FireDamage", w->player_person, "missing actor state");
+            if (ai_damage_person(s->ai, w, w->player_person, damage, 100, 125)) return -1;
+            s->swim_damage_time = timer_ticks + 40 + (uint32_t)world_rnd(&w->rng, 60);
+        }
+    }
     body(s, w, o);
+    if (s->pc_mode == 7 && s->vehicle_type != 1) {
+        if (s->unk_144aec) s->unk_144aec = s->unk_144aec / 2 + 4;
+        if (s->unk_144af0 > 0) s->unk_144af0 = s->unk_144af0 / 4 + 4;
+        else if (s->unk_144af0 < 0) s->unk_144af0 = s->unk_144af0 / 4 - 4;
+    }
     world_omap_delete(w, w->player_object);
     if (sim_move_person(s, w, w->player_object, s->unk_144af0,
                          s->unk_144aec, s->unk_144af4)) return -1;

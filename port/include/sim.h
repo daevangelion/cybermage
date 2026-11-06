@@ -18,6 +18,10 @@ typedef struct {
     struct events_state *events;
     int32_t pc_mode, previous_pc_mode;
     int32_t vehicle_type, flight_mode, flight_active, flight_unk_144B48;
+    int32_t unk_131418; /* Flight height above the local supporting floor. */
+    int32_t flight_action, key_hand_y, fly_throttle, fly_curr_throttle;
+    int32_t fire_check, fire_damage, fire_tile_panel, fire_tile_art;
+    uint32_t swim_damage_time;
     uint8_t kb_scan_status[SIM_SCAN_COUNT];
     uint8_t kb_latch;
     uint8_t bios_shift, shift_lock;
@@ -32,6 +36,7 @@ typedef struct {
     int32_t unk_144b1c, unk_144b20, unk_144b24;
     int32_t unk_144b28, unk_144b2c, unk_144b30;
     int32_t unk_144b34, unk_144b38, unk_144b3c;
+    int32_t unk_144b50;
     int32_t body_height;                    /* Xox+130D1C */
     int32_t rise_dir;
     int32_t collision_level, collision_mode, support_object, no_openings;
@@ -45,6 +50,7 @@ typedef struct {
 } sim_state;
 
 void sim_init(sim_state *s, uint32_t timer_ticks);
+int sim_start_scene(sim_state *s, world *w);
 void sim_scan(sim_state *s, uint8_t scan);
 void sim_input(sim_state *s, const cm_input *input);
 int32_t sim_clock(sim_state *s, uint32_t timer_ticks);
@@ -65,5 +71,9 @@ int sim_jumble_bound(sim_state *s, world *w, unsigned object,
                      int32_t dx, int32_t dy, int collide);
 /* CollFireFlat returns -1 hit, 0 clear, -2 invalid scene data. */
 int sim_coll_fire_flat(world *w, unsigned object, int32_t old_z);
+#define SIM_COLL_ERROR INT32_MIN
+int sim_coll_fire(sim_state *s, world *w, unsigned missile);
+void sim_save_export(const sim_state *s, uint32_t values[29]);
+int sim_save_import(sim_state *s, const uint32_t values[29]);
 
 #endif

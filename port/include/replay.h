@@ -11,6 +11,8 @@ typedef struct {
     const char *path;
     uint32_t next, frame;
     unsigned range_count;
+    uint16_t bios_seed;
+    int has_bios_seed;
     cm_trace_range ranges[CM_TRACE_RANGES_MAX];
 } cm_replay;
 typedef struct {

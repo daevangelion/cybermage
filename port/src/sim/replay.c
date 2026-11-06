@@ -1,5 +1,6 @@
 #include "replay.h"
 #include <errno.h>
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -62,6 +63,53 @@ static int hex(const char *text, uint8_t *out, uint32_t size)
     return 0;
 }
 
+/* seed.csv is the trace format's named companion, sampled before the
+ * original RANDOM_SEED write. Checkpoints must never provide replacement RNG. */
+static int seed_metadata(cm_replay *r)
+{
+    static const char header[] = "bios_tick,icount,time\n";
+    static const char filename[] = "seed.csv";
+    const char *slash = strrchr(r->path, '/');
+    size_t prefix = slash ? (size_t)(slash - r->path) + 1 : 0;
+    char path[1024], text[256];
+    cm_file file = {0};
+    int64_t seed, instructions;
+    double seconds;
+    char *first, *second, *end;
+    int exists, conversion_error;
+    if (prefix + sizeof filename > sizeof path)
+        return cm_fail(r->path, 0, "trace metadata path too long");
+    memcpy(path, r->path, prefix);
+    memcpy(path + prefix, filename, sizeof filename);
+    exists = platform_file_exists(path);
+    if (exists <= 0) return exists < 0 ? -1 : 0;
+    if (platform_file_read(&file, path)) return -1;
+    if (file.size >= sizeof text || file.size < sizeof header ||
+        memcmp(file.data, header, sizeof header - 1) || memchr(file.data, 0, file.size)) {
+        platform_file_release(&file);
+        return cm_fail(r->path, 0, "invalid trace seed metadata");
+    }
+    memcpy(text, file.data, file.size);
+    text[file.size] = 0;
+    platform_file_release(&file);
+    first = strchr(text + sizeof header - 1, ',');
+    second = first ? strchr(first + 1, ',') : NULL;
+    if (!first || !second)
+        return cm_fail(r->path, 0, "invalid trace BIOS seed sample");
+    *first = *second = 0;
+    errno = 0;
+    seconds = strtod(second + 1, &end);
+    conversion_error = errno;
+    if (integer(text + sizeof header - 1, 10, 0, UINT16_MAX, &seed) ||
+        integer(first + 1, 10, 0, INT64_MAX, &instructions) ||
+        end == second + 1 || *end != '\n' || end[1] ||
+        conversion_error == ERANGE || !isfinite(seconds) || seconds < 0)
+        return cm_fail(r->path, 0, "invalid trace BIOS seed sample");
+    r->bios_seed = (uint16_t)seed;
+    r->has_bios_seed = 1;
+    return 0;
+}
+
 int replay_open(cm_replay *r, const char *path)
 {
     char *fields[TRACE_FIELDS_MAX];
@@ -90,6 +138,7 @@ int replay_open(cm_replay *r, const char *path)
         strcmp(fields[0], "frame") || strcmp(fields[CM_TRACE_COLUMNS], "keys") ||
         strcmp(fields[CM_TRACE_COLUMNS + 1], "input_keys") ||
         strcmp(fields[CM_TRACE_COLUMNS + 2], "ranges...")) goto bad;
+    if (seed_metadata(r)) goto bad;
     return 0;
 bad:
     platform_file_release(&r->file);

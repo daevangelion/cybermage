@@ -42,6 +42,29 @@ void sim_init(sim_state *s, uint32_t ticks)
     s->kb_look_down_bit = s->kb_look_up_bit = 1;
 }
 
+/* Xox::LoadScene CM_HI.EXE:011F86..011FB0 derives body height after the
+ * world's 011F4E..011F7B player shape-height override. */
+int sim_start_scene(sim_state *s, world *w)
+{
+    world_object *o;
+    if (w->player_object >= w->object_count)
+        return cm_fail("LoadScene", w->player_object, "invalid player object");
+    o = &w->objects[w->player_object];
+    s->body_height = o->z + o->z / 2 + 0x1000 + s->unk_144b34;
+    s->fire_check = 0; /* LoadScene 011691. */
+    if (w->scene == 7) { /* 0119F2 */
+        s->fire_damage = 8;
+        s->fire_tile_panel = 43; s->fire_tile_art = 40;
+    } else if (w->scene == 8) { /* 011B1F */
+        s->fire_check = 1; s->fire_damage = 3;
+        s->fire_tile_panel = 35; s->fire_tile_art = 34;
+    } else if (w->scene == 10) { /* 011C97 */
+        s->fire_check = 1; s->fire_damage = 4;
+        s->fire_tile_panel = 19; s->fire_tile_art = 18;
+    }
+    return 0;
+}
+
 void sim_input(sim_state *s, const cm_input *input)
 {
     unsigned i;

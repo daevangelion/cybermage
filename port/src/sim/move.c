@@ -82,7 +82,40 @@ int sim_move_person(sim_state *s, world *w, unsigned object,
     old_z = o->floor_z;
     if (old_z < ((old_z + 0x800) >> 16) * SIM_TILE_UNIT)
         old_z = ((old_z + 0x800) >> 16) * SIM_TILE_UNIT;
-    if (s->unk_144b1c) {
+    if (s->flight_mode) {
+        int32_t cap, before_x = x, before_y = y;
+        int original_level = s->collision_level;
+        if (s->unk_144b34) {
+            s->unk_144b34 = s->unk_144b3c = 0;
+            body_height(s, o);
+        }
+        if (sim_coll_flat(w, object, o->x, o->y)) return -1;
+        floor = o->floor_z;
+        o->floor_z = clamp(floor + s->unk_131418, old_z - 0x2000, old_z + 0x2000);
+        hit = sim_coll_top_flat(s, w, object, old_z > floor ? old_z : floor, SIM_TOP_CLEARANCE);
+        if (hit < 0) return -1;
+        if (hit && o->floor_z < floor) {
+            s->unk_144b34 = o->floor_z - floor;
+            o->floor_z = floor;
+            body_height(s, o);
+        }
+        cap = hit ? o->floor_z : 0;
+        if (collision_level(s, w, o->floor_z) ||
+            sim_new_pc_bound(s, w, object, &x, &y) ||
+            collision_level(s, w, o->floor_z + s->body_height - SIM_HEAD_CLEARANCE) ||
+            sim_new_pc_bound(s, w, object, &x, &y)) return -1;
+        if (sim_path_check(s, w, x, y)) {
+            o->floor_z = (original_level + 1) * SIM_TILE_UNIT - s->body_height - SIM_TOP_CLEARANCE - 1;
+            if (o->floor_z < floor) o->floor_z = floor;
+            if (cap && o->floor_z < cap) o->floor_z = cap;
+            x = before_x; y = before_y;
+            if (collision_level(s, w, o->floor_z) ||
+                sim_new_pc_bound(s, w, object, &x, &y) ||
+                collision_level(s, w, o->floor_z + s->body_height - SIM_HEAD_CLEARANCE) ||
+                sim_new_pc_bound(s, w, object, &x, &y)) return -1;
+        }
+        if (cap && o->floor_z > cap) { o->floor_z = cap; x = o->x; y = o->y; }
+    } else if (s->unk_144b1c) {
         int32_t before_x = x, before_y = y;
         int original_level = s->collision_level;
         if (sim_coll_flat(w, object, o->x, o->y)) return -1;

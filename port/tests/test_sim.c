@@ -33,6 +33,14 @@ int main(void)
     w.top_level = 3;
     w.object_count = 3;
     w.player_object = 1;
+    w.objects[1].z = 0x5d55;
+    assert(!sim_start_scene(&s, &w));
+    assert(w.objects[1].z == 0x5d55 && s.body_height == 0x9bff);
+    w.unk_5E7A8 = 1;
+    w.objects[1].z = 0x3800;
+    assert(!sim_start_scene(&s, &w));
+    assert(w.objects[1].z == 0x3800 && s.body_height == 0x6400);
+    w.unk_5E7A8 = 0;
     w.objects[1].x = 0x18000;
     w.objects[1].y = 0x18000;
     w.objects[1].floor_z = 0x10000;
@@ -74,5 +82,22 @@ int main(void)
     assert(w.objects[1].floor_z == 0x10400);
     w.flatmap.nodes[33].next = CM_CHAIN_NODES;
     assert(sim_coll_flat(&w, 1, 0x18000, 0x18000) == -1);
+    {
+        sim_state loaded;
+        uint32_t values[29] = {0};
+        s.pc_mode = 5; s.previous_pc_mode = 2;
+        s.unk_144ae8 = -640; s.unk_144b34 = -0x4800;
+        s.unk_144b1c = 4; s.unk_144b28 = 8192;
+        values[4] = 0xabcdef12;
+        sim_save_export(&s, values);
+        sim_init(&loaded, 123);
+        assert(!sim_save_import(&loaded, values));
+        assert(loaded.pc_mode == 5 && loaded.previous_pc_mode == 2);
+        assert(loaded.unk_144ae8 == -640 && loaded.unk_144b34 == -0x4800);
+        assert(loaded.unk_144b1c == 4 && loaded.unk_144b28 == 8192);
+        assert(values[4] == 0xabcdef12 && loaded.previous_ticks == 123);
+        values[0] = 8;
+        assert(sim_save_import(&loaded, values) == -1);
+    }
     return 0;
 }

@@ -94,18 +94,27 @@ the instructions; it is not a coordinate correction. The subsequent verification
 was blocked during linking by the concurrent original-EXE table-reader cutover
 (`cm_exe_init`/`cm_exe_table` undefined); corrected replay parity is not claimed.
 
+## Inherited Sim checkpoint (Integrator)
+
+The inherited Sim sources compile with the strict C99 flags in
+`B=build/Integrator`. The initial full build was blocked by concurrent Events
+work (`talk_texture` and `monitor` unused in `events/world.c`). The existing
+`port/build/Sim/cybermage` completed the 106-frame movement trace with
+`player_state=MATCH`; this is evidence for that binary, not the blocked new link.
+
+The checkpoint includes player-height initialization, the CollFire sweep and
+original-code fixture driver, flight controls/motion, explicit Sim/Events/AI save
+bridges, `--user` storage and GAMENAME.USR, missile/SoulFire-before-movement
+ordering, player fire/H2H callsites, and BIOS seed metadata. Final integrated
+verification below supersedes the older investigation results above.
+
 ## Remaining integration limits
 
-The complete CollFire missile sweep is not yet implemented (CollFireFlat is).
-Mouse/joystick action translation and the flying-player physical branch are not
-complete. Monster boundary steering is owned by AI's `ai_monster_blocked`;
+Mouse/joystick action translation is not complete. Monster boundary steering is owned by AI's `ai_monster_blocked`;
 Sim provides the path/rectangle/FX/radius clipping and collision flags it reads.
-The first-frame player shape-height discrepancy reported by World (14924 versus
-23893) still needs its later original initialization traced; no snapshot value
-has been fitted into the port.
+The player shape/body height is initialized by `sim_start_scene` from the
+LoadScene rule; no snapshot value is fitted into the port.
 
 `main.c` integrates UI, audio, events, actors, rendering and original-frame replay.
-Its save/load orchestration still needs the Events/AI live-state export/import
-bridges, persistent GAMENAME.USR and separate writable user storage rather than
-writing saves beneath the asset directory. Player fire/selector presentation
-calls being supplied by Port/UI still need their main-loop callsites.
+Its remaining main-loop integration work is InitPC/restore ordering, modal shop
+and death hooks, and scene transitions.
