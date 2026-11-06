@@ -239,6 +239,21 @@ all-definition selection, signed extremes and intermediate16-bit wrapping.
 checks fresh Easy37/Hard12/Normal24 reloads and that HP normalization leaves
 the Easy37 definition unchanged.
 
+Named c1018ed (binary a770debf...) closes guard60's former checkpoint57:
+all19,608 actor/RNG checkpoints across129 completed frames match. A read-only
+native GDB observer, tagged at `replay_next` so Save UI at frame85 keeps its
+proper frame, also matches **all5,476 individual RNG calls** over completed
+saved-game gameplay0..128. This scope excludes boot/menu initialization and
+the unmatched terminal edge; it imports no undefined field and masks none of
+the actor comparison fields. Primary receipt:
+`captures/AI-easy-fixed-receipt.json`.
+
+The same named binary's ten upper Easy routes also all match full player,
+actor and RNG checkpoints (1,544 state records), including the old door5
+NPC120/frame130 and lift13 NPC123/frame236 failures. Receipt:
+`captures/Gate-route-c1018ed/receipt.json`. This is not a claim that the later
+standing full-game gate has passed.
+
 `--rng-trace` writes every original RND/RANDOM call's return address, frame,
 bound and pre-call words. Native `world_rnd`/`world_random` tag their C call site
 through an optional observer; the core neither allocates nor performs I/O.
