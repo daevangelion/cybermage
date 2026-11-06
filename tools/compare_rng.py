@@ -37,6 +37,10 @@ def main():
         print(f'First mismatch at logical call {index}')
         print(f'original frame={want["frame"]} caller={want["caller"]} {key(want)}')
         print(f'native   frame={got["frame"]} caller={got["caller"]} {key(got)}')
+        if int(got.get('original_undefined_person', 0)):
+            print('Original undefined local context: PERSON=' + got['original_undefined_person'] +
+                  ' cached_distance=' + got.get('original_undefined_distance', '?') +
+                  '; no RNG differences masked')
         for extra in range(1, 9):
             if index + extra < len(original) and key(original[index + extra]) == key(got):
                 print('Original calls preceding matching native call: ' +

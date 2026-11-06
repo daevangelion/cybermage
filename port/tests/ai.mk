@@ -10,6 +10,7 @@ LDLIBS += $(shell pkg-config --libs sdl2) -lm
 check: $(B)/test_ai
 	$(B)/test_ai ../orig/retail/SCENE.RSC ../orig/retail
 	$(abspath ../.venv/bin/python) tests/test_target_trace.py
+	$(abspath ../.venv/bin/python) tests/test_actor_trace.py
 
 $(B)/test_ai: tests/test_ai.c $(OBJECTS)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)

@@ -90,10 +90,12 @@ static void rng_observe(void *context, const char *file, unsigned line,
 {
     rng_trace *t = context;
     fprintf(t->out, "%" PRIu64 ",%" PRId64 ",%s,%s:%u,%" PRId32
-            ",%u,%u,%u,%" PRId32 ",%u,%u,%u,%" PRIu32 ",%" PRIu32 ",%" PRIu32 "\n", t->sequence++, t->frame,
+            ",%u,%u,%u,%" PRId32 ",%u,%u,%u,%" PRIu32 ",%" PRIu32 ",%" PRIu32
+            ",%u,%" PRId32 "\n", t->sequence++, t->frame,
             bounded ? "RND" : "RANDOM", file, line, bound,
             before[0], before[1], before[2], value, after[0], after[1], after[2],
-            a.timer_ticks, a.animation_deadline, a.fast_animation_deadline);
+            a.timer_ticks, a.animation_deadline, a.fast_animation_deadline,
+            a.undefined_distance_person, a.undefined_distance_value);
 }
 
 static int import_undefined(const char *path)
@@ -181,7 +183,7 @@ int main(int argc, char **argv)
     if (rng_path) {
         rng.out = fopen(rng_path, "w");
         if (!rng.out) return 1;
-        fputs("sequence,frame,operation,caller,bound,rng0,rng1,rng2,value,after0,after1,after2,ticks,normal_deadline,fast_deadline\n", rng.out);
+        fputs("sequence,frame,operation,caller,bound,rng0,rng1,rng2,value,after0,after1,after2,ticks,normal_deadline,fast_deadline,original_undefined_person,original_undefined_distance\n", rng.out);
         w.rng.observe = rng_observe; w.rng.observe_context = &rng;
     }
     if (steering_path) {
@@ -196,7 +198,7 @@ int main(int argc, char **argv)
         fputs("sequence,frame,object,proposed_x,proposed_y,source_x,source_y,source_floor,source_z,source_height,source_radius,node,candidate,targetable,flags,x,y,floor,z,height,radius,active\n", collision.out);
     }
     if (replay_open(&replay, argv[2])) return 1;
-    puts("frame,ticks,rng0,rng1,rng2,person,object,x,y,z,heading,state,status,hp,target,animation,cursor,active");
+    puts("frame,ticks,rng0,rng1,rng2,person,object,x,y,z,heading,state,status,hp,target,animation,cursor,active,original_undefined_person,original_undefined_distance");
     while ((next = replay_next(&replay, &f)) > 0) {
         uint32_t normal_ticks = (uint32_t)f.values[CM_TRACE_TICKS], fast_ticks = normal_ticks;
         if (!initialized) {
@@ -229,11 +231,12 @@ int main(int argc, char **argv)
             const world_person *p = &w.persons[id];
             const world_object *o = &w.objects[p->object];
             printf("%" PRId64 ",%" PRId64 ",%u,%u,%u,%u,%d,%" PRId32 ",%" PRId32
-                   ",%" PRId32 ",%u,%d,%d,%d,%" PRId32 ",%u,%u,%u\n",
+                   ",%" PRId32 ",%u,%d,%d,%d,%" PRId32 ",%u,%u,%u,%u,%" PRId32 "\n",
                    f.values[CM_TRACE_FRAME], f.values[CM_TRACE_TICKS],
                    w.rng.word[0], w.rng.word[1], w.rng.word[2], id, p->object,
                    o->x, o->y, o->floor_z, o->heading, p->state, p->status,
-                   (int16_t)p->unk_0038, p->target, p->unk_00BC, p->unk_00BD, o->active);
+                   (int16_t)p->unk_0038, p->target, p->unk_00BC, p->unk_00BD, o->active,
+                   a.undefined_distance_person, a.undefined_distance_value);
         }
         rng.frame = f.values[CM_TRACE_FRAME];
         observed_frame = rng.frame;
@@ -250,10 +253,15 @@ int main(int argc, char **argv)
             }
         }
         replay_input(&s, &f);
+        a.undefined_distance_person = 0;
         if (sim_frame(&s, &w, &input, (uint32_t)f.values[CM_TRACE_TICKS]) ||
             ai_pc_input(&a, &s, &w) || events_step(&e, &s, &a, &w) ||
             ai_update_objects(&a, &s, &w, normal_ticks, fast_ticks) ||
             ai_pc_hand2hand(&a, &s, &w)) return 1;
+        if (a.undefined_distance_person)
+            fprintf(stderr, "ORIGINAL UNDEFINED: frame=%" PRId64 " PERSON=%u "
+                    "UpdateObjects(348C4) cached-distance fallback=%" PRId32 "\n",
+                    observed_frame, a.undefined_distance_person, a.undefined_distance_value);
         {
             const world_object *pc = &w.objects[w.player_object];
             w.camera.u = pc->x; w.camera.v = pc->y;

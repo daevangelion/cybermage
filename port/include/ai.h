@@ -145,6 +145,8 @@ typedef struct ai_state {
     int32_t unk_144AE0;
     uint32_t missile_fade_time;
     int32_t pc_learn_spell, pc_flash;
+    unsigned undefined_distance_person; /* Verification: 0=none; first NPC using an undefined original local. */
+    int32_t undefined_distance_value; /* That actor's defined cached-distance fallback. */
     int32_t h2h_distance;
     int16_t h2h_angle;
     ai_pc_aim pc_aim;
