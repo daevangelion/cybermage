@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare prepared fire/action and its cooldown with retail UpdateObjects.
+"""Compare actor selection, fire preparation and reaction with retail x86.
 
 Visibility, movement, tracking, PC presentation and missile launch boundaries
 are intercepted identically; target-kind filtering, attack decisions, numeric
@@ -17,6 +17,7 @@ PERSON, MONSTER = 0x610000, 0x600000
 original = Original()
 cpu = original.cpu
 backsteps = 0
+moves = 0
 
 
 def u32(address, value):
@@ -28,7 +29,7 @@ def u16(address, value):
 
 
 def boundary(c, address, size, context):
-    global backsteps
+    global backsteps, moves
     del size, context
     if address not in (0x34488, 0x2a9b0, 0x344e0, 0x33ed0, 0x2dfd0, 0x46b00):
         return
@@ -37,6 +38,8 @@ def boundary(c, address, size, context):
     c.reg_write(UC_X86_REG_EAX, 0)
     if address == 0x46b00:
         backsteps += 1
+    if address == 0x33ed0:
+        moves += 1
     c.reg_write(UC_X86_REG_ESP, stack+(8 if address == 0x46b00 else 4))
     c.reg_write(UC_X86_REG_EIP, target)
 
@@ -45,8 +48,9 @@ cpu.hook_add(UC_HOOK_CODE, boundary)
 
 
 def run(actor_kind, target_kind, alternate, seed, reaction=None):
-    global backsteps
+    global backsteps, moves
     backsteps = 0
+    moves = 0
     cpu.mem_write(THIS, bytes(0x144b80))
     cpu.mem_write(PERSON, bytes(0x180))
     cpu.mem_write(MONSTER, bytes(0x400))
@@ -63,6 +67,7 @@ def run(actor_kind, target_kind, alternate, seed, reaction=None):
     cpu.mem_write(MONSTER+0x38, bytes([100, 0, actor_kind]))
     cpu.mem_write(MONSTER+0x200+0x3a, bytes([target_kind]))
     u32(MONSTER+0x30, 0x40000)
+    u32(MONSTER+0x74, 0x40000)
     u16(MONSTER+0x7c, 24); u16(MONSTER+0x7e, 1)
     for person in range(2):
         address, obj = PERSON+person*0xc0, person+1
@@ -72,13 +77,20 @@ def run(actor_kind, target_kind, alternate, seed, reaction=None):
         u32(address+0x4c, -1); u32(address+0x50, -1)
         u32(THIS+0x61418+obj*4, 0x88000+person*0x1000)
         u32(THIS+0x64080+obj*4, 0x88000+person*0x1000)
+        u32(THIS+0x66ce8+obj*4, 0x1000)
+        u32(THIS+0x6c5b8+obj*4, 0x8000)
         cpu.mem_write(THIS+0x7db42+obj, b'\1')
         u16(THIS+0x7b9f4+obj*2, person)
     actor = PERSON+0xc0
     u16(actor+0x1c, 5); u32(actor+0xc, 0x20000)
     if reaction:
-        u16(actor+0x1c, 6 if reaction == '--hurt' else 7)
-        u16(actor+0x1e, 2)
+        if reaction in ('--choose', '--choose-melee'):
+            u16(actor+0x1c, 1)
+            if reaction == '--choose-melee':
+                u32(MONSTER+0x5c, 0x30000)
+        else:
+            u16(actor+0x1c, 6 if reaction == '--hurt' else 7)
+            u16(actor+0x1e, 2)
 
     def checkpoint():
         words = [struct.unpack('<h', cpu.mem_read(actor+offset, 2))[0]
@@ -86,7 +98,7 @@ def run(actor_kind, target_kind, alternate, seed, reaction=None):
         words += [cpu.mem_read(actor+0xbc, 1)[0]]
         words += [struct.unpack('<h', cpu.mem_read(actor+offset, 2))[0]
                   for offset in (0x34, 0x1e, 0x1a)]
-        return (*words, *struct.unpack('<3H', cpu.mem_read(0x9747f, 6)), backsteps)
+        return (*words, *struct.unpack('<3H', cpu.mem_read(0x9747f, 6)), backsteps, moves)
 
     original.call(0x348c4, [THIS, 1])
     first = checkpoint()
@@ -121,7 +133,27 @@ def main():
                 if wanted != actual:
                     raise ValueError(f'reaction {reaction}, actor/target={args[:2]}: original={wanted}, native={actual}')
                 count += 1
-    print(f'Attack preparation: {count} original-x86 target-filtered action/cooldown cases matched')
+    for actor_kind in (9, 6, 5):
+        for target_kind in (0, 5, 6, 17):
+            for alternate in (0, 1):
+                for seed in range(1, 5):
+                    args = (actor_kind, target_kind, alternate, seed)
+                    wanted = run(*args, '--choose')
+                    result = subprocess.check_output([str(native), *map(str, args), '--choose'], text=True)
+                    actual = tuple(tuple(map(int, line.split())) for line in result.splitlines())
+                    if wanted != actual:
+                        raise ValueError(f'action selection {args}: original={wanted}, native={actual}')
+                    count += 1
+    for actor_kind in (9, 6, 5):
+        for target_kind in (0, 17):
+            args = (actor_kind, target_kind, 0, 1)
+            wanted = run(*args, '--choose-melee')
+            result = subprocess.check_output([str(native), *map(str, args), '--choose-melee'], text=True)
+            actual = tuple(tuple(map(int, line.split())) for line in result.splitlines())
+            if wanted != actual:
+                raise ValueError(f'melee selection {args[:2]}: original={wanted}, native={actual}')
+            count += 1
+    print(f'Actor actions: {count} original-x86 selection/preparation/reaction cases matched')
 
 
 if __name__ == '__main__':

@@ -112,7 +112,7 @@ that distinction. `actor_prepare_attack` now receives the caller's filtered
 flags. Original South NPC73's fire completion writes short cooldown2 at0360C1;
 the old native action0 instead chose24+RND(6)=29 and delayed its idle transition.
 The RNG words can still match because either bound consumes one draw.
-`check-attack-prepare` compares108 unmodified retail UpdateObjects cases covering
+`check-attack-prepare` compares210 unmodified retail UpdateObjects cases covering
 actor kinds5/6/9, all three excluded target kinds, alternate fire, action0/3/4,
 the following short/long cooldown and hurt/death backstep admission. Kind5's
 jump-table entry at034828 targets034D75: min-range10000 then the034D7D
@@ -120,6 +120,16 @@ can-move clear, which the old native switch omitted. That omission caused
 Lower NPC5's forbidden backstep(-733,-1351) at tick392 before its ordinary
 movement; no collision coefficient needs changing. No BP-clock or counter seed
 change is used.
+
+The new-action path0356BB uses that same can-move flag for its1+RND(4) delay.
+At0356C0/0356DB it proceeds to0356FD, not the existing-action rearm block.
+Native selection now distinguishes a new/tracked action from a pre-existing
+one, so a zero-delay kind5/6 action waits until the next update rather than
+firing immediately. This is the path implicated by Down NPC5's extra RND at26
+and state transition at27; the fixture verifies its gating without changing
+timer input. The210 controls
+also count movement calls, preserving the original melee-selection035613
+edge to0356FD (which still moves; it is not an actor-loop early exit).
 
 Death state8 samples recoil PERSON+A4/B0 **before** MoveObject
 (036B98..036BB0). A call that finishes recoil still exits that actor update;

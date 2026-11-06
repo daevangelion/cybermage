@@ -44,9 +44,12 @@ static int airborne(ai_state *a, sim_state *s, world *w, unsigned id, unsigned t
     return 0;
 }
 
-static int choose_attack(ai_state *a, world *w, world_person *p,
+/* Return0 for a pre-existing action;1 when selection/tracking handled it.
+ * A newly selected fire action follows original0356FD, not the rearm block. */
+static int choose_attack(world *w, world_person *p,
                           const ai_monster *m, const world_object *o,
-                          unsigned target, int melee, int spells, int32_t distance)
+                          unsigned target, int melee, int spells, int32_t distance,
+                          int can_move)
 {
     if (melee && distance < m->melee_range && overlap(o, &w->objects[target]) &&
         world_rnd(&w->rng, p->unk_001E) == 0) {
@@ -63,9 +66,8 @@ static int choose_attack(ai_state *a, world *w, world_person *p,
         ai_track_target(w, (unsigned)p->object, target, 0);
         p->unk_0016 = 1;
         p->unk_0028 = (int16_t)(m->attack[5] && world_rnd(&w->rng, 2) ? 4 : 3);
-        if (m->kind != 6 && m->kind != 14) p->unk_001E = (int16_t)(1 + world_rnd(&w->rng, 4));
+        if (can_move) p->unk_001E = (int16_t)(1 + world_rnd(&w->rng, 4));
     } else ai_track_target(w, (unsigned)p->object, target, p->unk_0020 == 0);
-    (void)a;
     return 1;
 }
 
@@ -278,8 +280,8 @@ static int actor_state(ai_state *a, sim_state *s, world *w, unsigned id,
             }
         } else {
             if (target) {
-                if (choose_attack(a, w, p, m, o, target, melee, spells, distance) < 0) return -1;
-                if (p->unk_0028 && !p->unk_001E) {
+                int selected = choose_attack(w, p, m, o, target, melee, spells, distance, can_move);
+                if (!selected && p->unk_0028 && !p->unk_001E) {
                     ai_track_target(w, (unsigned)p->object, target, 0);
                     if (p->unk_0028 == 1 || p->unk_0028 == 2) {
                         p->unk_001E = (int16_t)(p->unk_001A == 2 ?
