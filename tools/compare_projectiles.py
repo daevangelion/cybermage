@@ -13,6 +13,7 @@ import re
 import struct
 
 POSITIONS = {'x': 0x61418, 'y': 0x64080, 'z': 0x78d8c, 'heading': 0x7e65c}
+MISSILE_COUNT = 12  # Original 576-byte pool; matches AI_MISSILE_MAX.
 RECORD_FIELDS = ('active', 'object', 'vertical', 'ticks', 'type', 'target',
                  'source', 'frame', 'sound', 'speed', 'variant', 'radius')
 COMPARE_FIELDS = ('active', 'type', 'frame', 'ticks', 'vertical', 'speed',
@@ -51,7 +52,7 @@ def original(path):
                 raise ValueError(f'missing original Xox span at {address:x}, {count} bytes')
 
             missiles = []
-            for slot in range(4):
+            for slot in range(MISSILE_COUNT):
                 values = struct.unpack('<12i', read(0x135ecc + slot*48, 48))
                 value = dict(zip(RECORD_FIELDS, values))
                 if value['object'] < 0 or value['object'] >= 2842:
@@ -76,7 +77,7 @@ def native(path):
         if frame in result:
             raise ValueError(f'duplicate native frame {frame}')
         missiles = []
-        for slot in range(4):
+        for slot in range(MISSILE_COUNT):
             value = {}
             for field in COMPARE_FIELDS:
                 key = f'm{slot}_{field}'
@@ -115,7 +116,7 @@ def main():
         raise ValueError(f'checkpoint count mismatch original={len(want)} native={len(got)}')
     first = None; compared = active = 0
     for frame in range(len(want)-1):
-        for slot in range(4):
+        for slot in range(MISSILE_COUNT):
             expected, actual = want[frame+1][slot], got[frame][slot]
             compared += 1
             fields = COMPARE_FIELDS if expected['active'] or actual['active'] else ('active',)

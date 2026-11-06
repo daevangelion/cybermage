@@ -44,7 +44,7 @@ class ProjectileTrace(unittest.TestCase):
                 records = bytearray(576)
                 for slot in range(12):
                     struct.pack_into('<12i', records, slot*48,
-                                     int(active and frame == 1 and slot == 0),
+                                     int(active and frame == 1 and slot in (0, 11)),
                                      1088+slot, -321, 456, 9, -1,
                                      0, 0, -1, 12345, 0, 0)
                 spans = [records]
@@ -60,8 +60,14 @@ class ProjectileTrace(unittest.TestCase):
     def test_post_frame_alignment_and_signed_fields(self):
         result = self.run_compare()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn('Compared 4 checkpoints (1 active)', result.stdout)
+        self.assertIn('Compared 12 checkpoints (2 active)', result.stdout)
         self.assertIn('First divergence: None', result.stdout)
+
+    def test_all_slots_are_checked(self):
+        missiles = compare.original(self.trace)[1]
+        self.assertEqual(len(missiles), 12)
+        self.assertEqual(missiles[11]['active'], 1)
+        self.assertEqual(len(compare.native(self.states)[0]), 12)
 
     def test_one_changed_active_field_fails(self):
         path = self.states / 'frame000000.state'
@@ -69,6 +75,22 @@ class ProjectileTrace(unittest.TestCase):
         result = self.run_compare()
         self.assertEqual(result.returncode, 1)
         self.assertIn("'field': 'vertical'", result.stdout)
+
+    def test_changed_last_slot_fails(self):
+        path = self.states / 'frame000000.state'
+        path.write_text(path.read_text().replace('m11_vertical=-321', 'm11_vertical=-320'))
+        result = self.run_compare()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("'slot': 11", result.stdout)
+        self.assertIn("'field': 'vertical'", result.stdout)
+
+    def test_missing_last_slot_fails(self):
+        path = self.states / 'frame000000.state'
+        path.write_text('\n'.join(line for line in path.read_text().splitlines()
+                                  if not line.startswith('m11_')))
+        result = self.run_compare()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('missing m11_active', result.stderr)
 
     def test_inactive_slots_have_no_live_payload(self):
         path = self.states / 'frame000000.state'

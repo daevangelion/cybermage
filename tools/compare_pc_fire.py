@@ -12,7 +12,7 @@ from pathlib import Path
 import re
 import struct
 
-from compare_projectiles import original as projectile_original, native as projectile_native, COMPARE_FIELDS
+from compare_projectiles import original as projectile_original, native as projectile_native, COMPARE_FIELDS, MISSILE_COUNT
 
 PC_FIELDS = {
     'glow_frame': (0x1444F4, 'i'), 'glow_set': (0x1444F8, 'i'),
@@ -103,7 +103,7 @@ def main():
                     first = {'native_frame': frame, 'original_frame': frame+1,
                              'field': name, 'expected': expected, 'actual': got}
     print(f'PC fire: {len(want)-1} completed frames, {len(PC_FIELDS)} PC fields/frame, '
-          f'{4*(len(want)-1)} missile checkpoints ({active} active); terminal native frame excluded')
+          f'{MISSILE_COUNT*(len(want)-1)} missile checkpoints ({active} active); terminal native frame excluded')
     print('Field differences:', dict(differences))
     print('First divergence:', first)
     return int(first is not None)
