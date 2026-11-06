@@ -1,4 +1,6 @@
 #include "../src/sim/sim_internal.h"
+#include "ai.h"
+#include "audio.h"
 #include "events.h"
 #include <assert.h>
 #include <string.h>
@@ -6,6 +8,48 @@
 static world w;
 static events_state e;
 static sim_state s;
+static ai_state a;
+
+static void crouch_contact(void)
+{
+    world_rng expected;
+    world_object *player, *ceiling;
+    memset(&w, 0, sizeof w);
+    memset(&s, 0, sizeof s);
+    memset(&a, 0, sizeof a);
+    w.object_count = 3; w.person_count = 1; w.player_object = 1;
+    w.persons[0].object = 1;
+    player = &w.objects[1]; ceiling = &w.objects[2];
+    player->x = player->y = 0x18000;
+    player->z = 0x6000;
+    ceiling->x = ceiling->y = 0x18000;
+    ceiling->radius = ceiling->height = 0x4000;
+    ceiling->z = 0x8000; ceiling->flags = 0x00800000;
+    w.flatmap.nodes[33].object = 2;
+    s.body_height = player->z + player->z / 2 + 0x1000;
+    s.ai = &a; a.monster_count = 1; a.pc_sound = -1;
+    snd_enable(0, 0);
+    world_rng_init(&w.rng, 44);
+    expected = w.rng;
+    (void)world_rnd(&expected, 0x4000);
+    /* MovePerson047A9F..047AFA: forced crouch checks sample0, consumes its
+     * actual volume draw even muted, and raises the next frame's hit flash. */
+    assert(!sim_move_person(&s, &w, 1, 0, 0, 0));
+    assert(s.unk_144b34 == 0x8000 - 0x1100 - 0xa000);
+    assert(a.pc_flash == 2 && a.pc_sound == -1);
+    assert(!memcmp(w.rng.word, expected.word, sizeof expected.word));
+    /* No new adjustment means no sound/RNG/flash write. */
+    a.pc_flash = 0;
+    assert(!sim_move_person(&s, &w, 1, 0, 0, 0));
+    assert(!a.pc_flash);
+    assert(!memcmp(w.rng.word, expected.word, sizeof expected.word));
+    /* Existing stronger hit feedback is not lowered by a ceiling contact. */
+    s.unk_144b34 = 0; s.body_height = 0xa000; a.pc_flash = 5;
+    (void)world_rnd(&expected, 0x4000);
+    assert(!sim_move_person(&s, &w, 1, 0, 0, 0));
+    assert(a.pc_flash == 5);
+    assert(!memcmp(w.rng.word, expected.word, sizeof expected.word));
+}
 
 int main(void)
 {
@@ -61,5 +105,6 @@ int main(void)
     x = 933647; y = 980211;
     assert(!sim_coll_object(&s, &w, 970, &x, &y));
     assert(x == 944128 - 7680 - SIM_OBJECT_MARGIN - 1);
+    crouch_contact();
     return 0;
 }
