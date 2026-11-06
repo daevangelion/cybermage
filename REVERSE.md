@@ -96,7 +96,7 @@ known gaps are deliberate; implementation is not full-game parity.
 | target | Original combat order MATCH, conditional input scope below | `tools/compare_targets.py`:1298 completed checkpoints, all13 original nonempty, zero mismatches | Broader scenes/combat routes ([AI](docs/re/ai.md)) |
 | render_sw | Implemented; scoped complete newgame frame exact | Render gate and `tools/compare_frames.py`:completed newgame frame115 differs0/307200; renderer-only views exact outside hand footprints | Moving props, other scenes, painter ties/extreme pitch ([render](docs/re/render.md)) |
 | render_gl | Opt-in enhanced backend integrated | `tests/render_gl.mk check check-gl check-gl-es scene scene-es`; real640/1920 app replays MATCH; title/HUD exact against SW | Not DOS-raster-exact; broader scene/device acceptance ([render](docs/re/render.md)) |
-| classic input/Sim | Named167-scenario baseline:166 actor/RNG MATCH,166 player MATCH | Both106-row movement traces,1299 combat,2033 water/127 wet, original mouse154 and real death/restart/load routes MATCH | One mid-climb Save continuation exposes ignored scenery-PROP clearance; source correction requires its new named gate ([Sim](docs/re/sim.md)) |
+| classic input/Sim | Named168-scenario gate:168 actor/RNG MATCH,168 player MATCH | Both106-row movement traces,1299 combat,2033 water/127 wet, original mouse154 and real death/restart/load routes MATCH | No remaining observed divergence in this cohort; legacy joystick and broader full-game routes unverified ([Sim](docs/re/sim.md)) |
 | modern controls | Desktop opt-in; Android default action/touch/controller layer | `make -C port -f tests/controls.mk B=build/Controls controls-check`; Android virtual-stick walking verified | Physical-controller/long-play usability ([controls](docs/re/controls.md)) |
 | save/load | Codec, live bridges and genuine saved-start replay integrated | Retail SAVE010246045 bytes/GAMENAME288 round-trip; `--replay-load-slot 0`:earned Training94 and water94 player records MATCH | Full original-save playthrough and demo format ([UI](docs/re/ui.md),[Sim](docs/re/sim.md)) |
 | Events/inventory/vehicles | All90 dispatches; genuine tank entry/exit reducer MATCH | `tests/events.mk`; saved-start `events_trace`:Training639 frames/22,009,716 event bytes/116 vehicle rows MATCH; water94/3,237,736 bytes | Reducer consumes measured Sim phase inputs; full vehicle/multi-scene gameplay not established ([Events](docs/re/events.md)) |
@@ -107,14 +107,14 @@ known gaps are deliberate; implementation is not full-game parity.
 | audio/speech/movies | Integrated native PCM/OPL/HMI/TGV | `make -C port -f tests/audio.mk check`:38 songs validate; first30 frames of three movies match FFmpeg | Not exact SOS driver/mixer/voice-allocation parity ([audio](docs/re/audio.md)) |
 | platform/Android | Full-engine APK and opt-in Android GL runtime verified | Frozen20117a3 x86_64 APK:API36/GLES3 `--es renderer gl` and SW title→NEW→scene1→modern touch walking, no crash; earlier dual-ABI gate atc699ea4 | Physical-device/long-play acceptance; no measured FPS logging ([APK/screenshots/logs](port/android/README.md)) |
 
-Named integrated gate: commit `ae2792acce6e8b19a93471f3ee61dd73e43d0389`,
+Named integrated gate: commit `56b6303c39c7ba806ac7f614b6243eca0a0341d2`,
 isolated `git archive` snapshot, strict build and complete `make -C port check`
-and separate five-group phase/six-target controls gates exit0. Receipt
-[gate-ae2792a.json](docs/re/gate-ae2792a.json) pins binary SHA256
-`e05c88457b1dfda7acdbbf5f0242232c8b1c14b80fe70e1f1289dd2a366e3543`
-and the full148-scenario gate plus nineteen original continuations/witnesses:
-166/167 full actor/RNG MATCH,166/167 player MATCH,44,227 original state
-records and6,688,271 actor checkpoints. The included save-before-death69 and
+and separate collision/five-group phase/six-target controls gates exit0. Receipt
+[gate-56b6303.json](docs/re/gate-56b6303.json) pins binary SHA256
+`0d1b86c534e9f479d36b0f566ec1abe652c59a868402986c4a9ed0ec3217d73f`
+and the full167-scenario gate plus one68-record raw9 recovery witness:
+168/168 full actor/RNG MATCH,168/168 player MATCH,44,295 original state
+records and6,695,976 actor checkpoints. The included save-before-death69 and
 failed-hop17 regressions add no continuous-survival or decoder-acquisition
 claim. The archive includes Review2 through87e5f55, Events2's deferred
 ordinary-pickup correction, and the headless rehearsal cadence option.
@@ -155,18 +155,20 @@ The178-record Scene2 upper hall genuinely uses F3/F4 Regen and reachesHP103
 saved cash both change1966→2287. Raw Scene9's385-record ladder-top segment
 genuinely climbs0→65536 atHP111 from the unchanged pre-failure control2 save;
 neither uppergate crossing nor Mission4/5 departure is claimed.
-The later original Scene1 mid-climb Save continuation first diverges at
-checkpoint52. ClearObject0459AB..0459D1 exempts item-bearing props only, whereas
-native incorrectly ignores sceneryPROP890/item0; the resulting wrong centre
-acceptance skips the original southeast clearance and forced-crouch RND16384.
+The earlier original Scene1 mid-climb Save divergence at checkpoint52 is now
+closed. ClearObject0459AB..0459D1 exempts item-bearing props only; the correction
+keeps sceneryPROP890/item0 solid, restoring the original southeast clearance
+and forced-crouch RND16384 rather than accepting the obstructed centre.
 All29 saved motion words and the first five post-save RND calls match, so
 clock, partial-HUD and save-serialization hypotheses are falsified. A named
-isolated regression fails before the correction (0e2fdcb, exit134); the source
-fix is not certified by this older ae2792a baseline. Separately loading the
+isolated regression fails before the correction (0e2fdcb, exit134) and passes
+on56b6303 with all80 actual continuation records/12008 actor checkpoints.
+Separately loading the
 actual original mid-climb save reaches true floor1, then ranger19 is killed;
 those94/290-record continuations match and are genuine upper-route evidence.
 No campaign exit or full-game completion is claimed, and future concurrent
 HEAD changes are not certified. The earlier
+[167-route](docs/re/gate-ae2792a.json),
 [147-route](docs/re/gate-8df96e0.json),
 [140-route](docs/re/gate-c2a3a0c.json),
 [126-route](docs/re/gate-5e32231.json),

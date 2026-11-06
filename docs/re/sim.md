@@ -647,3 +647,12 @@ actor/clock/event record while adding motion globals/RNG. All29 saved motion
 words and the first five post-save RND calls match, falsifying clock, extra-HUD
 and serialization hypotheses. The correction changes only this scenery/item
 admission branch; no clock/input/position/RNG values are fitted.
+
+Named56b6303 passes that regression, including the three expected invalid-prop
+errors, and all80 genuine continuation records /12008 actor checkpoints.
+Its full167-scenario gate plus the68-record raw9 recovery witness matches
+168/168 player and actor/RNG comparisons; strict build, collision, five phase
+groups, six controls targets and complete `make check` exit0. Evidence:
+[gate-56b6303.json](gate-56b6303.json),44,295 original state records and
+6,695,976 actor checkpoints. The recovery save nameGROUND does not prove
+descent: all its original Z values remain65536 and actor25 is still alive.
