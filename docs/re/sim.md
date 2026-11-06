@@ -604,3 +604,15 @@ targets and complete `make check` again exit0. The rehearsal cadence changes
 frame-indexed key planning only; actual-clock replay ignores it. See
 [gate-8df96e0.json](gate-8df96e0.json); this is not a claim that cadence3
 forecasts reproduce original survival or wall-time input sampling.
+
+Later external-save probes expand the same named cohort to147 scenarios:
+147 player matches and144 actor/RNG matches. The three Scene2 slot1 fixtures
+share NPC76 state14's first animation/RNG mismatch at checkpoint3; Audio owns
+the original-instruction correction. NPC76's nonzero-cooldown/no-target paths
+at36E53..36EA6 bypass completion and rejoin Move36EF1, unlike native's
+unconditional completion/RND6 tail. The original BP value and first original
+RND caller were not observed;
+the source proof covers either BP outcome without inferring BP from tick0.
+Scene9's genuine188-record first bend from public slot2 fully matches21505
+actor/RNG checkpoints. These are external-fixture continuations, not earned
+transitions from our Scene1 route, and use actual package configuration4b84.
