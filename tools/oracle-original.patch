@@ -888,7 +888,7 @@ index 5118211..2e45d06 100644
 +    }
 +}
 diff --git a/crates/game/src/main.rs b/crates/game/src/main.rs
-index e9094e3..2b1d9fd 100644
+index e9094e3..8eafcbc 100644
 --- a/crates/game/src/main.rs
 +++ b/crates/game/src/main.rs
 @@ -14,6 +14,7 @@ mod desktop;
@@ -923,7 +923,7 @@ index e9094e3..2b1d9fd 100644
 +            !(0..640).contains(&x) || !(0..240).contains(&y) || buttons > 3 {
 +            return Err(error);
 +        }
-+        Ok(Self { time, x, y, buttons, order })
++        Ok(Self { time: time.abs(), x, y, buttons, order })
 +    }
 +}
 +
@@ -1072,7 +1072,7 @@ index e9094e3..2b1d9fd 100644
          let res = if emu.m.display.options_open || emu.m.display.help_open {
              emu.realtime_last = None;
              emu.m.audio.advance_music(step); // as the windowed frontend: no held notes
-@@ -695,6 +763,23 @@ fn benchmark(emu: &mut Emu, seconds: f64) {
+@@ -695,6 +763,31 @@ fn benchmark(emu: &mut Emu, seconds: f64) {
      #[cfg(windows)] if std::env::var_os("CM_VK_VALIDATION").is_some() { assert_eq!(vulkan::validation_errors(),0,"Vulkan validation errors"); }
  }
  
@@ -1091,12 +1091,20 @@ index e9094e3..2b1d9fd 100644
 +            assert!(RawMouseEvent::parse(value, 0).is_err(), "{value}");
 +        }
 +    }
++
++    #[test]
++    fn raw_mouse_signed_zero_is_one_timestamp() {
++        let positive = RawMouseEvent::parse("0:0:0:1", 0).unwrap();
++        let negative = RawMouseEvent::parse("-0.0:0:0:0", 1).unwrap();
++        assert_eq!(positive.time.total_cmp(&negative.time), std::cmp::Ordering::Equal);
++        assert!(positive.order < negative.order);
++    }
 +}
 +
  #[cfg(test)]
  mod timing_tests {
      use super::*;
-@@ -704,7 +789,7 @@ mod timing_tests {
+@@ -704,7 +797,7 @@ mod timing_tests {
          let mut emu = Emu {
              cpu: Cpu::new(), m: Machine::new(vfs::Vfs::new(path.clone(),path)),
              ips: 1_000_000.0, cfg_trace: false, watches: Vec::new(), profile: None,
@@ -1105,7 +1113,7 @@ index e9094e3..2b1d9fd 100644
          };
          emu.cpu.r[x86::ESP] = 0x30000;
          // call flip; jmp back to call. A frame slice must not start a second flip.
-@@ -726,7 +811,7 @@ mod timing_tests {
+@@ -726,7 +819,7 @@ mod timing_tests {
          let mut emu = Emu {
              cpu: Cpu::new(), m: Machine::new(vfs::Vfs::new(path.clone(),path)),
              ips: 1_000_000.0, cfg_trace: false, watches: Vec::new(), profile: None,
