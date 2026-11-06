@@ -124,6 +124,8 @@ Billboards expand along horizontal camera-right and world-up in the vertex
 shader, so pitch does not tilt actors. Projection uses true pitch and fixed
 vertical FOV (original4:3 focal/height ratio), expanding horizontally at wider
 aspects. `render_gl_draw_view` supports scissored secondary views.
+Its `cm_gl_view` carries the legacy focal-reference dimensions separately from
+the physical viewport, including vehicle views.
 
 R8UI images and separate packed-run coverage retain opaque paletteindex0.
 The indexed R8UI framebuffer is shaded through the original64/10/21 colormap
@@ -131,6 +133,24 @@ rows, then palette-resolved. Invisibility reads a copied indexed background;
 aura selects the original checkerboard maps. UI capture records replace,
 colormap composition and source-coordinate copy operations, preserving
 opaque0/255 and sampled/shaded world pixels without GPU readback.
+Ordered EC/PCFlash maps extend over the widened world without widening UI's
+bounded legacy tint rectangle or double-applying the map to opaque hands.
+
+Select with `--renderer gl`; `sw` remains the default. `--width N --height N`
+choose GL window dimensions (headless default640x480; interactive960x720).
+The actual drawable, including resize/high-DPI changes, determines render and
+capture resolution. UI stays centred4:3; gameplay preserves the original view's
+vertical FOV and expands horizontally. `--dump` reads the real resolved GL
+backbuffer before swap into native-size `frameNNNNNN.ppm`, never the CPU world
+canvas. Unsupported GL/limits fail explicitly rather than silently selecting SW.
+
+Ordinary GL frames do not read pixels back. Death and a scene-replacing failed
+load need a frozen bitmap: `render_gl_read_canvas` uses an indexed variant of
+the same GPU compositor, samples the actual HUD pixel centres into640x480 R8UI,
+then reads once. It neither inverts RGB palettes nor reconstructs a world image
+in C. This preserves palette-index identity and source-copy pixel phase before
+the original CPU melt/menu bitmap effects. GLES integer readback selects its
+supported format, with bounded row scratch for the guaranteed RGBA32UI path.
 
 `tests/render_gl.mk` provides pure mesh/coverage/decoder tests and a real
 offscreen scene executable. Its comparison uses the same loaded world and
@@ -142,4 +162,5 @@ replace/shade/source-copy operators, including opaque0/255 and aspect scaling.
 Optional `check-gl` / `check-gl-es` exercise real GPU packed/masked coverage,
 invisibility/aura parity, moving panel updates, shade/fixed/fog maps, raised
 floors/topflats and sky/fog modes. Both passed on Mesa26.2.5: desktop4.6 core
-and ES3.2 contexts executing the330/300 shader prefixes respectively.
+and ES3.2 contexts executing the330/300 shader prefixes respectively (checkpoint
+`c06b7ad`; later compositor/snapshot changes require fresh runtime verification).

@@ -8,6 +8,7 @@
 #define CM_RAW_SCANS_MAX 256
 #define CM_TOUCH_MAX 32
 #define CM_TOUCH_RECTS_MAX 256
+#define CM_GL_SIZE_MAX 8192u
 
 typedef struct { int x, y, w, h; } cm_rect;
 
@@ -84,5 +85,8 @@ void *platform_gl_proc(const char *name);
 void platform_gl_size(unsigned *width,unsigned *height);
 int platform_gl_swap(void);
 void platform_gl_close(void);
+typedef int (*cm_gl_readback)(uint8_t *pixels,size_t bytes);
+int platform_gl_dump(const char *directory,unsigned frame,unsigned width,
+                      unsigned height,cm_gl_readback read_rgba);
 
 #endif

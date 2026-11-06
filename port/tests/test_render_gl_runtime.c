@@ -8,6 +8,7 @@ static uint8_t wall[128*128],flat[128*128],masked[4],panel[4]={9,9,9,9};
 static uint8_t packed[16]={8,0,0,0,12,0,0,0,2,0,7,7,2,0,7,7};
 static uint8_t shades[64*256],fixed[10*256],fog[21*256],palette[768],sky[1024*128];
 static uint8_t pixels[64*64];
+static uint8_t canvas[CM_WIDTH*CM_HEIGHT];
 static unsigned frame;
 
 static uint32_t hash(void)
@@ -94,6 +95,15 @@ int main(void)
     w.camera.pitch=0;w.sky_type=4;draw();assert(pixel(32,40)==33 && pixel(32,60)==0);
     w.sky_type=2;w.sky_fog=201;w.fog_on=1;draw();
     for (i=0;i<sizeof pixels;++i) assert(pixels[i]==201);
+    {
+        const cm_gl_view inset={8,4,24,20,CM_WIDTH,CM_HEIGHT,1};
+        assert(render_gl_clear(17)==0);
+        assert(render_gl_draw_view(&w,&w.camera,&inset)==0);
+        assert(render_gl_readback(pixels,sizeof pixels,64)==0);
+        assert(pixel(12,12)==201 && pixel(0,0)==17 && pixel(12,40)==17);
+        assert(render_gl_read_canvas(NULL,canvas)==0);
+        assert(canvas[40*CM_WIDTH+160]==201 && canvas[400*CM_WIDTH+160]==17);
+    }
     printf("GL primitives passed: %s\n",render_gl_driver());
     render_gl_close();render_unload();platform_shutdown();return 0;
 }

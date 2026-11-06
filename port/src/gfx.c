@@ -13,7 +13,7 @@ int gfx_overlay_begin(cm_overlay *overlay,uint8_t *pixels)
     unsigned i;
     if (!overlay || !pixels || active_overlay)
         return cm_fail("UI overlay",0,"invalid or nested overlay capture");
-    overlay->pixels=pixels;overlay->map_count=0;overlay->error=0;
+    overlay->pixels=pixels;overlay->map_count=0;overlay->world_map=0;overlay->error=0;
     overlay->last_source=NULL;
     if (!identity_ready) {
         for (i=0;i<256;++i) identity_map[i]=(uint8_t)i;
@@ -78,6 +78,15 @@ static int overlay_map(const uint8_t table[256],unsigned previous)
     }
     o->last_source=table;o->last_previous=(uint16_t)previous;o->last_row=(uint16_t)row;
     return (int)row;
+}
+
+void gfx_world_map(const uint8_t table[256])
+{
+    if (active_overlay) {
+        unsigned previous=active_overlay->world_map ? active_overlay->world_map-2u:UINT16_MAX;
+        int row=overlay_map(table,previous);
+        if (row>=0) active_overlay->world_map=(uint16_t)(row+2);
+    }
 }
 
 void gfx_map_pixel(uint8_t *dst,const uint8_t table[256])
@@ -267,4 +276,28 @@ void gfx_shade(uint8_t *dst, int x0, int y0, int x1, int y1,
     for (y = y0; y <= y1; ++y)
         for (x = x0; x <= x1; ++x)
             gfx_map_pixel(dst+y*CM_WIDTH+x,table);
+}
+
+void gfx_shade_world(uint8_t *dst,int x0,int y0,int x1,int y1,const uint8_t table[256])
+{
+    cm_overlay *overlay=active_overlay;
+    unsigned i;
+    int captured=overlay && dst==overlay->pixels;
+    if (captured) {
+        gfx_world_map(table);
+        for (i=0;i<CM_WIDTH*CM_HEIGHT;++i) {
+            unsigned op=overlay->coverage[i];
+            int row;
+            if (op==1) continue;
+            row=overlay_map(table,op ? op-2:UINT16_MAX);
+            if (row<0) break;
+            if (!op) overlay->source[i]=i;
+            overlay->coverage[i]=(uint8_t)(row+2);
+        }
+        /* World transforms are already recorded. CPU opaque UI still needs
+         * the original rectangle, after hands/before the HUD when flashing. */
+        active_overlay=NULL;
+    }
+    gfx_shade(dst,x0,y0,x1,y1,table);
+    if (captured) active_overlay=overlay;
 }

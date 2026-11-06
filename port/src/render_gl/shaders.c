@@ -23,15 +23,15 @@ const char *glr_world_vertex(void)
 const char *glr_common_fragment(void)
 {
     return
-    "uniform ivec2 u_target,u_origin;uniform vec3 u_camera;uniform vec2 u_yaw,u_pitch;\n"
+    "uniform ivec2 u_target,u_origin;uniform vec3 u_camera;uniform vec2 u_yaw,u_pitch;uniform float u_focal_y;\n"
     "uniform int u_sky_type,u_sky_fill,u_sky_fog,u_fog_on;uniform usampler2D u_backdrop;\n"
     "uint sky_index(ivec2 pixel){if(u_sky_type==0||u_sky_type==3)return 0u;"
     "if(u_sky_type==2&&u_fog_on!=0)return uint(u_sky_fog);"
     "vec2 p=(vec2(pixel-u_origin)+vec2(0.5))/vec2(u_target)*2.0-1.0;"
-    "float sy=p.y*0.75,sx=p.x*float(u_target.x)/float(u_target.y)*0.75;"
+    "float sy=p.y/u_focal_y,sx=p.x*float(u_target.x)/float(u_target.y)/u_focal_y;"
     "vec2 ray=u_yaw*(u_pitch.x-sy*u_pitch.y)+vec2(u_yaw.y,-u_yaw.x)*sx;"
     "float elev=(u_pitch.y+sy*u_pitch.x)/length(ray);"
-    "float row=127.0-160.0*(elev+(u_sky_type==4?0.375:0.0));"
+    "float row=127.0-160.0*(elev+(u_sky_type==4?0.5/u_focal_y:0.0));"
     "if(row<0.0)return uint(u_sky_fill);if(row>=128.0)return 0u;"
     "float u=fract(-atan(ray.y,ray.x)/6.283185307179586+0.15625);"
     "return texelFetch(u_backdrop,ivec2(int(u*1024.0),int(row)),0).r;}\n";
@@ -81,16 +81,31 @@ const char *glr_sky_fragment(void)
 const char *glr_present_fragment(void)
 {
     return
-    "layout(location=0)out vec4 out_color;uniform usampler2D u_scene,u_overlay,u_cover,u_overlay_maps,u_sources;"
-    "uniform sampler2D u_palette;uniform vec4 u_overlay_rect;uniform int u_overlay_on;\n"
-    "void main(){ivec2 p=ivec2(gl_FragCoord.xy);uint index=texelFetch(u_scene,p,0).r;"
-    "vec2 local=(gl_FragCoord.xy-u_overlay_rect.xy)/u_overlay_rect.zw;"
-    "if(u_overlay_on!=0&&all(greaterThanEqual(local,vec2(0)))&&all(lessThan(local,vec2(1)))){"
-    "ivec2 q=clamp(ivec2(floor(vec2(local.x,1.0-local.y)*vec2(640,480))),ivec2(0),ivec2(639,479));"
+    "#ifdef CM_INDEXED_OUTPUT\nlayout(location=0)out uint out_index;\n"
+    "#else\nlayout(location=0)out vec4 out_color;\n#endif\n"
+    "uniform usampler2D u_scene,u_overlay,u_cover,u_overlay_maps,u_sources;"
+    "uniform sampler2D u_palette;uniform int u_overlay_on,u_world_map;uniform ivec4 u_world_rect;\n"
+    "void main(){ivec2 p=ivec2(gl_FragCoord.xy);\n"
+    "#ifdef CM_INDEXED_OUTPUT\n"
+    "{bool narrow=u_target.x*480<=u_target.y*640;"
+    "int num=narrow?u_target.x:u_target.y,den=narrow?640:480;"
+    "ivec2 top=ivec2(p.x,479-p.y);"
+    "p=((top*2+1)*num+u_target*den-ivec2(640,480)*num)/(2*den);"
+    "p.y=u_target.y-1-p.y;p=clamp(p,ivec2(0),u_target-1);}\n"
+    "#endif\nuint index=texelFetch(u_scene,p,0).r;"
+    "bool narrow=u_target.x*480<=u_target.y*640;"
+    "int num=narrow?u_target.x:u_target.y,den=narrow?640:480;"
+    "ivec2 top=ivec2(p.x,u_target.y-1-p.y);"
+    "ivec2 n=(top*2+ivec2(1))*den-(u_target*den-ivec2(640,480)*num);"
+    "if(u_overlay_on!=0&&all(greaterThanEqual(n,ivec2(0)))&&all(lessThan(n,ivec2(640,480)*(2*num)))){"
+    "ivec2 q=n/(2*num);"
     "uint op=texelFetch(u_cover,q,0).r;if(op==1u)index=texelFetch(u_overlay,q,0).r;"
     "else if(op>=2u){uint source=texelFetch(u_sources,q,0).r;ivec2 s=ivec2(int(source%640u),int(source/640u));"
-    "vec2 delta=vec2(s.x-q.x,q.y-s.y)*u_overlay_rect.z/640.0;"
-    "ivec2 at=clamp(ivec2(gl_FragCoord.xy+delta),ivec2(0),textureSize(u_scene,0)-1);"
+    "ivec2 delta=ivec2(s.x-q.x,q.y-s.y);"
+    "ivec2 at=clamp(((p*2+ivec2(1))*den+delta*(2*num))/(2*den),ivec2(0),textureSize(u_scene,0)-1);"
     "index=texelFetch(u_overlay_maps,ivec2(int(texelFetch(u_scene,at,0).r),int(op)-2),0).r;}}"
-    "out_color=texelFetch(u_palette,ivec2(int(index),0),0);}\n";
+    "else if(u_world_map>=2&&all(greaterThanEqual(p,u_world_rect.xy))&&all(lessThan(p,u_world_rect.xy+u_world_rect.zw)))"
+    "index=texelFetch(u_overlay_maps,ivec2(int(index),u_world_map-2),0).r;"
+    "\n#ifdef CM_INDEXED_OUTPUT\nout_index=index;\n"
+    "#else\nout_color=texelFetch(u_palette,ivec2(int(index),0),0);\n#endif\n}\n";
 }

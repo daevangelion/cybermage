@@ -23,6 +23,8 @@ static char error_file[PATH_MAX_BYTES], error_message[512];
 static SDL_Window *window;
 static SDL_GLContext gl_context;
 static int gl_window;
+static uint8_t *gl_dump_memory;
+static size_t gl_dump_capacity;
 static SDL_Surface *surface;
 static SDL_Surface *converted;
 static SDL_AudioDeviceID device;
@@ -219,6 +221,9 @@ void platform_shutdown(void)
     if (gl_context) SDL_GL_DeleteContext(gl_context);
     gl_context = NULL;
     gl_window = 0;
+    if (gl_dump_memory) SDL_free(gl_dump_memory);
+    gl_dump_memory = NULL;
+    gl_dump_capacity = 0;
     if (controller) SDL_GameControllerClose(controller);
     controller = NULL;
     controller_id = -1;
@@ -943,7 +948,7 @@ int platform_gl_open(int headless,unsigned width,unsigned height,int *gles)
 {
     Uint32 flags=SDL_WINDOW_OPENGL|SDL_WINDOW_ALLOW_HIGHDPI;
     int es=0,major=0,minor=0;
-    if (!width || !height || width>8192 || height>8192 || gl_context)
+    if (!width || !height || width>CM_GL_SIZE_MAX || height>CM_GL_SIZE_MAX || gl_context)
         return cm_fail("SDL GL",0,"invalid GL context request");
     if (!(SDL_WasInit(SDL_INIT_VIDEO)&SDL_INIT_VIDEO)) {
         if (headless) SDL_SetHintWithPriority("SDL_VIDEODRIVER","offscreen",SDL_HINT_DEFAULT);
@@ -967,6 +972,10 @@ int platform_gl_open(int headless,unsigned width,unsigned height,int *gles)
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION,3) ||
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION,es ? 0:3) ||
         SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER,1) ||
+        SDL_GL_SetAttribute(SDL_GL_RED_SIZE,8) ||
+        SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE,8) ||
+        SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE,8) ||
+        SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE,8) ||
         SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE,24))
         return cm_fail("SDL GL attributes",0,SDL_GetError());
     window=SDL_CreateWindow("CyberMage Enhanced",SDL_WINDOWPOS_CENTERED,SDL_WINDOWPOS_CENTERED,
@@ -1002,4 +1011,41 @@ int platform_gl_swap(void)
 {
     if (!gl_context || !window) return cm_fail("SDL GL",0,"GL context not open");
     SDL_GL_SwapWindow(window);return 0;
+}
+
+int platform_gl_dump(const char *directory,unsigned frame,unsigned width,
+                      unsigned height,cm_gl_readback read_rgba)
+{
+    char path[PATH_MAX_BYTES];
+    unsigned native_w,native_h,x,y;
+    size_t count,rgba_bytes,needed;
+    uint8_t *rgba,*ppm;
+    int header,n;
+    if (!directory || !read_rgba || !gl_context || !width || !height ||
+        width>CM_GL_SIZE_MAX || height>CM_GL_SIZE_MAX || width>SIZE_MAX/height)
+        return cm_fail("GL dump",frame,"invalid native capture request");
+    platform_gl_size(&native_w,&native_h);
+    if (native_w!=width || native_h!=height)
+        return cm_fail("GL dump",frame,"drawable resized before capture");
+    count=(size_t)width*height;
+    if (count>(CM_FILE_MAX-64u)/3u || count>(SIZE_MAX-64u)/7u)
+        return cm_fail("GL dump",frame,"native capture exceeds file bound");
+    rgba_bytes=count*4;needed=count*7+64;
+    if (needed>gl_dump_capacity) {
+        SDL_free(gl_dump_memory);gl_dump_memory=NULL;gl_dump_capacity=0;
+        gl_dump_memory=SDL_malloc(needed);
+        if (!gl_dump_memory) return cm_fail("GL dump",frame,"capture allocation failed");
+        gl_dump_capacity=needed;
+    }
+    rgba=gl_dump_memory;ppm=rgba+rgba_bytes;
+    if (read_rgba(rgba,rgba_bytes)) return -1;
+    header=snprintf((char *)ppm,64,"P6\n%u %u\n255\n",width,height);
+    if (header<0 || header>=64) return cm_fail("GL dump",frame,"capture header overflow");
+    for (y=0;y<height;++y) for (x=0;x<width;++x)
+        memcpy(ppm+(size_t)header+((size_t)y*width+x)*3,
+               rgba+((size_t)(height-1-y)*width+x)*4,3);
+    n=snprintf(path,sizeof path,"%s/frame%06u.ppm",directory,frame);
+    if (n<0 || (size_t)n>=sizeof path) return cm_fail(directory,frame,"capture path too long");
+    if (platform_directory(directory)) return -1;
+    return platform_file_write(path,ppm,(uint32_t)((size_t)header+count*3));
 }

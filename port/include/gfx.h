@@ -12,6 +12,7 @@ typedef struct {
     const uint8_t *map_source[CM_OVERLAY_MAPS];
     uint16_t previous[CM_OVERLAY_MAPS];
     unsigned map_count;
+    uint16_t world_map; /* Explicit world tint beyond the4:3 HUD canvas. */
     const uint8_t *last_source;
     uint16_t last_previous, last_row;
     int error;
@@ -23,6 +24,7 @@ void gfx_store(uint8_t *dst,uint8_t color);
 void gfx_map_pixel(uint8_t *dst,const uint8_t table[256]);
 void gfx_cover(uint8_t *dst,unsigned count);
 void gfx_copy(uint8_t *dst,const uint8_t *src,unsigned count);
+void gfx_world_map(const uint8_t table[256]);
 
 typedef struct {
     const uint8_t *data;
@@ -44,5 +46,8 @@ void gfx_blit(uint8_t *dst, int x, int y, const uint8_t *src,
               unsigned width, unsigned height);
 void gfx_shade(uint8_t *dst, int x0, int y0, int x1, int y1,
                const uint8_t table[256]);
+/* Same CPU rectangle; GPU capture also tints extended world-dependent pixels. */
+void gfx_shade_world(uint8_t *dst,int x0,int y0,int x1,int y1,
+                      const uint8_t table[256]);
 
 #endif

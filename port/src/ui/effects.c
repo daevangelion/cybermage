@@ -18,7 +18,7 @@ int ui_draw_pc_tint(const cm_ui *ui, uint8_t *dst, const ai_state *a,
     map=after_hand?ui->flashcolor[state-1]:state-1;
     if (map<0 || map>=10)
         return cm_fail("CM_HI.EXE",0x92F1C,"flash color exceeds transfer palettes");
-    gfx_shade(dst,view.x,view.y,view.x+view.width-1,view.y+view.height-1,
+    gfx_shade_world(dst,view.x,view.y,view.x+view.width-1,view.y+view.height-1,
               ui->bright+(unsigned)map*256);
     return 0;
 }

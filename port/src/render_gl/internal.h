@@ -7,7 +7,6 @@
 #define GLR_TILE_QUADS (CM_MAP_LEVELS*CM_MAP_CELLS*6)
 #define GLR_IMAGE_SIDE 2048u
 #define GLR_IMAGE_BYTES (GLR_IMAGE_SIDE*GLR_IMAGE_SIDE)
-#define GLR_MAX_SIZE 8192u
 
 enum {GLR_MASK=1,GLR_PACK=2,GLR_INVIS=4,GLR_AURA=8,
       GLR_BILLBOARD=16,GLR_COLORLESS=32,GLR_FLAT=64,GLR_MIRROR=2048};
@@ -32,7 +31,7 @@ void glr_prop_quad(glr_vertex out[4],const world_object *o,const render_texture 
                    unsigned light,unsigned mode);
 int glr_build_tiles(const world *w,glr_vertex *vertices,unsigned capacity,
                     glr_batch batches[GLR_TEXTURE_MAX],unsigned *quads);
-GLuint glr_program(cm_gl_api *gl,int gles,const char *vertex,const char *fragment);
+GLuint glr_program(cm_gl_api *gl,int gles,const char *vertex,const char *fragment,int indexed);
 const char *glr_world_vertex(void);
 const char *glr_common_fragment(void);
 const char *glr_world_fragment(void);

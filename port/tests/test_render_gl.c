@@ -38,9 +38,17 @@ int main(void)
     assert(overlay.source[22]==2 && overlay.maps[op-2][77]==b[a[77]]);
     gfx_copy(pixels+23,pixels+1,1);
     assert(overlay.coverage[23]==1 && pixels[23]==255);
+    gfx_world_map(a);gfx_world_map(b);
+    op=overlay.world_map;assert(op>=2);
+    for (i=0;i<256;++i) assert(overlay.maps[op-2][i]==b[a[i]]);
+    gfx_shade_world(pixels,0,0,0,0,a);
+    assert(pixels[0]==a[17] && pixels[1]==255);
+    op=overlay.coverage[2];
+    for (i=0;i<256;++i) assert(overlay.maps[op-2][i]==a[b[a[i]]]);
+    op=overlay.coverage[7];
     assert(gfx_overlay_end()==0);
     gfx_store(pixels+7,255);
-    assert(pixels[7]==255 && overlay.coverage[7]==0);
+    assert(pixels[7]==255 && overlay.coverage[7]==op);
     {
         const uint8_t raw[]={1,2,3,4};
         const uint8_t packed[]={8,0,0,0,12,0,0,0,2,0,0,2,254,255};

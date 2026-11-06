@@ -13,14 +13,15 @@ int glr_api_load(cm_gl_api *api)
     return 0;
 }
 
-static GLuint compile(cm_gl_api *gl,int gles,GLenum kind,const char *body)
+static GLuint compile(cm_gl_api *gl,int gles,GLenum kind,const char *body,int indexed)
 {
     const char *source[]={gles ? "#version 300 es\n":"#version 330 core\n",
         "#ifdef GL_ES\nprecision highp float;\nprecision highp int;\nprecision highp usampler2D;\n#endif\n",
+        indexed ? "#define CM_INDEXED_OUTPUT\n":"",
         kind==GL_FRAGMENT_SHADER ? glr_common_fragment():"",body};
     GLuint shader=gl->CreateShader(kind);
     GLint ok=0;
-    gl->ShaderSource(shader,4,source,NULL);gl->CompileShader(shader);gl->GetShaderiv(shader,GL_COMPILE_STATUS,&ok);
+    gl->ShaderSource(shader,5,source,NULL);gl->CompileShader(shader);gl->GetShaderiv(shader,GL_COMPILE_STATUS,&ok);
     if (!ok) {
         char log[2048];log[0]=0;gl->GetShaderInfoLog(shader,sizeof log,NULL,log);log[sizeof log-1]=0;
         cm_fail("GL shader",kind,log);gl->DeleteShader(shader);return 0;
@@ -28,12 +29,12 @@ static GLuint compile(cm_gl_api *gl,int gles,GLenum kind,const char *body)
     return shader;
 }
 
-GLuint glr_program(cm_gl_api *gl,int gles,const char *vertex,const char *fragment)
+GLuint glr_program(cm_gl_api *gl,int gles,const char *vertex,const char *fragment,int indexed)
 {
-    GLuint v=compile(gl,gles,GL_VERTEX_SHADER,vertex),f,program;
+    GLuint v=compile(gl,gles,GL_VERTEX_SHADER,vertex,0),f,program;
     GLint ok=0;
     if (!v) return 0;
-    f=compile(gl,gles,GL_FRAGMENT_SHADER,fragment);
+    f=compile(gl,gles,GL_FRAGMENT_SHADER,fragment,indexed);
     if (!f) {gl->DeleteShader(v);return 0;}
     program=gl->CreateProgram();gl->AttachShader(program,v);gl->AttachShader(program,f);gl->LinkProgram(program);
     gl->DeleteShader(v);gl->DeleteShader(f);gl->GetProgramiv(program,GL_LINK_STATUS,&ok);

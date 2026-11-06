@@ -7,8 +7,8 @@
 #define GLR_KEY_WORDS 23
 
 typedef struct {
-    GLint target,origin,camera,yaw,pitch,projection,sky_type,sky_fill,sky_fog,fog_on;
-    GLint lights,curves,default_curve,frame,parity_origin,overlay_rect,overlay_on;
+    GLint target,origin,camera,yaw,pitch,projection,focal_y,sky_type,sky_fill,sky_fog,fog_on;
+    GLint lights,curves,default_curve,frame,parity_origin,overlay_on,world_map,world_rect;
 } uniforms;
 typedef struct {
     GLuint index,alpha;
@@ -29,9 +29,12 @@ typedef struct {
     int open,gles,api_loaded;
     unsigned width,height,limit,frame,static_quads,loaded;
     GLuint programs[3],vao[3],vbo[2],ibo,fbo[2],color[2],depth;
+    GLuint canvas_fbo,canvas_texture;
+    GLuint snapshot_program;
     GLuint maps,palette,sky,white,zero,overlay,coverage,sources,overlay_maps;
     GLuint bound[8];unsigned active;
     uniforms u[3];
+    uniforms snapshot_u;
     image_cache images[GLR_TEXTURE_MAX];
     object_cache objects[CM_OBJECT_MAX];
     glr_batch batches[GLR_TEXTURE_MAX];
@@ -43,7 +46,10 @@ typedef struct {
     uint8_t palette_bytes[768];
     world_camera camera;
     float yaw_x,yaw_y,pitch_cos,pitch_sin;
+    float vertical_focal;
     int vx,vy;unsigned vw,vh;
+    GLint primary_rect[4];
+    int primary_valid;
     int distance_moved;
     int32_t distance_u,distance_v;
     char driver[256];
@@ -52,6 +58,7 @@ static gl_state s;
 static glr_vertex tile_vertices[GLR_TILE_QUADS*4];
 static GLuint indices[GLR_TILE_QUADS*6];
 static uint8_t image_pixels[GLR_IMAGE_BYTES],image_alpha[GLR_IMAGE_BYTES];
+static GLuint read_row[CM_GL_SIZE_MAX*4];
 
 static int error(const char *stage)
 {
@@ -77,15 +84,22 @@ static void locations(GLuint p,uniforms *u)
 #define LOCATION(field,name) u->field=s.gl.GetUniformLocation(p,name)
     LOCATION(target,"u_target");LOCATION(origin,"u_origin");LOCATION(camera,"u_camera");
     LOCATION(yaw,"u_yaw");LOCATION(pitch,"u_pitch");LOCATION(projection,"u_projection");
+    LOCATION(focal_y,"u_focal_y");
     LOCATION(sky_type,"u_sky_type");LOCATION(sky_fill,"u_sky_fill");LOCATION(sky_fog,"u_sky_fog");LOCATION(fog_on,"u_fog_on");
     LOCATION(lights,"u_lights");LOCATION(curves,"u_curves");LOCATION(default_curve,"u_default_curve");
     LOCATION(frame,"u_frame");LOCATION(parity_origin,"u_parity_origin");
-    LOCATION(overlay_rect,"u_overlay_rect");LOCATION(overlay_on,"u_overlay_on");
+    LOCATION(overlay_on,"u_overlay_on");
+    LOCATION(world_map,"u_world_map");LOCATION(world_rect,"u_world_rect");
 #undef LOCATION
 }
 static void sampler(GLuint p,const char *name,int unit)
 {
     s.gl.Uniform1i(s.gl.GetUniformLocation(p,name),unit);
+}
+static void resolve_samplers(GLuint p)
+{
+    sampler(p,"u_scene",0);sampler(p,"u_palette",1);sampler(p,"u_overlay",2);
+    sampler(p,"u_cover",3);sampler(p,"u_overlay_maps",4);sampler(p,"u_sources",5);
 }
 static void attributes(unsigned vao)
 {
@@ -102,13 +116,16 @@ static void attributes(unsigned vao)
 void render_gl_close(void)
 {
     unsigned i;
+    if (!s.open) return;
     if (s.api_loaded) {
         for (i=0;i<3;++i) if (s.programs[i]) s.gl.DeleteProgram(s.programs[i]);
+        if (s.snapshot_program) s.gl.DeleteProgram(s.snapshot_program);
         for (i=0;i<GLR_TEXTURE_MAX;++i) {
             if (s.images[i].index) s.gl.DeleteTextures(1,&s.images[i].index);
             if (s.images[i].alpha) s.gl.DeleteTextures(1,&s.images[i].alpha);
         }
         s.gl.DeleteTextures(2,s.color);s.gl.DeleteRenderbuffers(1,&s.depth);s.gl.DeleteFramebuffers(2,s.fbo);
+        s.gl.DeleteTextures(1,&s.canvas_texture);s.gl.DeleteFramebuffers(1,&s.canvas_fbo);
         s.gl.DeleteTextures(1,&s.maps);s.gl.DeleteTextures(1,&s.palette);s.gl.DeleteTextures(1,&s.sky);
         s.gl.DeleteTextures(1,&s.white);s.gl.DeleteTextures(1,&s.zero);s.gl.DeleteTextures(1,&s.overlay);
         s.gl.DeleteTextures(1,&s.coverage);s.gl.DeleteTextures(1,&s.sources);s.gl.DeleteTextures(1,&s.overlay_maps);
@@ -122,7 +139,7 @@ int render_gl_resize(unsigned width,unsigned height)
 {
     unsigned i;
     const GLuint zero[4]={0,0,0,0};
-    if (!s.open || !width || !height || width>s.limit || height>s.limit || width>GLR_MAX_SIZE || height>GLR_MAX_SIZE)
+    if (!s.open || !width || !height || width>s.limit || height>s.limit || width>CM_GL_SIZE_MAX || height>CM_GL_SIZE_MAX)
         return cm_fail("GL resize",0,"unsupported framebuffer size");
     if (width==s.width && height==s.height) return 0;
     for (i=0;i<2;++i) {
@@ -138,12 +155,23 @@ int render_gl_resize(unsigned width,unsigned height)
             return cm_fail("GL framebuffer",i,"integer framebuffer incomplete");
         s.gl.Disable(GL_SCISSOR_TEST);s.gl.ClearBufferuiv(GL_COLOR,0,zero);
     }
-    s.width=width;s.height=height;return error("GL resize");
+    s.width=width;s.height=height;s.primary_valid=0;return error("GL resize");
+}
+
+int render_gl_clear(uint8_t index)
+{
+    const GLuint color[4]={index,0,0,0};
+    const GLfloat depth=1;
+    if (!s.open) return cm_fail("GL clear",0,"context not open");
+    s.primary_valid=0;
+    s.gl.BindFramebuffer(GL_FRAMEBUFFER,s.fbo[0]);s.gl.Disable(GL_SCISSOR_TEST);
+    s.gl.DepthMask(GL_TRUE);s.gl.ClearBufferuiv(GL_COLOR,0,color);s.gl.ClearBufferfv(GL_DEPTH,0,&depth);
+    return error("GL clear");
 }
 
 int render_gl_open(int headless,unsigned width,unsigned height)
 {
-    unsigned i;
+    unsigned i,drawable_width,drawable_height;
     GLint limit;
     const GLubyte *driver,*version;
     const uint8_t white=255,zero=0;
@@ -156,18 +184,16 @@ int render_gl_open(int headless,unsigned width,unsigned height)
     if (!driver || !version) {cm_fail("GL",0,"context has no renderer/version string");render_gl_close();return -1;}
     snprintf(s.driver,sizeof s.driver,"%s / %s",(const char *)driver,(const char *)version);
     s.gl.GetIntegerv(GL_MAX_TEXTURE_SIZE,&limit);s.limit=limit>0 ? (unsigned)limit:0;
-    s.programs[0]=glr_program(&s.gl,s.gles,glr_world_vertex(),glr_world_fragment());
-    s.programs[1]=glr_program(&s.gl,s.gles,glr_screen_vertex(),glr_sky_fragment());
-    s.programs[2]=glr_program(&s.gl,s.gles,glr_screen_vertex(),glr_present_fragment());
+    s.programs[0]=glr_program(&s.gl,s.gles,glr_world_vertex(),glr_world_fragment(),0);
+    s.programs[1]=glr_program(&s.gl,s.gles,glr_screen_vertex(),glr_sky_fragment(),0);
+    s.programs[2]=glr_program(&s.gl,s.gles,glr_screen_vertex(),glr_present_fragment(),0);
     if (!s.programs[0] || !s.programs[1] || !s.programs[2]) {render_gl_close();return -1;}
     for (i=0;i<3;++i) {
         locations(s.programs[i],s.u+i);s.gl.UseProgram(s.programs[i]);sampler(s.programs[i],"u_backdrop",4);
     }
     s.gl.UseProgram(s.programs[0]);sampler(s.programs[0],"u_index",0);sampler(s.programs[0],"u_alpha",1);
     sampler(s.programs[0],"u_maps",2);sampler(s.programs[0],"u_previous",3);
-    s.gl.UseProgram(s.programs[2]);sampler(s.programs[2],"u_scene",0);sampler(s.programs[2],"u_palette",1);
-    sampler(s.programs[2],"u_overlay",2);sampler(s.programs[2],"u_cover",3);
-    sampler(s.programs[2],"u_overlay_maps",4);sampler(s.programs[2],"u_sources",5);
+    s.gl.UseProgram(s.programs[2]);resolve_samplers(s.programs[2]);
     s.gl.PixelStorei(GL_UNPACK_ALIGNMENT,1);s.gl.PixelStorei(GL_PACK_ALIGNMENT,1);
     s.gl.GenFramebuffers(2,s.fbo);s.gl.GenRenderbuffers(1,&s.depth);
     s.gl.GenVertexArrays(3,s.vao);s.gl.GenBuffers(2,s.vbo);s.gl.GenBuffers(1,&s.ibo);
@@ -188,6 +214,8 @@ int render_gl_open(int headless,unsigned width,unsigned height)
     texture(&s.sources,GL_R32UI,CM_WIDTH,CM_HEIGHT,GL_RED_INTEGER,GL_UNSIGNED_INT,NULL);
     texture(&s.overlay_maps,GL_R8UI,256,CM_OVERLAY_MAPS,GL_RED_INTEGER,GL_UNSIGNED_BYTE,NULL);
     s.gl.Disable(GL_BLEND);s.gl.Disable(GL_DITHER);s.gl.DepthFunc(GL_LESS);
+    platform_gl_size(&drawable_width,&drawable_height);
+    if (drawable_width && drawable_height) {width=drawable_width;height=drawable_height;}
     if (render_gl_resize(width,height) || error("GL initialization")) {render_gl_close();return -1;}
     return 0;
 }
@@ -276,7 +304,8 @@ static void view_uniforms(unsigned program,const world *w)
     s.gl.Uniform2i(u->target,(GLint)s.vw,(GLint)s.vh);s.gl.Uniform2i(u->origin,s.vx,s.vy);
     s.gl.Uniform3f(u->camera,(float)s.camera.u/65536,(float)s.camera.v/65536,(float)s.camera.z/65536);
     s.gl.Uniform2f(u->yaw,s.yaw_x,s.yaw_y);s.gl.Uniform2f(u->pitch,s.pitch_cos,s.pitch_sin);
-    s.gl.Uniform2f(u->projection,(4.0f/3)*(float)s.vh/(float)s.vw,4.0f/3);
+    s.gl.Uniform2f(u->projection,s.vertical_focal*(float)s.vh/(float)s.vw,s.vertical_focal);
+    s.gl.Uniform1f(u->focal_y,s.vertical_focal);
     s.gl.Uniform1i(u->sky_type,w->sky_type);s.gl.Uniform1i(u->sky_fill,w->sky_fill);
     s.gl.Uniform1i(u->sky_fog,w->sky_fog);s.gl.Uniform1i(u->fog_on,w->fog_on);
 }
@@ -379,7 +408,7 @@ static int draw_object(unsigned id)
         float f=dx*s.yaw_x+dy*s.yaw_y,d=f*s.pitch_cos+z*s.pitch_sin;
         if (d>0) {
             float up=z*s.pitch_cos-f*s.pitch_sin;
-            float first=ceilf((float)s.vh/2-up/d*(float)s.vh*(2.0f/3)-0.5f);
+            float first=ceilf((float)s.vh/2-up/d*(float)s.vh*s.vertical_focal/2-0.5f);
             clipped_top=first<0 ? 0:first>(float)s.vh ? (int)s.vh:(int)first;
         }
     }
@@ -404,21 +433,36 @@ static void sort_props(unsigned *order,unsigned count)
     }
 }
 
-int render_gl_draw_view(const world *w,const world_camera *camera,int x,int y,unsigned width,unsigned height)
+int render_gl_draw_view(const world *w,const world_camera *camera,const cm_gl_view *view)
 {
     unsigned i,n=0,order[CM_OBJECT_MAX];const GLuint zero[4]={0,0,0,0};GLfloat one=1;
+    unsigned width,height;
+    int x,y;
     float pitch;
-    if (!s.loaded || !camera || w!=s.world || x<0 || y<0 || !width || !height || width>s.width || height>s.height ||
+    if (!view) return cm_fail("GL view",0,"missing viewport");
+    x=view->x;y=view->y;width=view->width;height=view->height;
+    if (!s.loaded || !w || !camera || w!=s.world || w->object_count>CM_OBJECT_MAX ||
+        view->reference_width<2 || view->reference_height<2 ||
+        view->reference_width>CM_GL_SIZE_MAX || view->reference_height>CM_GL_SIZE_MAX ||
+        x<0 || y<0 || !width || !height || width>s.width || height>s.height ||
         (unsigned)x>s.width-width || (unsigned)y>s.height-height) return cm_fail("GL view",0,"invalid world or view rectangle");
     if (render_sync_textures(w) || static_mesh(w,0)) return -1;
     ++s.frame;
     s.distance_moved=s.distance_u!=camera->u || s.distance_v!=camera->v;
     s.camera=*camera;s.vx=x;s.vy=(int)s.height-y-(int)height;s.vw=width;s.vh=height;
+    if (!view->preserve_outside) {
+        s.primary_rect[0]=s.vx;s.primary_rect[1]=s.vy;
+        s.primary_rect[2]=(GLint)width;s.primary_rect[3]=(GLint)height;s.primary_valid=1;
+    }
+    s.vertical_focal=2.0f*(float)(view->reference_width/2)/(float)view->reference_height;
     s.yaw_x=(float)w->trig.cos[camera->angle>>5]/65536;s.yaw_y=(float)w->trig.sin[camera->angle>>5]/65536;
     pitch=-atanf((float)camera->pitch/320);s.pitch_cos=cosf(pitch);s.pitch_sin=sinf(pitch);
     s.gl.BindFramebuffer(GL_FRAMEBUFFER,s.fbo[0]);s.gl.Viewport(s.vx,s.vy,(GLsizei)width,(GLsizei)height);
-    s.gl.Enable(GL_SCISSOR_TEST);s.gl.Scissor(s.vx,s.vy,(GLsizei)width,(GLsizei)height);
+    if (view->preserve_outside) {
+        s.gl.Enable(GL_SCISSOR_TEST);s.gl.Scissor(s.vx,s.vy,(GLsizei)width,(GLsizei)height);
+    } else s.gl.Disable(GL_SCISSOR_TEST);
     s.gl.DepthMask(GL_TRUE);s.gl.ClearBufferuiv(GL_COLOR,0,zero);s.gl.ClearBufferfv(GL_DEPTH,0,&one);
+    s.gl.Enable(GL_SCISSOR_TEST);s.gl.Scissor(s.vx,s.vy,(GLsizei)width,(GLsizei)height);
     s.gl.Disable(GL_DEPTH_TEST);s.gl.Disable(GL_CULL_FACE);s.gl.BindVertexArray(s.vao[2]);
     view_uniforms(1,w);bind(4,s.sky);s.gl.DrawArrays(GL_TRIANGLES,0,3);
     view_uniforms(0,w);if (lights(w)) return -1;
@@ -443,21 +487,17 @@ int render_gl_draw_view(const world *w,const world_camera *camera,int x,int y,un
 }
 int render_gl_draw(const world *w,const world_camera *camera)
 {
-    return render_gl_draw_view(w,camera,0,0,s.width,s.height);
+    const cm_gl_view view={0,0,s.width,s.height,CM_WIDTH,CM_HEIGHT,0};
+    return render_gl_draw_view(w,camera,&view);
 }
 
-int render_gl_present(const cm_overlay *overlay)
+static int resolve_overlay(const cm_overlay *overlay,GLuint program,const uniforms *u,
+                           GLuint framebuffer,unsigned width,unsigned height)
 {
-    float scale,x,y;
-    cm_rect rectangles[CM_TOUCH_RECTS_MAX];
-    unsigned count,i;
-    if (!s.open || !s.palette_source) return cm_fail("GL present",0,"context/palette not loaded");
-    if (memcmp(s.palette_source,s.palette_bytes,768)) {
-        bind(7,s.palette);s.gl.TexSubImage2D(GL_TEXTURE_2D,0,0,0,256,1,GL_RGB,GL_UNSIGNED_BYTE,s.palette_source);
-        memcpy(s.palette_bytes,s.palette_source,768);
-    }
     if (overlay) {
-        if (overlay->error || !overlay->pixels || overlay->map_count>CM_OVERLAY_MAPS) return cm_fail("GL overlay",0,"invalid overlay recording");
+        if (overlay->error || !overlay->pixels || overlay->map_count>CM_OVERLAY_MAPS ||
+            (overlay->world_map && (overlay->world_map<2 || (unsigned)overlay->world_map-2>=overlay->map_count)))
+            return cm_fail("GL overlay",0,"invalid overlay recording");
         bind(7,s.overlay);s.gl.TexSubImage2D(GL_TEXTURE_2D,0,0,0,CM_WIDTH,CM_HEIGHT,GL_RED_INTEGER,GL_UNSIGNED_BYTE,overlay->pixels);
         bind(7,s.coverage);s.gl.TexSubImage2D(GL_TEXTURE_2D,0,0,0,CM_WIDTH,CM_HEIGHT,GL_RED_INTEGER,GL_UNSIGNED_BYTE,overlay->coverage);
         if (overlay->map_count) {
@@ -465,15 +505,28 @@ int render_gl_present(const cm_overlay *overlay)
             bind(7,s.sources);s.gl.TexSubImage2D(GL_TEXTURE_2D,0,0,0,CM_WIDTH,CM_HEIGHT,GL_RED_INTEGER,GL_UNSIGNED_INT,overlay->source);
         }
     }
-    s.gl.BindFramebuffer(GL_FRAMEBUFFER,0);s.gl.Viewport(0,0,(GLsizei)s.width,(GLsizei)s.height);
+    s.gl.BindFramebuffer(GL_FRAMEBUFFER,framebuffer);s.gl.Viewport(0,0,(GLsizei)width,(GLsizei)height);
     s.gl.Disable(GL_DEPTH_TEST);s.gl.Disable(GL_CULL_FACE);s.gl.Disable(GL_SCISSOR_TEST);
-    s.gl.UseProgram(s.programs[2]);s.gl.BindVertexArray(s.vao[2]);
-    scale=fminf((float)s.width/CM_WIDTH,(float)s.height/CM_HEIGHT);
-    x=((float)s.width-CM_WIDTH*scale)/2;y=((float)s.height-CM_HEIGHT*scale)/2;
-    s.gl.Uniform4f(s.u[2].overlay_rect,x,y,CM_WIDTH*scale,CM_HEIGHT*scale);
-    s.gl.Uniform1i(s.u[2].overlay_on,overlay!=NULL);
+    s.gl.UseProgram(program);s.gl.BindVertexArray(s.vao[2]);
+    s.gl.Uniform2i(u->target,(GLint)s.width,(GLint)s.height);
+    s.gl.Uniform1i(u->overlay_on,overlay!=NULL);
+    s.gl.Uniform1i(u->world_map,overlay && s.primary_valid ? overlay->world_map:0);
+    s.gl.Uniform4iv(u->world_rect,1,s.primary_rect);
     bind(0,s.color[0]);bind(1,s.palette);bind(2,s.overlay);bind(3,s.coverage);bind(4,s.overlay_maps);bind(5,s.sources);
     s.gl.DrawArrays(GL_TRIANGLES,0,3);
+    return 0;
+}
+
+int render_gl_present(const cm_overlay *overlay)
+{
+    cm_rect rectangles[CM_TOUCH_RECTS_MAX];
+    unsigned count,i;
+    if (!s.open || !s.palette_source) return cm_fail("GL present",0,"context/palette not loaded");
+    if (memcmp(s.palette_source,s.palette_bytes,768)) {
+        bind(7,s.palette);s.gl.TexSubImage2D(GL_TEXTURE_2D,0,0,0,256,1,GL_RGB,GL_UNSIGNED_BYTE,s.palette_source);
+        memcpy(s.palette_bytes,s.palette_source,768);
+    }
+    if (resolve_overlay(overlay,s.programs[2],s.u+2,0,s.width,s.height)) return -1;
     count=platform_touch_rects((int)s.width,(int)s.height,rectangles);
     if (count) {
         const GLfloat color[4]={160.0f/255,220.0f/255,220.0f/255,1};
@@ -487,20 +540,75 @@ int render_gl_present(const cm_overlay *overlay)
     }
     return error("GL palette and overlay resolve");
 }
+static int read_indexed(GLuint framebuffer,uint8_t *pixels,unsigned width,unsigned height,unsigned stride)
+{
+    GLint format,type;
+    unsigned x,y;
+    s.gl.BindFramebuffer(GL_FRAMEBUFFER,framebuffer);s.gl.ReadBuffer(GL_COLOR_ATTACHMENT0);
+    s.gl.GetIntegerv(GL_IMPLEMENTATION_COLOR_READ_FORMAT,&format);
+    s.gl.GetIntegerv(GL_IMPLEMENTATION_COLOR_READ_TYPE,&type);
+    if (!s.gles || (format==GL_RED_INTEGER && type==GL_UNSIGNED_BYTE)) {
+        s.gl.PixelStorei(GL_PACK_ROW_LENGTH,(GLint)stride);
+        s.gl.ReadPixels(0,0,(GLsizei)width,(GLsizei)height,GL_RED_INTEGER,GL_UNSIGNED_BYTE,pixels);
+        s.gl.PixelStorei(GL_PACK_ROW_LENGTH,0);
+    } else {
+        /* ES3 guarantees RGBA_INTEGER/UNSIGNED_INT for unsigned attachments.
+         * Bound row scratch avoids a native-resolution staging allocation. */
+        s.gl.PixelStorei(GL_PACK_ROW_LENGTH,0);
+        for (y=0;y<height;++y) {
+            s.gl.ReadPixels(0,(GLint)y,(GLsizei)width,1,GL_RGBA_INTEGER,GL_UNSIGNED_INT,read_row);
+            for (x=0;x<width;++x) pixels[(size_t)y*stride+x]=(uint8_t)read_row[x*4];
+        }
+    }
+    return error("GL indexed readback");
+}
 int render_gl_readback(uint8_t *pixels,size_t bytes,unsigned stride)
 {
     if (!s.open || !pixels || stride<s.width || s.height>SIZE_MAX/stride || bytes<(size_t)(s.height-1)*stride+s.width)
         return cm_fail("GL readback",0,"indexed destination too small");
-    s.gl.BindFramebuffer(GL_FRAMEBUFFER,s.fbo[0]);s.gl.ReadBuffer(GL_COLOR_ATTACHMENT0);
-    s.gl.PixelStorei(GL_PACK_ROW_LENGTH,(GLint)stride);
-    s.gl.ReadPixels(0,0,(GLsizei)s.width,(GLsizei)s.height,GL_RED_INTEGER,GL_UNSIGNED_BYTE,pixels);
-    s.gl.PixelStorei(GL_PACK_ROW_LENGTH,0);return error("GL indexed readback");
+    return read_indexed(s.fbo[0],pixels,s.width,s.height,stride);
 }
 int render_gl_read_rgba(uint8_t *pixels,size_t bytes)
 {
     if (!s.open || !pixels || (size_t)s.width*s.height>bytes/4) return cm_fail("GL readback",0,"RGBA destination too small");
     s.gl.BindFramebuffer(GL_FRAMEBUFFER,0);s.gl.ReadPixels(0,0,(GLsizei)s.width,(GLsizei)s.height,GL_RGBA,GL_UNSIGNED_BYTE,pixels);
     return error("GL resolved readback");
+}
+
+int render_gl_read_canvas(const cm_overlay *overlay,uint8_t pixels[CM_WIDTH*CM_HEIGHT])
+{
+    unsigned x,y;
+    GLuint source=s.fbo[0];
+    if (!s.open || !pixels) return cm_fail("GL canvas",0,"context not open or missing destination");
+    if (overlay || s.width!=CM_WIDTH || s.height!=CM_HEIGHT) {
+        if (!s.snapshot_program) {
+            s.snapshot_program=glr_program(&s.gl,s.gles,glr_screen_vertex(),glr_present_fragment(),1);
+            if (!s.snapshot_program) return -1;
+            locations(s.snapshot_program,&s.snapshot_u);
+            s.gl.UseProgram(s.snapshot_program);resolve_samplers(s.snapshot_program);
+        }
+        source=s.fbo[1];
+        if (s.width!=CM_WIDTH || s.height!=CM_HEIGHT) {
+            if (!s.canvas_fbo) {
+                s.gl.GenFramebuffers(1,&s.canvas_fbo);
+                texture(&s.canvas_texture,GL_R8UI,CM_WIDTH,CM_HEIGHT,GL_RED_INTEGER,GL_UNSIGNED_BYTE,NULL);
+                s.gl.BindFramebuffer(GL_FRAMEBUFFER,s.canvas_fbo);
+                s.gl.FramebufferTexture2D(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,s.canvas_texture,0);
+                if (s.gl.CheckFramebufferStatus(GL_FRAMEBUFFER)!=GL_FRAMEBUFFER_COMPLETE)
+                    return cm_fail("GL canvas",0,"indexed canvas framebuffer incomplete");
+            }
+            source=s.canvas_fbo;
+        }
+        if (resolve_overlay(overlay,s.snapshot_program,&s.snapshot_u,source,CM_WIDTH,CM_HEIGHT) ||
+            error("GL indexed snapshot resolve")) return -1;
+    }
+    if (read_indexed(source,pixels,CM_WIDTH,CM_HEIGHT,CM_WIDTH)) return -1;
+    for (y=0;y<CM_HEIGHT/2;++y) for (x=0;x<CM_WIDTH;++x) {
+        uint8_t byte=pixels[y*CM_WIDTH+x];
+        pixels[y*CM_WIDTH+x]=pixels[(CM_HEIGHT-1-y)*CM_WIDTH+x];
+        pixels[(CM_HEIGHT-1-y)*CM_WIDTH+x]=byte;
+    }
+    return 0;
 }
 void render_gl_dimensions(unsigned *width,unsigned *height) {*width=s.width;*height=s.height;}
 const char *render_gl_driver(void) {return s.driver;}
