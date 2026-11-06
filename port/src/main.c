@@ -7,6 +7,7 @@
 #include "replay.h"
 #include "rsc.h"
 #include "sim.h"
+#include "tgv.h"
 #include "ui.h"
 
 #include <inttypes.h>
@@ -27,10 +28,13 @@ static cm_ui ui;
 static ui_save_state save;
 static rsc hipak;
 static cm_file strings;
+static cm_file executable;
+static cm_exe exe;
 static cm_replay replay;
 static int16_t headless_pcm[48000 / CM_TICK_HZ * 2];
 static char resource_path[PATH_BYTES], strings_path[PATH_BYTES], save_path[PATH_BYTES];
 static char names_path[PATH_BYTES];
+static char executable_path[PATH_BYTES];
 
 static int make_path(char *out, size_t size, const char *dir, const char *file)
 {
@@ -82,30 +86,38 @@ static void camera_follow(void)
     game.camera.angle = o->heading;
 }
 
-static int new_game(const char *data, unsigned scene, uint32_t ticks)
+static int load_scene(const char *data, unsigned scene)
 {
-    uint8_t latch = simulation.kb_latch, modifiers = simulation.bios_shift;
     world_close(&game);
     render_unload();
     memset(&actors, 0, sizeof actors);
-    memset(&events, 0, sizeof events);
-    memset(&save, 0, sizeof save);
-    sim_init(&simulation, ticks);
-    simulation.kb_latch = latch;
-    simulation.bios_shift = modifiers;
     simulation.ai = &actors;
     simulation.events = &events;
-    if (world_load_scene(&game, data, scene) || ai_init(&actors, &game) ||
-        ai_load_tables(&actors, data) ||
+    if (world_load_scene(&game, data, scene) || ai_init(&actors, &game)) return -1;
+    ai_restore_pc_info(&events, &game);
+    if (ai_load_tables(&actors, data) ||
         world_finalize_scene(&game) || sim_start_scene(&simulation, &game) ||
         events_init(&events, &game) || events_load_tables(&events, data) ||
         render_load(&game, &hipak) || snd_scene(&game)) return -1;
     actors.events = &events;
-    memcpy(events.auto_ptr, ui.auto_ptr, sizeof events.auto_ptr);
-    memcpy(events.auto_slot, ui.auto_slot, sizeof events.auto_slot);
+    events.actors = &actors;
+    ui.shop_kind = 0;
     ui_save_init(&save, &game);
     ui_open(&ui, UI_GAME);
     return 0;
+}
+
+static int new_game(const char *data, unsigned scene, uint32_t ticks)
+{
+    uint8_t latch = simulation.kb_latch, modifiers = simulation.bios_shift;
+    memset(&events, 0, sizeof events);
+    sim_init(&simulation, ticks);
+    simulation.kb_latch = latch;
+    simulation.bios_shift = modifiers;
+    if (ai_init_pc(&events, &simulation, &game.rng, &exe, scene, ticks)) return -1;
+    memcpy(events.auto_ptr, ui.auto_ptr, sizeof events.auto_ptr);
+    memcpy(events.auto_slot, ui.auto_slot, sizeof events.auto_slot);
+    return load_scene(data, scene);
 }
 
 static int state_dump(const char *directory, unsigned frame)
@@ -179,6 +191,9 @@ int main(int argc, char **argv)
     world_rng_init(&game.rng, (uint16_t)bios_seed);
     if (make_path(resource_path, sizeof resource_path, data, "HIPAK.RSC") ||
         make_path(strings_path, sizeof strings_path, data, "STRINGS.MSG") ||
+        make_path(executable_path, sizeof executable_path, data, "CM_HI.EXE") ||
+        platform_file_read(&executable, executable_path) ||
+        cm_exe_init(&exe, &executable, executable_path) ||
         rsc_open(&hipak, resource_path) || platform_file_read(&strings, strings_path) ||
         rsc_entry(&hipak, 31, &pal_data, &pal_size) ||
         gfx_palette(palette, pal_data, pal_size, resource_path) ||
@@ -190,9 +205,11 @@ int main(int argc, char **argv)
     if (trace && replay.has_bios_seed && !seed_explicit)
         world_rng_init(&game.rng, replay.bios_seed);
     sim_init(&simulation, platform_ticks(0));
+    if (ai_init_pc(&events, &simulation, &game.rng, &exe, 1, platform_ticks(0))) goto out;
     while (!input.quit && (!frames || frame < frames)) {
         uint32_t ticks = platform_ticks(frame);
         ui_action action;
+        int shop_modal = 0;
         if (platform_poll(&input, frame)) goto out;
         if (trace) {
             int next = replay_next(&replay, &recorded);
@@ -227,7 +244,11 @@ int main(int argc, char **argv)
                 if (!(simulation.kb_scan_status[key] & 10)) input.pressed[key] = 0;
         }
         ui.ticks = ticks;
-        action = trace ? UI_NONE : ui_input(&ui, &input, ticks);
+        if (!trace && playing && ui.screen == UI_GAME) {
+            shop_modal = ui_shop_step(&ui, &events, &game, &input, ticks);
+            if (shop_modal < 0) goto out;
+        }
+        action = trace || shop_modal ? UI_NONE : ui_input(&ui, &input, ticks);
         if (action == UI_QUIT) break;
         if (action == UI_SPEECH_REPLAY && snd_log_replay(&game, ui.slot)) goto out;
         if (action == UI_NEW_GAME || action == UI_TRAINING) {
@@ -279,12 +300,16 @@ int main(int argc, char **argv)
                     events_save_import(&events, &save) ||
                     render_load(&game, &hipak)) goto out;
                 actors.events = &events;
+                events.actors = &actors;
+                ai_save_pc_info(&events, &game);
+                if (snd_scene(&game)) goto out;
+                ui.shop_kind = 0;
                 playing = 1;
             }
             ui_open(&ui, UI_GAME);
         }
         if (playing) {
-            if (ui.screen == UI_GAME) {
+            if (ui.screen == UI_GAME && !shop_modal) {
                 if (sim_frame(&simulation, &game, &input, ticks) ||
                     ai_pc_input(&actors, &simulation, &game) ||
                     events_step(&events, &simulation, &actors, &game) ||
@@ -301,7 +326,7 @@ int main(int argc, char **argv)
             }
             if (ui.screen != UI_GAME) memset(pixels, 0, sizeof pixels);
             if (render_draw(&game, &game.camera, pixels)) goto out;
-            if (ui.screen == UI_GAME) {
+            if (ui.screen == UI_GAME && !shop_modal) {
                 ui_hud hud = {0};
                 ui_view view = {120, 90, 400, 300};
                 if ((simulation.pc_mode == 1 || simulation.pc_mode == 2 || simulation.pc_mode == 5) &&
@@ -323,6 +348,7 @@ int main(int argc, char **argv)
                     }
                 }
             }
+            if (ui_shop_draw(&ui, &events, &game, pixels)) goto out;
         }
         if (headless && !trace) {
             while (audio_ticks != ticks) {
@@ -332,8 +358,10 @@ int main(int argc, char **argv)
         } else audio_ticks = ticks;
         if (ui_draw(&ui, pixels)) goto out;
         if (playing && ui.screen != UI_GAME) {
-            ui_view view = {0, 0, CM_WIDTH, CM_HEIGHT};
-            if (ui_draw_player_hand(&ui, &game, pixels, -1, 0, 0, view)) goto out;
+            int aim_x = (input.mouse_x - 320) / 2;
+            int aim_y = 201 - input.mouse_y / 2;
+            if (ui_draw_menu_cursor(&ui, &game, pixels, aim_x, aim_y,
+                                    input.mouse_buttons ? 13 : 4)) goto out;
         }
         if (platform_present(pixels, palette) ||
             (dump && platform_dump(dump, frame, pixels, palette)) ||
@@ -348,11 +376,13 @@ int main(int argc, char **argv)
     }
     status = divergence ? 3 : 0;
 out:
+    snd_movie_end();
     snd_close();
     replay_close(&replay);
     render_unload();
     world_close(&game);
     platform_file_release(&strings);
+    platform_file_release(&executable);
     rsc_close(&hipak);
     platform_shutdown();
     return status;
