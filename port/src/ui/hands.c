@@ -54,17 +54,18 @@ static int player_hand(const cm_ui *ui, world *w, uint8_t *dst,
     hand.aim_x = ui->CenterAimX[glove];
     hand.aim_y = ui->CenterAimY[glove];
     if (a) {
-        int64_t x = (int64_t)a->pc_aim.aim_x+a->pc_aim.render_x;
-        int64_t y = (int64_t)a->pc_aim.aim_y+a->pc_aim.render_y;
+        /* CM_HI.EXE18ADE..18B1B: wrap visual offsets, then clamp live aim. */
+        int32_t x = world_add32(a->pc_aim.aim_x,a->pc_aim.render_x);
+        int32_t y = world_add32(a->pc_aim.aim_y,a->pc_aim.render_y);
+        if (x < a->pc_aim.w_max_leftaimx) x = a->pc_aim.w_max_leftaimx;
+        if (x > a->pc_aim.w_max_rightaimx) x = a->pc_aim.w_max_rightaimx;
+        if (y < a->pc_aim.w_max_botaimy) y = a->pc_aim.w_max_botaimy;
+        if (y > a->pc_aim.w_max_topaimy) y = a->pc_aim.w_max_topaimy;
         if (x < -HAND_MAX_DIMENSION || x > HAND_MAX_DIMENSION ||
             y < -HAND_MAX_DIMENSION || y > HAND_MAX_DIMENSION)
             return cm_fail("hand graphics",frame,"render offset exceeds hand limits");
         hand.aim_x = (int)x;
         hand.aim_y = (int)y;
-        if (hand.aim_x < a->pc_aim.w_max_leftaimx) hand.aim_x = a->pc_aim.w_max_leftaimx;
-        if (hand.aim_x > a->pc_aim.w_max_rightaimx) hand.aim_x = a->pc_aim.w_max_rightaimx;
-        if (hand.aim_y < a->pc_aim.w_max_botaimy) hand.aim_y = a->pc_aim.w_max_botaimy;
-        if (hand.aim_y > a->pc_aim.w_max_topaimy) hand.aim_y = a->pc_aim.w_max_topaimy;
     }
     if (muzzle) {
         hand.x_off += ui->MuzzleX[glove][frame][a->pc.muzzle_count];

@@ -408,6 +408,15 @@ int main(int argc, char **argv)
         actors.pc_aim.weapon_aim_step = 18;
         assert(ui_draw_live_hand(&ui,&w,screen,5,&events,&actors,view) == -1);
         actors.pc_aim.weapon_aim_step = 4;
+        actors.pc_aim.aim_x=INT32_MAX;actors.pc_aim.render_x=1;
+        memset(screen,9,sizeof screen);
+        assert(ui_draw_live_hand(&ui,&w,screen,5,&events,&actors,view) == 0);
+        memcpy(encoded,screen,sizeof screen);
+        actors.pc_aim.aim_x=actors.pc_aim.w_max_leftaimx;actors.pc_aim.render_x=0;
+        memset(screen,9,sizeof screen);
+        assert(ui_draw_live_hand(&ui,&w,screen,5,&events,&actors,view) == 0);
+        assert(memcmp(encoded,screen,sizeof screen) == 0);
+        actors.pc_aim.aim_x=ui.CenterAimX[1];
         hud.hp = cm_u16(original.data+UI_SAVE_PREFIX+0x38);
         hud.max_hp = cm_u16(original.data+UI_SAVE_PREFIX+0x3A);
         hud.energy = save.unk_130D50[864];
