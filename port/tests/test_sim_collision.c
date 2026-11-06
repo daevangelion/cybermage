@@ -10,6 +10,38 @@ static events_state e;
 static sim_state s;
 static ai_state a;
 
+static void clearance_props(void)
+{
+    unsigned pass;
+    for (pass = 0; pass < 4; ++pass) {
+        world_object *mover, *prop;
+        memset(&w, 0, sizeof w); memset(&s, 0, sizeof s);
+        w.object_count = 4; w.person_count = 1; w.prop_count = 1;
+        w.player_object = pass < 2 ? 1 : 3;
+        mover = &w.objects[1]; prop = &w.objects[2];
+        mover->x = mover->y = 0x18000;
+        mover->z = 0x6000; mover->height = 0x4000; mover->active = 1;
+        prop->x = prop->y = 0x18000;
+        prop->z = prop->height = 0x8000; prop->unk_74AF0 = 0x2000;
+        prop->flags = 0x60080800; prop->active = 1; prop->targetable = 2;
+        prop->person = 0; w.prop_objects[0] = 2;
+        w.prop_items[0] = pass & 1 ? 17 : 0;
+        world_trig_init(&w.trig);
+        assert(!world_make_omap(&w));
+        /* ClearObject0459AB..0459D1 exempts only player/item contacts. */
+        assert(!sim_clear_object(&s, &w, 1));
+        assert(mover->x == (pass == 1 ? 0x18000 : 0x1e000));
+        assert(mover->y == 0x18000 && mover->floor_z == 0);
+    }
+    w.player_object = 1; w.objects[1].x = w.objects[1].y = 0x18000;
+    w.objects[2].person = -1;
+    assert(sim_clear_object(&s, &w, 1));
+    w.objects[2].person = 1;
+    assert(sim_clear_object(&s, &w, 1));
+    w.objects[2].person = 0; w.prop_objects[0] = 3;
+    assert(sim_clear_object(&s, &w, 1));
+}
+
 static void deferred_pickups(void)
 {
     unsigned pass,i,quantity[4];
@@ -182,5 +214,6 @@ int main(void)
     crouch_contact();
     jumble_axis_proposals();
     deferred_pickups();
+    clearance_props();
     return 0;
 }
