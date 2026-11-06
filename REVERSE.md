@@ -96,7 +96,7 @@ known gaps are deliberate; implementation is not full-game parity.
 | target | Original combat order MATCH, conditional input scope below | `tools/compare_targets.py`:1298 completed checkpoints, all13 original nonempty, zero mismatches | Broader scenes/combat routes ([AI](docs/re/ai.md)) |
 | render_sw | Implemented; scoped complete newgame frame exact | Render gate and `tools/compare_frames.py`:completed newgame frame115 differs0/307200; renderer-only views exact outside hand footprints | Moving props, other scenes, painter ties/extreme pitch ([render](docs/re/render.md)) |
 | render_gl | Opt-in enhanced backend integrated | `tests/render_gl.mk check check-gl check-gl-es scene scene-es`; real640/1920 app replays MATCH; title/HUD exact against SW | Not DOS-raster-exact; broader scene/device acceptance ([render](docs/re/render.md)) |
-| classic input/Sim | Scoped movement/combat/water MATCH; wider92-scenario gate62 MATCH | Named gate below:both106-row movement traces,1299 combat,2033 water/127 wet and original mouse154 MATCH | Remaining running-stance, NPC, selector-VDU and death/reload causes assigned; broader flight/multi-scene routes ([Sim](docs/re/sim.md)) |
+| classic input/Sim | Scoped movement/combat/water MATCH; wider92-scenario gate62 MATCH | Named gate below:both106-row movement traces,1299 combat,2033 water/127 wet and original mouse154 MATCH | Remaining running-stance, NPC, selector-VDU and death/reload causes assigned; legacy joystick and broader flight/multi-scene routes unverified ([Sim](docs/re/sim.md)) |
 | modern controls | Desktop opt-in; Android default action/touch/controller layer | `make -C port -f tests/controls.mk B=build/Controls controls-check`; Android virtual-stick walking verified | Physical-controller/long-play usability ([controls](docs/re/controls.md)) |
 | save/load | Codec, live bridges and genuine saved-start replay integrated | Retail SAVE010246045 bytes/GAMENAME288 round-trip; `--replay-load-slot 0`:earned Training94 and water94 player records MATCH | Full original-save playthrough and demo format ([UI](docs/re/ui.md),[Sim](docs/re/sim.md)) |
 | Events/inventory/vehicles | All90 dispatches; genuine tank entry/exit reducer MATCH | `tests/events.mk`; saved-start `events_trace`:Training639 frames/22,009,716 event bytes/116 vehicle rows MATCH; water94/3,237,736 bytes | Reducer consumes measured Sim phase inputs; full vehicle/multi-scene gameplay not established ([Events](docs/re/events.md)) |
@@ -124,11 +124,13 @@ all106 measured BDA bytes, including Ctrl=4 on frames71..75. This named receipt
 does not silently certify later concurrent HEAD changes.
 
 Later named4461e87 incremental route gate:
-[gate-4461e87.json](docs/re/gate-4461e87.json) records3/4 full actor/RNG matches
-and4/4 player matches: hall119110, door5-plain81 and SYP-approach96 fully match; door5
-approach198 first differs on NPC120/RNG130. Actual saved switch5 changes0→1
-in both original and native door5-plain runs; switch38 remains0 in both SYP
-approach exports. These incremental results do not
+[gate-4461e87.json](docs/re/gate-4461e87.json) records8/9 full actor/RNG matches
+and9/9 player matches across the upper-hall, door and decoder segments.
+Only door5 approach198 first differs on NPC120/RNG130. Actual saved switch5
+changes0→1 in both door5-plain runs. Switch38 remains0 during the unsuccessful
+attempts, then changes0→1 after actual F3/F6 decoder use; the native F5/F6
+246045-byte save exports are byte-identical to their original counterparts.
+These incremental results do not
 replace the full92-scenario counts above; the consolidated owner cohort awaits
 the difficulty, death/reload and remaining recoil cutovers.
 
