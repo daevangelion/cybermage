@@ -126,6 +126,8 @@ thresholds at092630, announcement sample sequencing and PCDeadMan on expiry.
 `events_countdown` is a separate post-world console tick for the integration owner.
 Selected weapon spell/slot and melee dice now travel through selector/save state;
 coder generation uses original04D3B0 and saves its24 bytes explicitly.
+Fixtures assert both selector equipment paths, all selected-field/coder/bet
+save round-trips and countdown rebasing from a different load clock.
 
 The added focused fixtures exercise all20 added dispatch types, signed actor
 height and invalid mapping, panel alias timing, coder alphabet and countdown
