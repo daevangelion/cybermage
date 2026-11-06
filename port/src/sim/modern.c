@@ -5,7 +5,14 @@ static int select_action(sim_state *s, world *w, const cm_input *in)
     events_state *e = s->events;
     events_selector *q;
     unsigned i, index = 0, kind;
-    if (!e || (!in->cycle && !in->select_slot && !in->select_open)) return 0;
+    if (!e) return 0;
+    if (!in->cycle && !in->select_slot && !in->select_open) {
+        if (e->selector_kind) {
+            if (events_keyboard(e, s, s->ai, w)) return -1;
+            if (e->selector_kind && (in->mouse_pressed & 1)) e->selector_confirm = 1;
+        }
+        return 0;
+    }
     kind = e->selector_kind && !in->select_open ? e->selector_kind : in->select_kind;
     if (kind < 1 || kind > 3) kind = 1;
     q=&e->selectors[kind-1];

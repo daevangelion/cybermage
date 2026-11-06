@@ -162,8 +162,8 @@ int events_process_selector(events_state *e, sim_state *s, world *w)
     if (scan(s, 0x48) && row>0) --row;
     if (scan(s, 0x50) && row < 3 && row < (count - 1) / 5) ++row;
     changed=world_add32(world_mul32(row,5),col)!=old;
-    if(!changed && s->mouse_present) {
-        if(confirm) changed=1;
+    if(!changed && (s->mouse_present || s->selector_pointer)) {
+        if(confirm && !s->selector_pointer) changed=1;
         else {
             x=s->mouse_hand_x;y=world_sub32(100,s->mouse_hand_y);
             col=x<-48?0:x<2?1:x<50?2:x<90?3:4;
@@ -183,7 +183,7 @@ int events_process_selector(events_state *e, sim_state *s, world *w)
         }
     }
     x=world_sub32(world_mul32(col,54),92);y=world_sub32(140,world_mul32(row,44));
-    if(s->mouse_present) {
+    if(s->mouse_present || s->selector_pointer) {
         if(changed) platform_mouse_warp(world_mul32(world_add32(160,x),2),
                                        world_mul32(world_sub32(200,y),2));
         else { x=s->mouse_hand_x;y=world_sub32(100,s->mouse_hand_y); }

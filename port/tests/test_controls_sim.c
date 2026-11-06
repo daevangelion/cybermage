@@ -162,6 +162,83 @@ static void vehicle_secondary(void)
     assert(!s.tank_hand && !s.unk_144b1c); /* Original13E78 ignores vehicle Ctrl. */
 }
 
+static void selector_arena(void)
+{
+    arena();
+    memset(&e, 0, sizeof e);
+    e.actors = &a; e.ambient_slot = -1; s.events = &e;
+    e.items[0].type = 120; e.items[0].kind = 0;
+    e.items[1].type = 6; e.items[1].kind = 9; e.items[1].quantity = 1;
+    w.persons[0].unk_0038 = 40 << 16 | 17;
+}
+
+static void modern_selector(void)
+{
+    cm_controls controls;
+    cm_input physical = {0}, semantic = {0};
+    selector_arena();
+    semantic.modern = 1; semantic.select_kind = 3; semantic.cycle = 1;
+    assert(!sim_modern_input(&s, &w, &semantic));
+    assert(e.selector_kind == 3 && e.selectors[2].index == 1);
+    controls_init(&controls);
+    physical.held[0x1c] = 1;
+    controls_frame(&controls, CONTROLS_MENU, &physical, &semantic);
+    assert(semantic.modern && semantic.pressed[0x1c]);
+    assert(!sim_frame(&s, &w, &semantic, 2) && !events_input(&e, &s, &a, &w));
+    assert(!e.selector_kind && s.pc_mode == 5 && (uint16_t)w.persons[0].unk_0038 == 40);
+
+    selector_arena();
+    memset(&semantic, 0, sizeof semantic);
+    semantic.modern = 1; semantic.select_kind = 3; semantic.select_open = 1;
+    assert(!sim_modern_input(&s, &w, &semantic) && e.selectors[2].index == 0);
+    controls_init(&controls); memset(&physical, 0, sizeof physical);
+    physical.mouse_x = 244; physical.mouse_y = 120;
+    physical.mouse_pressed = physical.mouse_released = 1; /* Tap, no prior hover. */
+    controls_frame(&controls, CONTROLS_MENU, &physical, &semantic);
+    assert(semantic.mouse_pressed & 1);
+    assert(!sim_frame(&s, &w, &semantic, 2) && !events_input(&e, &s, &a, &w));
+    assert(s.selector_pointer && !s.mouse_present && !e.selector_kind);
+    assert((uint16_t)w.persons[0].unk_0038 == 40 && !e.items[1].quantity);
+
+    selector_arena();
+    memset(&semantic, 0, sizeof semantic);
+    semantic.modern = 1; semantic.select_kind = 3; semantic.select_open = 1;
+    assert(!sim_modern_input(&s, &w, &semantic));
+    controls_init(&controls); memset(&physical, 0, sizeof physical);
+    physical.mouse_x = 244; physical.mouse_y = 120; physical.mouse_dx = 1;
+    controls_frame(&controls, CONTROLS_MENU, &physical, &semantic);
+    assert(!sim_frame(&s, &w, &semantic, 2) && !events_input(&e, &s, &a, &w));
+    assert(e.selector_kind == 3 && e.selectors[2].index == 1 && e.items[1].quantity == 1);
+    physical.mouse_dx = 0; physical.held[0x4b] = 1;
+    controls_frame(&controls, CONTROLS_MENU, &physical, &semantic);
+    assert(!sim_frame(&s, &w, &semantic, 4) && !events_input(&e, &s, &a, &w));
+    assert(!s.selector_pointer && e.selectors[2].index == 0); /* Stale pointer cannot undo arrows. */
+    physical.held[0x4b] = 0; physical.mouse_pressed = 4;
+    controls_frame(&controls, CONTROLS_MENU, &physical, &semantic);
+    assert(semantic.pressed[1]);
+    assert(!sim_frame(&s, &w, &semantic, 6) && !events_input(&e, &s, &a, &w));
+    assert(!e.selector_kind && s.pc_mode == 5 && e.items[1].quantity == 1);
+
+    selector_arena();
+    memset(&semantic, 0, sizeof semantic);
+    semantic.modern = 1; semantic.select_kind = 3; semantic.cycle = 1;
+    assert(!sim_modern_input(&s, &w, &semantic));
+    controls_init(&controls); memset(&physical, 0, sizeof physical);
+    physical.pad_buttons = 1; /* A acquired on foot must not confirm a newly opened menu. */
+    controls_frame(&controls, CONTROLS_FOOT, &physical, &semantic);
+    controls_frame(&controls, CONTROLS_MENU, &physical, &semantic);
+    assert(!semantic.pressed[0x1c]);
+    assert(!sim_frame(&s, &w, &semantic, 2) && !events_input(&e, &s, &a, &w));
+    assert(e.selector_kind == 3);
+    physical.pad_buttons = 0;
+    controls_frame(&controls, CONTROLS_MENU, &physical, &semantic);
+    physical.pad_buttons = 1;
+    controls_frame(&controls, CONTROLS_MENU, &physical, &semantic);
+    assert(semantic.pressed[0x1c]);
+    assert(!sim_frame(&s, &w, &semantic, 4) && !events_input(&e, &s, &a, &w));
+    assert(!e.selector_kind && (uint16_t)w.persons[0].unk_0038 == 40);
+}
+
 static int32_t speed(int magnitude, int run)
 {
     cm_input input = {0};
@@ -185,6 +262,7 @@ int main(int argc, char **argv)
     data_dir = argv[1];
     classic_mouse();
     vehicle_secondary();
+    modern_selector();
     arena();
     w.object_count = w.person_count = 1;
     w.player_object = w.player_person = 0;

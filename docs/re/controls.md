@@ -161,6 +161,16 @@ negative control (`artifact://3103`); the configured reducer and the existing
 modern movement/look/aim/jump fixture pass in the integrated strict build
 (`artifact://3297`). This unit result is not a full original mouse replay verdict.
 
+Enhanced in-game selectors retain their modal keyboard path: Enter/controller A
+confirms and Escape/right click cancels; mouse, RT and touch clicks use the
+actual pointer location, including a complete tap without a preceding hover
+frame. A transient semantic selector-pointer sample reuses the existing selector
+geometry without enabling classic mouse/joystick routing. An idle pointer does
+not undo keyboard navigation, and inputs acquired on foot cannot confirm a new
+menu until released. The focused pre-fix regression demonstrates the missing
+Enter confirmation (`artifact://3794`); the expanded fixture covers these
+keyboard, pointer and context-ownership paths.
+
 ## Focused verification
 
 ```

@@ -1,5 +1,6 @@
 #include "sim.h"
 #include "ai.h"
+#include "events.h"
 #include <string.h>
 
 /* CM_HI.EXE: CM_ISR9 067B7B. E0 selects a different bit pair; it is not
@@ -93,7 +94,9 @@ void sim_input(sim_state *s, const cm_input *input)
     unsigned i;
     s->mouse_present=!input->modern && s->input_device==1 && input->mouse_present;
     s->joystick_present=!input->modern && s->input_device==2 && input->joystick_present;
-    if(s->mouse_present) {
+    s->selector_pointer=input->modern && s->events && s->events->selector_kind &&
+        (input->mouse_dx || input->mouse_dy || (input->mouse_pressed&1));
+    if(s->mouse_present || s->selector_pointer) {
         int32_t x=world_sub32(input->mouse_x,320)/2;
         int32_t y=world_sub32(input->mouse_y/2,100);
         s->mouse_hand_x=x<-156?-156:x>156?156:x;
