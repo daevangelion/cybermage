@@ -134,9 +134,10 @@ save round-trips and countdown rebasing from a different load clock.
 The added focused fixtures exercise all20 added dispatch types, signed actor
 height and invalid mapping, panel alias timing, coder alphabet and countdown
 threshold/expiry. These are source-grounded unit checks, not90-type runtime
-oracle parity. Vehicle entry/exit still needs the real-oracle route comparison;
-the supplied retail SAVE010.DAT is the initial scene1 position, not a vehicle
-save. No vehicle-debug override, coordinate patch or fabricated save is used.
+oracle parity. Genuine Training tank entry is now compared below; aircar/exit
+runtime parity is not claimed. The supplied retail SAVE010.DAT is the initial
+scene1 position, not a vehicle save. No vehicle-debug override, coordinate patch
+or fabricated save is used.
 
 ## Extended original-input reducer comparison
 
@@ -197,6 +198,43 @@ corridor trace still matched. The negative copies live only under ignored captur
 Deleting an idle interior MoveWorld observation and supplying a header-only
 phase file both fail explicitly; only an uncompleted final frame may omit its
 phase observation. Unused trailing observations also reject.
+
+## Genuine Training tank entry
+
+Controls' original-menu Training route earned the LOWER checkpoint in
+`captures/scene11-training-lower-lift-save/saves/SAVE000.DAT`, SHA-256
+`39842d7ed24bd600a3eedbd39ed3ea775217e527a1ab16d8414866e18675f0cc`.
+The original then loads that unchanged save and approaches/enters the real tank
+using ordinary keys. Full input schedule, import/export hashes and producer
+identity are in `captures/scene11-training-tank-events/run.json`; the scripted
+original save after entry is TANK, not a fabricated starting state.
+
+```
+tools/run_capped.sh make -C port -f tests/events.mk B=build/Events2 check build/Events2/events_trace
+tools/run_capped.sh port/build/Events2/events_trace orig/retail \
+  captures/scene11-training-tank-events/frames.csv \
+  captures/scene11-training-tank-events/events-input.csv \
+  --replay-load-slot 0 --user captures/Integrator-training-tank/user
+```
+
+The native user SAVE000 hash was independently checked against the exact LOWER
+hash above. Real UI/World/Sim/AI/Events save import initializes the reducer;
+expected frame outputs are never imported. All589 pre-frame checkpoints matched,
+20,287,516 independently computed event/switch/vehicle bytes, including98 vehicle
+rows. There are588 observed result edges. This adds real scene11 reducer coverage
+to the earlier scene1 routes, not an inter-scene-request comparison.
+
+Enter in frame489 queues tankFlag1; original MoveWorld489 still sees the foot
+player. Original HandleNextFrame01C1CB..01C1FC consumes that prior request before
+keyboard01C29A, rejecting a dead selected vehicle. Entry occurs at MoveWorld490
+and appears in pre-frame491: object1375/person0 becomes object1416/person41,
+mode5 becomes7. The native input reducer now follows that ordering instead of
+consuming a newly generated request immediately. The pending/dead-target fixture
+failed before the fix, then passed without changing comparator predicates.
+
+Captured producer SHA-256:
+binary `99bd75b209f15df150a4d83d8b739fabfc5a012d4e3d524f6faa8bbb26716bb1`,
+patch `411930364140c12023c77ff3dfbc026279d4f5bea98715356b8cfcae9110b4c3`.
 
 ## Review corrections
 

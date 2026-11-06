@@ -192,6 +192,25 @@ static void crushing_feedback(void)
     }
 }
 
+static void pending_vehicle(void)
+{
+    event_setup(0);w.scene=11;w.person_count=56;e.switch_count=0;
+    w.persons[55].object=2;w.persons[55].type=1;
+    a.monster_count=2;a.monsters[1].kind=5;
+    w.objects[1].height=0x10000;w.objects[1].active=1;
+    w.objects[2].x=0x4000;w.objects[2].z=0x4000;
+    w.objects[1].heading=cm_atan64k(0,0,0x4000,0);
+    s.pc_mode=5;s.kb_scan_status[0x1C]=2;
+    assert(events_input(&e,&s,&a,&w)==0);
+    assert(e.tank_flag==1 && w.player_object==1 && w.player_person==0 && s.pc_mode==5);
+    w.persons[55].status=2;
+    assert(events_input(&e,&s,&a,&w)==0);
+    assert(e.tank_flag==1 && w.player_object==1 && s.pc_mode==5);
+    w.persons[55].status=0;
+    assert(events_input(&e,&s,&a,&w)==0);
+    assert(!e.tank_flag && w.player_object==2 && w.player_person==55 && s.pc_mode==7);
+}
+
 static void retail_cosmetics(const char *data)
 {
     unsigned scene,tick,i;
@@ -347,6 +366,7 @@ int main(int argc, char **argv)
     cosmetics();
     draining_feedback();
     crushing_feedback();
+    pending_vehicle();
     event_setup(0);snd_enable(0,0);e.autoDestruct=4;e.autoDTime=16800;e.autoMSlot=-1;
     e.ticks=2400;
     assert(events_countdown(&e,&s,&a,&w)==0 && e.autoDestruct==4);

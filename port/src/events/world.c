@@ -1212,6 +1212,12 @@ int events_input(events_state *e, sim_state *s, ai_state *a, world *w)
     if (!e || !s || !a || !w || w->player_object >= w->object_count) return cm_fail("MoveWorld",0,"missing simulation state");
     e->ticks = s->timer_ticks;
     e->actors = a;
+    /* HandleNextFrame01C1CB consumes the prior request before keyboard01C29A. */
+    if(e->tank_flag==1 && s->pc_mode!=7) {
+        if(e->vehicle_person<=0 || (unsigned)e->vehicle_person>=w->person_count)
+            return cm_fail("vehicle",(uint32_t)e->vehicle_person,"invalid pending vehicle person");
+        if(w->persons[e->vehicle_person].status!=2 && events_set_tank_mode(e,s,w,1)) return -1;
+    }
     {
         int chain=snd_take_video();
         if(chain) e->video_chain=chain;
@@ -1235,7 +1241,6 @@ int events_input(events_state *e, sim_state *s, ai_state *a, world *w)
         if (s->pc_mode == 7) { if (events_set_tank_mode(e,s,w,0)) return -1; }
         else if (events_switch_search(e,s,a,w)) return -1;
     }
-    if (e->tank_flag && s->pc_mode != 7 && events_set_tank_mode(e,s,w,1)) return -1;
     return 0;
 }
 
