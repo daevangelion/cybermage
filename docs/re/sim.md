@@ -392,3 +392,21 @@ loads. Negative-fixture ERROR lines are expected. The controls physics arena
 now supplies an inactive actor state and loads the real EXE tables through an
 explicit asset-directory argument; no existing motion/jump/selection assertions
 or production hooks were disabled to accommodate swim handling.
+
+### Terminal voice-handle ownership
+
+The game loop clears `actors.pc.sword_hum_slot` after successful credits/ending
+movie entry and after `snd_close`, just as death/deep-load teardown invalidates
+that hardware handle. It deliberately preserves `sword_hum_sound`; original
+KillSound/KillLoops writes at028719/028803 clear the slot, not the sample ID.
+Ordinary pause stops only the swim loop (01BC53..01BC83), not the hum.
+Movie entry already stops PCM through `snd_movie_begin`→`snd_kill(NULL)`;
+the loop does not duplicate that teardown or add Audio→AI coupling.
+
+`test_sim_loop` opens the real credits and ending assets and checks both handle
+invalidation and sample-ID preservation, plus pause/death/shutdown. The movie
+assertion failed before its fix (`artifact://2225`); after that fix the separate
+shutdown assertion failed (`artifact://2230`). Strict app/test builds and the
+complete lifecycle fixture then exited0 (`artifact://2233`), including its
+existing load/save/death/Training/invalid-CLI negatives. These focused follow-on
+checks are separate from the named full-game cohort above.

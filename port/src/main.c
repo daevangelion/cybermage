@@ -439,6 +439,13 @@ static int next_scene(const char *data, const char *user)
     return save_game(user, UI_SAVE_SLOTS);
 }
 
+static int movie_start(const char *data, unsigned kind, uint32_t ticks)
+{
+    if (snd_movie_begin(data, kind, 0, ticks)) return -1;
+    actors.pc.sword_hum_slot = -1;
+    return 0;
+}
+
 static int death_start(uint32_t ticks)
 {
     unsigned x;
@@ -869,7 +876,7 @@ int main(int argc, char **argv)
         }
         if (action == UI_QUIT) break;
         if (action == UI_CREDITS) {
-            if (snd_movie_begin(data, SND_MOVIE_CREDITS, 0, ticks)) goto out;
+            if (movie_start(data, SND_MOVIE_CREDITS, ticks)) goto out;
             playing = 0;
             goto audio_output;
         }
@@ -919,7 +926,7 @@ int main(int argc, char **argv)
                 if (snd_tick(&game)) goto out;
                 if (events.ending_requested) {
                     events.ending_requested = 0;
-                    if (snd_movie_begin(data, SND_MOVIE_ENDING, 0, ticks)) goto out;
+                    if (movie_start(data, SND_MOVIE_ENDING, ticks)) goto out;
                     playing = 0;
                     goto audio_output;
                 }
@@ -1033,6 +1040,7 @@ out:
     if (gl_recording) (void)gl_overlay_end();
     snd_movie_end();
     snd_close();
+    actors.pc.sword_hum_slot = -1;
     replay_close(&replay);
     render_gl_close();
     render_unload();

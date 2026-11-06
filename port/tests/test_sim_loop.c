@@ -84,17 +84,23 @@ void sim_loop_checks(void)
     {
         cm_input pause = {0};
         simulation.swim_loop = 0; /* Handle-state fixture, independent of mute/device. */
+        actors.pc.sword_hum_slot = 0;
+        actors.pc.sword_hum_sound = 61;
         ui_open(&ui, UI_GAME);
         pause.pressed[1] = 1;
         assert(menu_input(&pause, 9) == UI_NONE);
         assert(ui.screen == UI_PAUSE && simulation.swim_loop == -1);
+        assert(actors.pc.sword_hum_slot == 0 && actors.pc.sword_hum_sound == 61);
     }
     simulation.swim_loop = 0;
     actors.pc_sound = 0;
     actors.pc.loop_sound = 0;
+    actors.pc.sword_hum_slot = 0;
+    actors.pc.sword_hum_sound = 61;
     assert(!death_start(10));
     assert(simulation.swim_loop == -1 && actors.pc_sound == -1);
     assert(actors.pc.loop_sound == -1);
+    assert(actors.pc.sword_hum_slot == -1 && actors.pc.sword_hum_sound == 61);
     {
         cm_input in = {0};
         ui_view view;
@@ -159,6 +165,19 @@ void sim_loop_checks(void)
         assert(ui.screen == UI_LOAD && ui.return_screen == UI_TITLE);
         assert(!game.object_count);
     }
+    {
+        unsigned kind;
+        for (kind = SND_MOVIE_CREDITS; kind <= SND_MOVIE_ENDING; ++kind) {
+            actors.pc.sword_hum_slot = 0;
+            actors.pc.sword_hum_sound = 61;
+            assert(!movie_start("../orig/retail", kind, 0));
+            assert(actors.pc.sword_hum_slot == -1 && actors.pc.sword_hum_sound == 61);
+            assert(snd_movie_active());
+            snd_movie_end();
+        }
+    }
+    actors.pc.sword_hum_slot = 0;
+    actors.pc.sword_hum_sound = 61;
     snd_close();
 }
 
@@ -174,6 +193,7 @@ int main(int argc, char **args)
     test_user = args[1];
     argv[5] = test_user;
     assert(!cybermage_main((int)(sizeof argv / sizeof argv[0]), (char **)argv));
+    assert(actors.pc.sword_hum_slot == -1 && actors.pc.sword_hum_sound == 61);
     assert(!make_path(keys, sizeof keys, test_user, "training.keys"));
     assert(!platform_file_write(keys, training_keys, sizeof training_keys - 1));
     argv[7] = keys;
