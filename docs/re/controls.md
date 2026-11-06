@@ -174,6 +174,9 @@ not undo keyboard navigation, and inputs acquired on foot cannot confirm a new
 menu until released. The focused pre-fix regression demonstrates the missing
 Enter confirmation (`artifact://3794`); the expanded fixture covers these
 keyboard, pointer and context-ownership paths.
+Modern taps hit the drawn 112×76 tile at (14+116×column,128+88×row);
+gaps and space outside live tiles cannot confirm. Classic glove thresholds remain
+unchanged. The modern regression taps all twenty tile centres.
 
 ## Focused verification
 

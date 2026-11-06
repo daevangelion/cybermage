@@ -192,7 +192,7 @@ static void modern_selector(void)
     semantic.modern = 1; semantic.select_kind = 3; semantic.select_open = 1;
     assert(!sim_modern_input(&s, &w, &semantic) && e.selectors[2].index == 0);
     controls_init(&controls); memset(&physical, 0, sizeof physical);
-    physical.mouse_x = 244; physical.mouse_y = 120;
+    physical.mouse_x = 186; physical.mouse_y = 166;
     physical.mouse_pressed = physical.mouse_released = 1; /* Tap, no prior hover. */
     controls_frame(&controls, CONTROLS_MENU, &physical, &semantic);
     assert(semantic.mouse_pressed & 1);
@@ -205,7 +205,7 @@ static void modern_selector(void)
     semantic.modern = 1; semantic.select_kind = 3; semantic.select_open = 1;
     assert(!sim_modern_input(&s, &w, &semantic));
     controls_init(&controls); memset(&physical, 0, sizeof physical);
-    physical.mouse_x = 244; physical.mouse_y = 120; physical.mouse_dx = 1;
+    physical.mouse_x = 186; physical.mouse_y = 166; physical.mouse_dx = 1;
     controls_frame(&controls, CONTROLS_MENU, &physical, &semantic);
     assert(!sim_frame(&s, &w, &semantic, 2) && !events_input(&e, &s, &a, &w));
     assert(e.selector_kind == 3 && e.selectors[2].index == 1 && e.items[1].quantity == 1);
@@ -237,6 +237,30 @@ static void modern_selector(void)
     assert(semantic.pressed[0x1c]);
     assert(!sim_frame(&s, &w, &semantic, 4) && !events_input(&e, &s, &a, &w));
     assert(!e.selector_kind && (uint16_t)w.persons[0].unk_0038 == 40);
+    {
+        unsigned tile;
+        for (tile = 0; tile < 20; ++tile) {
+            unsigned i;
+            selector_arena();
+            memset(e.items, 0, sizeof e.items);
+            for (i = 0; i < 20; ++i) {
+                e.items[i].type = 4;
+                e.items[i].kind = 6;
+                e.items[i].subtype = (int32_t)(i % 10);
+            }
+            memset(&semantic, 0, sizeof semantic);
+            semantic.modern = 1; semantic.select_kind = 1; semantic.select_open = 1;
+            assert(!sim_modern_input(&s, &w, &semantic));
+            semantic.select_open = 0;
+            semantic.mouse_x = 14 + (int)(tile % 5) * 116 + 56;
+            semantic.mouse_y = 128 + (int)(tile / 5) * 88 + 38;
+            semantic.mouse_pressed = 1;
+            sim_input(&s, &semantic);
+            assert(!sim_modern_input(&s, &w, &semantic));
+            assert(!events_process_selector(&e, &s, &w));
+            assert(!e.selector_kind && e.weapon_slot == tile);
+        }
+    }
 }
 
 static int32_t speed(int magnitude, int run)

@@ -44,6 +44,7 @@ typedef struct {
     int input_device; /* Original inDevice:0 keyboard,1 mouse,2 joystick. */
     int mouse_present, joystick_present; /* Xox+E3510/+E3518, classic only. */
     int selector_pointer; /* Enhanced UI sample, never an original device-routing flag. */
+    int32_t selector_x, selector_y;
     int32_t mouse_hand_x, mouse_hand_y; /* HandleMouseEvents1434A..143BC. */
     int32_t unk_144ae8, unk_144aec, unk_144af0, unk_144af4;
     int32_t unk_144af8, unk_144afc, unk_144b00;

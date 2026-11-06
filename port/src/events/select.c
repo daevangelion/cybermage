@@ -162,7 +162,15 @@ int events_process_selector(events_state *e, sim_state *s, world *w)
     if (scan(s, 0x48) && row>0) --row;
     if (scan(s, 0x50) && row < 3 && row < (count - 1) / 5) ++row;
     changed=world_add32(world_mul32(row,5),col)!=old;
-    if(!changed && (s->mouse_present || s->selector_pointer)) {
+    if (!changed && s->selector_pointer) {
+        x = world_sub32(s->selector_x, 14);
+        y = world_sub32(s->selector_y, 128);
+        if (x >= 0 && x < 5 * 116 && y >= 0 && y < 4 * 88 &&
+            x % 116 < 112 && y % 88 < 76 && (y / 88) * 5 + x / 116 < count) {
+            col = x / 116;
+            row = y / 88;
+        } else confirm = 0;
+    } else if(!changed && s->mouse_present) {
         if(confirm && !s->selector_pointer) changed=1;
         else {
             x=s->mouse_hand_x;y=world_sub32(100,s->mouse_hand_y);
