@@ -13,6 +13,9 @@ deadlines and frame pacing exclude suspension, not merely movement deltas.
 Original replay fails closed before starting a movie, whose modal frames have no
 CMTRACE clock/input contract. Every executed actor frame requires measured
 actor-clocks.csv entries; only the unexecuted terminal checkpoint may omit them.
+GL validates light descriptors only when tile or object geometry uses them.
+Light0 ignores its descriptor and selects the default distance curve, as software
+does; event-written unused descriptors do not abort presentation.
 
 `vis` owns the pixel-free original ray traversal and ordered scene lists.
 Dependency direction is `render_sw → vis ← target → world`; neither `vis` nor

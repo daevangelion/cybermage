@@ -38,6 +38,7 @@ typedef struct {
     image_cache images[GLR_TEXTURE_MAX];
     object_cache objects[CM_OBJECT_MAX];
     glr_batch batches[GLR_TEXTURE_MAX];
+    uint32_t tile_lights;
     uint64_t cells[CM_MAP_LEVELS][CM_MAP_CELLS];
     uint32_t id_flags[256];uint16_t id_texture[256];
     const world *world;
@@ -254,6 +255,8 @@ static int static_mesh(const world *w,int force)
         if (cell_key(&w->cells[l][t])!=s.cells[l][t]) {changed=1;break;}
     if (!changed) return 0;
     if (glr_build_tiles(w,tile_vertices,GLR_TILE_QUADS,s.batches,&s.static_quads)) return -1;
+    s.tile_lights = 0;
+    for (i=0;i<s.static_quads;++i) s.tile_lights |= UINT32_C(1) << tile_vertices[i*4].light;
     s.gl.BindBuffer(GL_ARRAY_BUFFER,s.vbo[0]);
     s.gl.BufferData(GL_ARRAY_BUFFER,(GLsizeiptr)(s.static_quads*4*sizeof(glr_vertex)),tile_vertices,GL_STATIC_DRAW);
     for (i=0;i<GLR_TEXTURE_MAX;++i) if (s.batches[i].count && ensure_image(i)) return -1;
@@ -309,14 +312,25 @@ static void view_uniforms(unsigned program,const world *w)
     s.gl.Uniform1i(u->sky_type,w->sky_type);s.gl.Uniform1i(u->sky_fill,w->sky_fill);
     s.gl.Uniform1i(u->sky_fog,w->sky_fog);s.gl.Uniform1i(u->fog_on,w->fog_on);
 }
+static int light_valid(const world *w,unsigned i)
+{
+    unsigned type;
+    int param;
+    if (!i) return 0; /* Light0 always uses the default distance curve. */
+    if (i>=32) return cm_fail("GL light",i,"light index outside table");
+    type=w->light_type[i];param=w->light_param[i];
+    if (type>6 || (type==6 && i>=16) || (type==0 && (param<0 || param>=64)) ||
+        (type==1 && (param<0 || param>=21)))
+        return cm_fail("GL light",i,"invalid original colormap descriptor");
+    return 0;
+}
+
 static int lights(const world *w)
 {
     GLint light[32][2],curve[16][3],def[3];unsigned i;
     for (i=0;i<32;++i) {
-        unsigned type=w->light_type[i];int param=w->light_param[i];
-        if (type>6 || (type==6 && i>=16) || (type==0 && (param<0 || param>=64)) || (type==1 && (param<0 || param>=21)))
-            return cm_fail("GL light",i,"invalid original colormap descriptor");
-        light[i][0]=(GLint)type;light[i][1]=param;
+        if ((s.tile_lights & (UINT32_C(1)<<i)) && light_valid(w,i)) return -1;
+        light[i][0]=(GLint)w->light_type[i];light[i][1]=w->light_param[i];
     }
     for (i=0;i<16;++i) {curve[i][0]=w->curve_base[i];curve[i][1]=w->curve_shift[i];curve[i][2]=w->curve_scale[i];}
     def[0]=w->shade_override.revision ? w->shade_override.bias:w->curve_base[0];
@@ -366,6 +380,7 @@ static int object_mesh(const world *w,unsigned id)
     if (level>=CM_MAP_LEVELS) level=CM_MAP_LEVELS-1;
     light=w->cells[level][((unsigned)o->y>>16)*32+((unsigned)o->x>>16)].light;
     if (light>=32 || texture>=w->texture_count) return cm_fail("GL object",id,"invalid light or texture");
+    if (light_valid(w,light)) return -1;
     key[k++]=o->x;key[k++]=o->y;key[k++]=o->z;key[k++]=o->floor_z;
     key[k++]=o->radius;key[k++]=o->height;key[k++]=o->heading;key[k++]=(int32_t)o->flags;
     key[k++]=(int32_t)texture;key[k++]=(int32_t)light;key[k++]=(int32_t)mode;

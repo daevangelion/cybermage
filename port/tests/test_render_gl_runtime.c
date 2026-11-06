@@ -108,6 +108,10 @@ int main(void)
     assert(platform_init(1)==0 && render_sync_textures(&w)==0);
     assert(render_gl_open(1,64,64)==0 && render_gl_load(&w,assets,palette)==0);
     draw();assert(pixel(32,20)==7);
+    w.light_type[0] = 99;
+    w.light_param[0] = -1;
+    w.light_type[31] = 99; /* No geometry refers to descriptor31. */
+    draw();assert(pixel(32,20)==7);
     camera_test();
     o->flags|=0x20000;draw();
     for (y=16;y<32;++y) for (x=24;x<40;++x)
