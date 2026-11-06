@@ -557,6 +557,9 @@ pass the old coordinate; JumbleBound passes its already computed proposal.
 Five bounded regressions cover both axes' quarter0/3 snaps, preservation of
 the other axis and a free-origin negative control. Named e4a6fcb fails these
 assertions before the cutover (exit134).
+The named cda7722 consolidated gate passes the collision regression and all
+previously affected Lower/Down/South/fence-jump/fence-out actor/RNG routes;
+the original NPC8 first-correction cause is closed without a mask change.
 
 ## Hand/selector physical dispatch
 
@@ -576,3 +579,6 @@ previous combat physics context rather than changing its existing opt-in
 behavior. The bounded regression checks stationary modes, retained inertia
 decay, cleared hand-mode bob and enhanced-aim jump gravity. Named b04e4f6
 fails before this producer/consumer cutover (assert134).
+Named cda7722 then passes all five phase groups, including the stationary
+and enhanced-aim controls. The actual72-record healing/strafe route matches
+all player state and10650 actor checkpoints/RNG, retaining its genuine heal.
