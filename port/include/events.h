@@ -127,6 +127,8 @@ void events_reset_selectors(events_state *e);
 /* Input: -1 error, 0 proceed to world. Selectors do not stop MoveWorld. */
 int events_input(events_state *e, sim_state *s, struct ai_state *a, world *w);
 int events_move_world(events_state *e, sim_state *s, struct ai_state *a, world *w);
+/* RenderBellsAndWhistles019423/01942A, after actors and text presentation. */
+int events_text_finish(events_state *e, world *w);
 void events_scene_cosmetics(events_state *e, const world *w);
 int events_cosmetics(events_state *e, sim_state *s, struct ai_state *a, world *w);
 int events_countdown(events_state *e, sim_state *s, struct ai_state *a, world *w);

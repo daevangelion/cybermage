@@ -82,17 +82,9 @@ static int start_text(events_state *e, world *w, unsigned scene,
 }
 
 /* SpeechMessage017E9A completion changes only the named switch, not its link. */
-static int dialogue_tick(events_state *e, world *w)
+static int dialogue_complete(events_state *e, world *w)
 {
     unsigned i;
-    const snd_dialogue *text=snd_text();
-    if(!e->text_trigger) return 0;
-    if(!e->text_serial) {
-        if(snd_message(w,e->text_trigger==10?9:w->scene,(unsigned)e->text_message,e->text_object)) return -1;
-        e->text_serial=snd_text()->revision;
-        return 0;
-    }
-    if(text->active) return 0;
     for(i=0;i<2;++i) {
         int index=i?e->text_switch0:e->text_switch1;
         if(index) {
@@ -109,6 +101,19 @@ static int dialogue_tick(events_state *e, world *w)
     }
     e->text_trigger=e->text_object=0;e->text_serial=0;
     return 0;
+}
+
+static int dialogue_tick(events_state *e, world *w)
+{
+    const snd_dialogue *text=snd_text();
+    if(!e->text_trigger) return 0;
+    if(!e->text_serial) {
+        if(snd_message(w,e->text_trigger==10?9:w->scene,(unsigned)e->text_message,e->text_object)) return -1;
+        e->text_serial=snd_text()->revision;
+        return 0;
+    }
+    if(text->active) return 0;
+    return dialogue_complete(e,w);
 }
 
 static int talk_texture(events_state *e, sim_state *s, world *w, events_event *v,
@@ -1294,12 +1299,19 @@ int events_move_world(events_state *e, sim_state *s, ai_state *a, world *w)
         if (v->enabled && dispatch(e,s,a,w,event,tile)) return -1;
         event = v->next;
     }
-    /* Keyboard01309A ends text; SpeechMessage completion is after MoveWorld. */
-    if(e->text_skip_pending) {
-        e->text_skip_pending=0;
-        if(dialogue_tick(e,w)) return -1;
-    }
     return 0;
+}
+
+/* RenderBellsAndWhistles019423/01942A: after actors, before countdown.
+ * Keyboard01309A marks text finished but must not release state3 NPCs during
+ * the same frame's UpdateObjects. Natural completion retains its existing path. */
+int events_text_finish(events_state *e, world *w)
+{
+    if(!e || !w) return cm_fail("SpeechMessage",0,"missing dialogue state");
+    if(!e->text_skip_pending) return 0;
+    e->text_skip_pending=0;
+    if(!e->text_trigger || snd_text()->active) return 0;
+    return dialogue_complete(e,w);
 }
 
 int events_step(events_state *e, sim_state *s, ai_state *a, world *w)

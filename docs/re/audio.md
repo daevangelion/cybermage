@@ -267,8 +267,8 @@ LoadTextMessage0x17750 selects spoken dialogue when enabled; otherwise it reads
 TEXT.MSG's independent directory. Each text message has u16 line count, that
 many u16 offsets, then NUL-terminated strings. Offsets are relative to this
 string block. snd_text exposes borrowed lines, scene/message, speaker object,
-link, active/spoken flag and revision. UI owns typing/timing/rendering and
-completion-trigger application. snd_message sets the request; snd_tick starts
+link, active/spoken flag and revision. UI owns page timing/rendering; Events
+owns completion-trigger application. snd_message sets the request; snd_tick starts
 or retries the next speech segment when the previous slot finishes; moving
 speakers update pan/volume each frame. snd_message_stop is KillSpeechText;
 snd_speech_skip stops only the current segment. The speech-log override is
@@ -283,6 +283,23 @@ stored in SPEECH.ENG/TEXT.MSG. A normal snd_message clears that override.
 These mappings, initial sample flags and music playlists are read from the
 separately supplied CM_HI.EXE through the shared numeric LE table reader at
 snd_open; no retail rule-table payload is bundled in the C sources.
+
+Backslash01309A stops the current message but does not complete its triggers
+during MoveWorld. RenderBellsAndWhistles019423/01942A calls SpeechMessage/TextMessage
+**after UpdateObjects01E7E0**, before countdown01942F. The runtime calls
+`events_text_finish(e,w)` once in that late presentation phase: NPC state3 and
+linked switches still see the active message during the skip frame, then see
+completion next frame. Natural completion keeps its existing path.
+
+Measured original `captures/Audio-water-dialogue`: frame1464/tick2478 has
+Backslash input2, textTrigger1 and NPC130 state3; frame1465/tick2480 has
+textTrigger0 but NPC130 still3; only frame1466 becomes2. Moving pending-skip
+completion merely to the end of MoveWorld was therefore one actor update early.
+`tools/scenarios/water-dialogue-boundary.txt` preserves the genuine input prefix.
+`make -C port -f tests/projectiles.mk B=build/AudioProjectile check-actor-dialogue`
+(run capped) checks that phase, linked-switch timing, one-time completion and
+unregistered-message skip without restarting it. The fixture isolates movement,
+visibility and cosmetics; event reduction and the NPC state3 decision are real.
 
 snd_movie_begin/step/end in movie.c replace IntroEpilogue0x1F4EC. Original
 selector **1=intro,2=credits,other=ending**, with English/French/German filenames.
