@@ -226,8 +226,10 @@ snapshots. No emulated Xox struct or offset-indexed game state was added.
   scene3/messages6,7, scene8/messages7,15, and scene10; scene8/message15 also
   forces centre pan. These are original branches0x17C71..0x17CDC.
 - Static soundDataLoad0x95C34 enables0..33 except4,9,11,12. snd_scene also
-  enables monster-definition sample words+0x52/+0x54/+0x56 and five words
-  +0xCC..+0xD4; class10 enables111/112. Evidence: LoadPERSONS0x226CC..0x22717,
+  enables monster-definition disk sample bytes+0x7D..+0x7F and five words
+  +0xCC..+0xD4; class10 enables111/112. LoadPERSONS0x2265D..0x22672 expands
+  those three disk bytes to runtime words+0x52/+0x54/+0x56 before loading.
+  Evidence: LoadPERSONS0x226CC..0x22717,
   LoadMONSTER0x23349..0x23400. A later spawn can use snd_sample_load.
 - snd_kill clears all voices and PERSON+0x4C/+0x50 handles; snd_kill_loops
   clears looping/speech/actor handles and optionally plays transition31 for

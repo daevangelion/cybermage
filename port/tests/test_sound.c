@@ -11,11 +11,17 @@ static int16_t pcm[2400];
 
 static void controls(void)
 {
+    uint8_t definition[276] = {0};
     snd_slot state[AUDIO_SAMPLE_SLOTS];
     unsigned pan, i;
     int volume, slot;
     w.object_count = 2; w.player_object = 0; w.objects[1].x = 65536;
     assert(snd_scene(&w) == 0);
+    definition[0x7d] = 34;
+    w.person_count = 1; w.persons[0].type = 0;
+    w.monster_definitions.data = definition; w.monster_definitions.size = sizeof definition;
+    assert(snd_scene(&w) == 0 && snd_play(34,32767,32768) == 0);
+    snd_kill(&w); w.person_count = 0;
     assert(snd_clip(&w, 1, 131072, 32767, 0, &pan, &volume) == 1);
     assert(volume == 16383 && pan == 32768);
     assert(snd_clip(&w, 1, 65536, 32767, 100, &pan, &volume) == 0);

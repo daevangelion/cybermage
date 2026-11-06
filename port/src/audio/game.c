@@ -199,7 +199,9 @@ int snd_scene(const world *w)
             return cm_fail("monster definitions", i, "sound actor type outside definitions");
         d = w->monster_definitions.data + (unsigned)type * SND_MONSTER_BYTES;
         for (j = 0; j < 3; ++j) {
-            unsigned sample = cm_u16(d + 0x52 + j * 2);
+            /* LoadPERSONS0x2265D expands disk bytes7D..7F into runtime
+             * MONSTER words52/54/56 before its sample-loading pass. */
+            unsigned sample = d[0x7d + j];
             if (snd_sample_load(sample)) return -1;
         }
         for (j = 0; j < 5; ++j) {
