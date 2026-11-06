@@ -33,7 +33,7 @@ void sim_loop_checks(void)
     events.scene_requested.y = position.y;
     events.scene_requested.z = position.floor_z;
     events.scene_requested.heading = position.heading;
-    assert(!next_scene("../orig/retail"));
+    assert(!next_scene("../orig/retail", test_user));
     assert(!events.scene_requested.pending);
     assert(events.cash == 123 && events.energy == 31);
     assert((uint16_t)game.persons[0].unk_0038 == 23);

@@ -1,13 +1,31 @@
 #include "sim.h"
+#include "ui.h"
 #include <assert.h>
 #include <string.h>
 
 static world w;
+static uint8_t normal_save[UI_SAVE_PREFIX + UI_PERSON_BYTES];
+static uint8_t auto_save[SIM_AUTO_PREFIX + UI_PERSON_BYTES];
+static uint8_t restored_save[sizeof normal_save];
 
 int main(void)
 {
     sim_state s;
     sim_init(&s, 100);
+    {
+        cm_input modern = {0};
+        modern.modern = 1;
+        modern.held[0x39] = modern.pressed[0x39] = 1;
+        sim_input(&s, &modern);
+        assert(s.kb_scan_status[0x39] == 3);
+        modern.pressed[0x39] = 0;
+        sim_input(&s, &modern);
+        assert(s.kb_scan_status[0x39] == 1);
+        modern.held[0x39] = 0;
+        sim_input(&s, &modern);
+        assert(s.kb_scan_status[0x39] == 0);
+        assert(s.kb_latch == 0);
+    }
     sim_scan(&s, 0x1c);
     assert(s.kb_scan_status[0x1c] == 0); /* first make is swallowed */
     sim_scan(&s, 0x9c);
@@ -98,6 +116,34 @@ int main(void)
         assert(values[4] == 0xabcdef12 && loaded.previous_ticks == 123);
         values[0] = 8;
         assert(sim_save_import(&loaded, values) == -1);
+    }
+    {
+        unsigned i;
+        uint32_t size;
+        for (i = 0; i < sizeof normal_save; ++i) normal_save[i] = (uint8_t)(i % 251);
+        memset(normal_save, 0, 4);
+        memset(normal_save + UI_SAVE_PREFIX - 4, 0, 4);
+        normal_save[UI_SAVE_PREFIX - 4] = 1;
+        assert(!sim_auto_pack(normal_save, sizeof normal_save, auto_save,
+                              sizeof auto_save, &size));
+        assert(size == sizeof auto_save);
+        assert(!memcmp(auto_save, normal_save, 8));
+        assert(!memcmp(auto_save + 8, normal_save + 0x758, 8));
+        assert(!memcmp(auto_save + 16, normal_save + 0x201f, 0x2c551 - 0x201f));
+        memcpy(restored_save, normal_save, sizeof normal_save);
+        restored_save[8] = 123; /* AUTO must not restore inventory. */
+        restored_save[0x201f] = 0;
+        assert(!sim_auto_unpack(restored_save, sizeof restored_save, auto_save, size));
+        assert(restored_save[8] == 123);
+        assert(restored_save[0x201f] == normal_save[0x201f]);
+        assert(sim_auto_unpack(restored_save, sizeof restored_save, auto_save, size - 1));
+        auto_save[0] = 1;
+        assert(sim_auto_unpack(restored_save, sizeof restored_save, auto_save, size));
+        auto_save[0] = 0;
+        auto_save[SIM_AUTO_PREFIX - 4] = 2;
+        assert(sim_auto_unpack(restored_save, sizeof restored_save, auto_save, size));
+        assert(sim_auto_pack(normal_save, sizeof normal_save, auto_save,
+                             sizeof auto_save - 1, &size));
     }
     return 0;
 }

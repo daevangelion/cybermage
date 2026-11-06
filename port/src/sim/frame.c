@@ -280,7 +280,8 @@ int sim_frame(sim_state *s, world *w, const cm_input *input, uint32_t timer_tick
     /* HandleNextFrame 01C244..01C258 clears frame actions, not inertia.
      * In particular, zero momentum must not reuse last frame's speed. */
     s->unk_144aec = s->unk_144af0 = s->unk_144af4 = 0;
-    jump = keyboard(s, w);
+    jump = input->modern ? sim_modern_input(s, w, input) : keyboard(s, w);
+    if (jump < 0) return -1;
     if (!jump) s->unk_144b20 = 0;
     can_jump = !s->flight_mode && !s->unk_144b20 && !s->unk_144b1c && !s->unk_144b30 &&
                !s->unk_144b50 && s->unk_144b3c != -1;
@@ -306,7 +307,7 @@ int sim_frame(sim_state *s, world *w, const cm_input *input, uint32_t timer_tick
             s->unk_144af8 = s->fly_curr_throttle;
         }
     }
-    if (jump && running) {
+    if (jump && (running || (input->modern && can_jump))) {
         s->unk_144b34 = 0;
         s->body_height = o->z + o->z / 2 + 0x1000;
         s->unk_144b3c = 0;
@@ -318,11 +319,11 @@ int sim_frame(sim_state *s, world *w, const cm_input *input, uint32_t timer_tick
         s->unk_144b2c = p->unk_007C ? p->unk_0080 : o->floor_z;
         p->unk_007C = 0;
         s->unk_144b24 = s->unk_144ae8;
-    } else if (jump && can_jump && !s->flight_mode &&
+    } else if (!input->modern && jump && can_jump && !s->flight_mode &&
                (s->pc_mode == 1 || s->pc_mode == 2 || s->pc_mode == 5)) {
         s->previous_pc_mode = s->pc_mode;
         s->pc_mode = 3;
-    } else if (!jump && s->pc_mode == 3) {
+    } else if (!input->modern && !jump && s->pc_mode == 3) {
         s->pc_mode = s->previous_pc_mode;
     }
     momentum(s);

@@ -249,11 +249,21 @@ static void person(save_io *io, const world_person *p, world_person *out)
 int ui_load_game(ui_save_state *save, world *w, const uint8_t *data,
                  uint32_t size, const char *asset_dir)
 {
-    unsigned scene, i;
-    save_io io = {data, NULL, 0};
+    unsigned scene;
     if (ui_save_scene(data, size, &scene)) return -1;
     world_close(w);
     if (world_load_scene(w, asset_dir, scene)) return -1;
+    return ui_save_overlay(save, w, data, size);
+}
+
+int ui_save_overlay(ui_save_state *save, world *w, const uint8_t *data,
+                      uint32_t size)
+{
+    unsigned scene, i;
+    save_io io = {data, NULL, 0};
+    if (ui_save_scene(data, size, &scene)) return -1;
+    if (scene != w->scene)
+        return cm_fail("SAVE*.DAT", 0, "overlay scene differs from loaded scene");
     word32(&io, 0);
     w->unk_5E7A8 = signed32(word32(&io, 0));
     prefix(&io, save);

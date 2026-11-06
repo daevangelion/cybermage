@@ -68,6 +68,12 @@ int sim_start_scene(sim_state *s, world *w)
 void sim_input(sim_state *s, const cm_input *input)
 {
     unsigned i;
+    if (input->modern) {
+        for (i = 0; i < SIM_SCAN_COUNT; ++i)
+            s->kb_scan_status[i] = (uint8_t)((input->held[i] ? 1 : 0) |
+                                                   (input->pressed[i] ? 2 : 0));
+        return;
+    }
     for (i = 0; i < input->raw_count; ++i)
         sim_scan(s, input->raw_scans[i]);
 }

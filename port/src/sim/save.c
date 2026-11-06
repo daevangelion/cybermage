@@ -1,5 +1,7 @@
 #include "sim.h"
+#include "ui.h"
 #include <limits.h>
+#include <string.h>
 
 /* SaveGame/LoadGame's 29 discontiguous words at file06D4. Unknown fields
  * belonging to UI/AI/Events stay untouched; this is not a struct dump. */
@@ -57,5 +59,53 @@ int sim_save_import(sim_state *s, const uint32_t v[29])
     s->unk_144b34 = signed_word(v[SAVE_CROUCH]);
     s->body_height = signed_word(v[SAVE_BODY]);
     s->unk_144b50 = signed_word(v[SAVE_SWIM]);
+    return 0;
+}
+
+/* AutoSave 051733..051946 selects these ranges from SaveGame's byte layout.
+ * Reuse the explicit UI codec: neither format contains native structs. */
+enum {
+    SAVE_WORLD_WORDS = 0x758, SAVE_OBJECTS = 0x201f,
+    SAVE_OBJECTS_END = 0x2c551, SAVE_LIGHTS = 0x2c8a9,
+    AUTO_OBJECTS = 16,
+    AUTO_LIGHTS = AUTO_OBJECTS + SAVE_OBJECTS_END - SAVE_OBJECTS
+};
+
+int sim_auto_pack(const uint8_t *data, uint32_t size, uint8_t *out,
+                    uint32_t capacity, uint32_t *written)
+{
+    uint32_t count, need;
+    if (!data || !out || !written || size < UI_SAVE_PREFIX)
+        return cm_fail("AUTO*.DAT", size, "truncated source save");
+    count = cm_u32(data + UI_SAVE_PREFIX - 4);
+    if (cm_u32(data) >= 12 || count > CM_OBJECT_MAX ||
+        size != UI_SAVE_PREFIX + count * UI_PERSON_BYTES)
+        return cm_fail("AUTO*.DAT", size, "invalid source save layout");
+    need = SIM_AUTO_PREFIX + count * UI_PERSON_BYTES;
+    if (capacity < need)
+        return cm_fail("AUTO*.DAT", capacity, "auto output buffer too small");
+    memcpy(out, data, 8);
+    memcpy(out + 8, data + SAVE_WORLD_WORDS, 8);
+    memcpy(out + AUTO_OBJECTS, data + SAVE_OBJECTS, SAVE_OBJECTS_END - SAVE_OBJECTS);
+    memcpy(out + AUTO_LIGHTS, data + SAVE_LIGHTS, size - SAVE_LIGHTS);
+    *written = need;
+    return 0;
+}
+
+int sim_auto_unpack(uint8_t *save, uint32_t size, const uint8_t *data,
+                      uint32_t length)
+{
+    uint32_t count;
+    if (!save || !data || size < UI_SAVE_PREFIX || length < SIM_AUTO_PREFIX)
+        return cm_fail("AUTO*.DAT", length, "truncated auto save");
+    count = cm_u32(data + SIM_AUTO_PREFIX - 4);
+    if (count > CM_OBJECT_MAX || length != SIM_AUTO_PREFIX + count * UI_PERSON_BYTES ||
+        size != UI_SAVE_PREFIX + count * UI_PERSON_BYTES ||
+        cm_u32(save + UI_SAVE_PREFIX - 4) != count || cm_u32(data) != cm_u32(save))
+        return cm_fail("AUTO*.DAT", length, "auto save scene or layout mismatch");
+    memcpy(save, data, 8);
+    memcpy(save + SAVE_WORLD_WORDS, data + 8, 8);
+    memcpy(save + SAVE_OBJECTS, data + AUTO_OBJECTS, SAVE_OBJECTS_END - SAVE_OBJECTS);
+    memcpy(save + SAVE_LIGHTS, data + AUTO_LIGHTS, size - SAVE_LIGHTS);
     return 0;
 }

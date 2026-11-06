@@ -116,6 +116,22 @@ sections and linker garbage collection from fire.c, fire_flat.c, slide.c,
 world/math.c and world/sight.c. This verifies those synthetic sweep cases, not
 all missile lifecycles or a retail firefight.
 
+## Automatic scene persistence
+
+Retail `CM_HI.EXE` AutoSave `051640..0519FF` is **not** SAVE*.DAT:
+it writes `AUTO0%02u.DAT`, starts with scene, +5E7A8, +BDEB8, +5DFA0,
+then object arrays; it omits player inventory, Sim words and missile/SoulFire
+records. The remaining light/event/aperture/switch/fire fields and PERSON tail
+follow the regular save order. PERSONs include player index zero. FindAutoSlot
+`037AE8..037B12` scans ten autoSlot words for zero and returns -1 when full.
+SetMonDiffLevel normalizes NPCs before writing and restores difficulty afterward.
+Scene routing must not mistake a regular save for this reduced world snapshot.
+MoveWorld type25 `03ACC2..03AD6C`: mode1 loads the current global autoSave
+slot when nonnegative (otherwise ordinary transition); mode2 finds a free slot,
+writes the **outgoing** scene and then transitions. AutoLoad
+`051DE7..051E98` restores current player HP/status, installs the exit event's
+destination coordinates/heading, and clears all missile/SoulFire active flags.
+
 ## Remaining integration limits
 
 Mouse/joystick action translation is not complete. Monster boundary steering is owned by AI's `ai_monster_blocked`;
