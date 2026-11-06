@@ -165,6 +165,9 @@ int main(void)
         assert(canvas[40*CM_WIDTH+160]==201 && canvas[400*CM_WIDTH+160]==17);
         snapshot_test();
     }
+    render_unload(); /* A deep failed save load disarms the shared scene. */
+    assert(!render_gl_reset());
+    assert(!render_gl_clear(0) && !render_gl_present(NULL));
     printf("GL primitives passed: %s\n",render_gl_driver());
     render_gl_close();render_unload();platform_shutdown();return 0;
 }

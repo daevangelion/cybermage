@@ -230,7 +230,8 @@ int render_gl_reset(void)
 {
     const world *w=s.world;
     const render_state *assets=s.assets;
-    unsigned width=s.width,height=s.height,loaded=s.loaded;
+    unsigned width=s.width,height=s.height;
+    int loaded=s.loaded && assets && assets->shade_maps && assets->fixed_maps && assets->fog_maps;
     unsigned frame=s.frame;
     int gles=s.gles;
     const uint8_t *palette=s.palette_source;

@@ -21,6 +21,9 @@ lost-context names and geometry/image/revision caches without deleting invalid
 names, recreates programs/buffers/framebuffers, then reloads caller-owned indexed
 assets and palette before drawing. The runtime test destroys/recreates a real GL
 context and checks the same scene pixel after reset.
+Reset reloads a world only while shared colormaps are live; a disarmed failed
+load can resume its Load/Title UI without stale-scene reload. The SDL adapter
+also replaces its tracked context handle with SDL's current handle on reset.
 
 `vis` owns the pixel-free original ray traversal and ordered scene lists.
 `vis_project`, `vis_new_point` and `vis_prop_texture` are also the single
