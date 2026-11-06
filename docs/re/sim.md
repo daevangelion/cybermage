@@ -108,6 +108,14 @@ bridges, `--user` storage and GAMENAME.USR, missile/SoulFire-before-movement
 ordering, player fire/H2H callsites, and BIOS seed metadata. Final integrated
 verification below supersedes the older investigation results above.
 
+`tools/run_capped.sh .venv/bin/python tools/sim_fire_original.py
+port/build/Integrator/test_sim_fire` matched 120 unmodified retail x86 sweeps
+(40 cardinal/diagonal/boundary angles × actor/panel/rotated-panel fixtures).
+The standalone native fixture was compiled with strict C99 flags, function/data
+sections and linker garbage collection from fire.c, fire_flat.c, slide.c,
+world/math.c and world/sight.c. This verifies those synthetic sweep cases, not
+all missile lifecycles or a retail firefight.
+
 ## Remaining integration limits
 
 Mouse/joystick action translation is not complete. Monster boundary steering is owned by AI's `ai_monster_blocked`;

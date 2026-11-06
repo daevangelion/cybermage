@@ -19,12 +19,16 @@ $(B)/%.o: src/%.c
 	@mkdir -p $(@D)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -MMD -MP -c -o $@ $<
 
-check: $(B)/test_core $(B)/test_platform $(B)/test_touch $(B)/test_sim $(B)/test_exe
+check: $(B)/test_core $(B)/test_platform $(B)/test_touch $(B)/test_sim $(B)/test_exe $(B)/test_sim_loop $(B)/test_sim_fire
 	$(B)/test_core
 	$(B)/test_platform $(B)/platform-keys.txt $(B)/platform-dump
 	$(B)/test_touch
 	$(B)/test_sim
 	$(B)/test_exe
+	$(B)/test_sim_loop $(B)/loop-user
+	$(B)/test_sim_fire 0 0
+	$(B)/test_sim_fire 8192 1
+	$(B)/test_sim_fire 16384 2
 	$(abspath ../.venv/bin/python) ../tools/test_rsc.py
 	$(MAKE) -f tests/audio.mk B=$(B)/audio check
 	$(MAKE) -f tests/world.mk B=$(B)/world check
@@ -41,12 +45,20 @@ $(B)/test_touch: tests/test_touch.c src/platform_sdl.c $(AUDIO_CORE)
 	@mkdir -p $(@D)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
-$(B)/test_sim: tests/test_sim.c tests/media_error.c src/sim/input.c src/sim/flat.c
+$(B)/test_sim: tests/test_sim.c tests/media_error.c src/sim/input.c src/sim/flat.c src/sim/fire_flat.c src/sim/save.c
 	@mkdir -p $(@D)
 	$(CC) -Iinclude $(CFLAGS) $(LDFLAGS) -o $@ $^
 
 $(B)/test_exe: tests/test_exe.c tests/media_error.c src/exe.c
 	@mkdir -p $(@D)
 	$(CC) -Iinclude $(CFLAGS) $(LDFLAGS) -o $@ $^
+
+$(B)/test_sim_loop: tests/test_sim_loop.c src/main.c $(filter-out $(B)/main.o,$(OBJECTS))
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $< $(filter %.o,$^) $(LDLIBS)
+
+$(B)/test_sim_fire: tests/test_sim_fire.c $(filter-out $(B)/main.o,$(OBJECTS))
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 -include $(OBJECTS:.o=.d)
