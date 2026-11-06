@@ -126,6 +126,42 @@ static void classic_mouse(void)
     }
 }
 
+static void vehicle_secondary(void)
+{
+    cm_input in = {0};
+    int32_t z;
+    arena();
+    s.pc_mode = 7;
+    in.modern = in.jump = 1;
+    z = w.objects[1].floor_z;
+    assert(!sim_frame(&s, &w, &in, 2));
+    assert(s.tank_hand == 1 && !s.unk_144b1c && w.objects[1].floor_z == z);
+    assert(!sim_frame(&s, &w, &in, 4) && s.tank_hand == 1);
+    in.jump = 0;
+    assert(!sim_frame(&s, &w, &in, 6) && !s.tank_hand);
+    arena();
+    s.pc_mode = 7;
+    s.unk_144b20 = 1;
+    in.jump = 1;
+    assert(!sim_frame(&s, &w, &in, 2) && !s.tank_hand && !s.unk_144b1c);
+    in.jump = 0;
+    assert(!sim_frame(&s, &w, &in, 4) && !s.unk_144b20);
+    in.jump = 1;
+    assert(!sim_frame(&s, &w, &in, 6) && s.tank_hand == 1);
+    arena();
+    s.pc_mode = 7;
+    s.vehicle_type = 1;
+    s.fly_throttle = 24; s.fly_curr_throttle = 20;
+    assert(!sim_frame(&s, &w, &in, 2));
+    assert(!s.tank_hand && !s.unk_144b1c && s.flight_action == 2);
+    arena();
+    s.pc_mode = 7;
+    memset(&in, 0, sizeof in);
+    s.kb_scan_status[s.kb_jump] = 3;
+    assert(!sim_frame(&s, &w, &in, 2));
+    assert(!s.tank_hand && !s.unk_144b1c); /* Original13E78 ignores vehicle Ctrl. */
+}
+
 static int32_t speed(int magnitude, int run)
 {
     cm_input input = {0};
@@ -148,6 +184,7 @@ int main(int argc, char **argv)
     assert(argc == 2);
     data_dir = argv[1];
     classic_mouse();
+    vehicle_secondary();
     arena();
     w.object_count = w.person_count = 1;
     w.player_object = w.player_person = 0;

@@ -132,6 +132,15 @@ Keyboard motion takes priority; classic absolute hand coordinates remain
 640x240 DOS space at the driver boundary. See
 [physical mouse oracle/config provenance](bootstrap.md#physical-mouse-and-original-configuration).
 
+Dedicated physical jumping is limited to foot modes 1/2/5. In a vehicle the
+modern Jump/A action is a secondary request: tank type 0 sets the canonical
+`sim_state.tank_hand` (`PCTankHand`, global `206824`); release clears it.
+Aircar type 1 instead restores flight throttle. These are the original
+`014E6D..014ED3` / `014FF2` branches, not a vehicle-type alias or an imported
+observer flag. Classic keyboard mode 7 continues to ignore Ctrl (`013E78`).
+The pre-fix modern tank physically enters the foot jump table; the focused
+negative control catches that behavior (`artifact://3428`).
+
 Original input fields and jump physics: `docs/re/sim.md`, CM_HI.EXE
 `HandleKeyboardEvents` 012DD4, `ProcessInputEvents` 014754 (jump setup
 014D5E..014E63), `MovePerson` 046D30. Selectors/use/vehicles:

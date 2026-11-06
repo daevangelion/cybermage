@@ -356,12 +356,12 @@ int sim_frame(sim_state *s, world *w, const cm_input *input, uint32_t timer_tick
     }
     if (s->mouse_present) mouse_input(s, input);
     if (!jump) s->unk_144b20 = 0;
-    can_jump = !s->flight_mode && !s->unk_144b20 && !s->unk_144b1c && !s->unk_144b30 &&
+    can_jump = (s->pc_mode == 1 || s->pc_mode == 2 || s->pc_mode == 5) &&
+               !s->flight_mode && !s->unk_144b20 && !s->unk_144b1c && !s->unk_144b30 &&
                !s->unk_144b50 && s->unk_144b3c != -1;
     /* ProcessInputEvents 01476C/0147DD admits foot modes only; held
      * primary melee clears eligibility at0148C4, unlike keySwing_Sword. */
-    running = can_jump && (s->pc_mode == 1 || s->pc_mode == 2 || s->pc_mode == 5) &&
-        !(s->pc_mode == 2 && s->primary_fire) && (input->modern ?
+    running = can_jump && !(s->pc_mode == 2 && s->primary_fire) && (input->modern ?
         input->run && s->movement_request > 0 : s->movement_request > RUN_THRESHOLD);
     s->running = running;
     s->flight_action=0;
@@ -381,12 +381,17 @@ int sim_frame(sim_state *s, world *w, const cm_input *input, uint32_t timer_tick
             if (s->key_hand_y < -96) s->key_hand_y = -96;
             s->flight_action = 3;
         }
-        if (jump) {
+    }
+    /* ProcessInputEvents014E6D..014ED3: secondary controls a tank hand or
+     * restores flight throttle; a vehicle never starts the foot jump table. */
+    if (jump && !s->unk_144b1c && !s->unk_144b20) {
+        if (s->pc_mode == 7 && !s->vehicle_type) s->tank_hand = 1;
+        else if (s->flight_mode || (s->pc_mode == 7 && s->vehicle_type)) {
             s->flight_action = 2;
             s->unk_144ae8 = s->fly_throttle;
             s->unk_144af8 = s->fly_curr_throttle;
         }
-    }
+    } else if (!jump && s->pc_mode == 7 && !s->vehicle_type) s->tank_hand = 0;
     if (jump && (running || (input->modern && can_jump))) {
         s->unk_144b34 = 0;
         s->body_height = o->z + o->z / 2 + 0x1000;

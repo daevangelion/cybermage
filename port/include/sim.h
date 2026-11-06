@@ -23,6 +23,7 @@ typedef struct {
     int32_t pc_mode, previous_pc_mode;
     int modern_aim;
     int32_t vehicle_type, flight_mode, flight_active, flight_unk_144B48;
+    int32_t tank_hand; /* PCTankHand global206824, not Xox vehicle_type130D14. */
     int32_t unk_131418; /* Flight height above the local supporting floor. */
     int32_t flight_action, key_hand_y, fly_throttle, fly_curr_throttle;
     int32_t fire_check, fire_damage, fire_tile_panel, fire_tile_art;
