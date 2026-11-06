@@ -111,6 +111,7 @@ static int load_scene(const char *data, unsigned scene)
     actors.events = &events;
     ai_start_clock(&actors, simulation.previous_ticks);
     events.actors = &actors;
+    events.ticks = simulation.timer_ticks;
     ui.shop_kind = 0;
     death_phase = 0;
     ui_save_init(&save, &game);
@@ -188,6 +189,7 @@ static int load_game(const char *data, const char *user, unsigned slot, uint32_t
     memset(&actors, 0, sizeof actors);
     actors.pc_sound = actors.pc_learn_spell = -1;
     actors.difficulty = 1;
+    events.ticks = ticks;
     if (ai_load_scene_definitions(&actors, &game) || ai_load_tables(&actors, data) ||
         ai_save_import(&actors, &game, &save) ||
         events_init(&events, &game) || events_load_tables(&events, data) ||
@@ -290,9 +292,9 @@ static int death_start(uint32_t ticks)
     return 0;
 }
 
-static int death_step(const cm_input *input, uint32_t ticks)
+static int death_step(const cm_input *input, uint32_t ticks, int no_sound)
 {
-    int song;
+    int song, finished;
     if (death_phase == 1) {
         const uint8_t *image;
         uint32_t size;
@@ -309,10 +311,11 @@ static int death_step(const cm_input *input, uint32_t ticks)
                 death_background[y * CM_WIDTH + x] = image[y / 2 * 320 + x / 2];
         death_phase = 2;
     }
-    if (ui_pc_death(pixels, death_background, death_columns, &game.rng)) return -1;
+    finished = ui_pc_death(pixels, death_background, death_columns, &game.rng);
+    if (finished < 0) return -1;
     song = snd_check_song();
     if (song < 0) return -1;
-    if (song || input->pressed[1]) {
+    if (song || input->pressed[1] || (no_sound && finished)) {
         death_phase = 3;
         ui_open(&ui, UI_DEATH);
     }
@@ -355,6 +358,7 @@ int main(int argc, char **argv)
     unsigned frames = 0, frame = 0, bios_seed = 0;
     uint32_t audio_ticks = 0;
     int headless = 0, status = 1, playing = 0, divergence = 0, seed_explicit = 0, i;
+    int modern = 0;
     for (i = 1; i < argc; ++i) {
         if (!strcmp(argv[i], "--headless")) headless = 1;
         else if ((!strcmp(argv[i], "--data") || !strcmp(argv[i], "--dump") ||
@@ -391,7 +395,8 @@ int main(int argc, char **argv)
         cm_fail("arguments", 0, "--controls must be classic or modern");
         return 2;
     }
-    if (trace && !strcmp(control_mode, "modern")) {
+    modern = !strcmp(control_mode, "modern");
+    if (trace && modern) {
         cm_fail("arguments", 0, "original replays require classic controls");
         return 2;
     }
@@ -401,7 +406,7 @@ int main(int argc, char **argv)
     if (!user) user = platform_user_dir();
     if (platform_directory(user)) goto out;
     controls_init(&controls);
-    if (!strcmp(control_mode, "modern") &&
+    if (modern &&
         (make_path(controls_path, sizeof controls_path, user, "controls.cfg") ||
          controls_load(&controls, controls_path))) goto out;
     world_rng_init(&game.rng, (uint16_t)bios_seed);
@@ -426,7 +431,7 @@ int main(int argc, char **argv)
         uint32_t ticks = platform_ticks(frame);
         ui_action action;
         int shop_modal = 0;
-        if (!strcmp(control_mode, "modern")) {
+        if (modern) {
             controls_context context = !playing || ui.screen != UI_GAME ||
                 death_phase || events.selector_kind ? CONTROLS_MENU :
                 ui.shop_kind || events.shop_requested.kind ? CONTROLS_SHOP :
@@ -480,8 +485,11 @@ int main(int argc, char **argv)
                     if (!(simulation.kb_scan_status[key] & 10)) input.pressed[key] = 0;
         }
         ui.ticks = ticks;
-        if (playing && !death_phase && game.persons[game.player_person].status == 2 &&
-            death_start(ticks)) goto out;
+        if (playing && !death_phase &&
+            (game.persons[game.player_person].status == 2 || events.pc_dead_man)) {
+            events.pc_dead_man = 0;
+            if (death_start(ticks)) goto out;
+        }
         if (!trace && playing && ui.screen == UI_GAME && !death_phase) {
             shop_modal = ui_shop_step(&ui, &events, &game, &input, ticks);
             if (shop_modal < 0) goto out;
@@ -510,7 +518,7 @@ int main(int argc, char **argv)
                 sim_input(&simulation, &input);
                 simulation.previous_ticks = simulation.bp_limit_time = ticks;
                 ai_start_clock(&actors, ticks);
-                if (death_step(&input, ticks)) goto out;
+                if (death_step(&input, ticks, trace != NULL)) goto out;
                 goto audio_output;
             }
             if (ui.screen == UI_GAME && !shop_modal) {
@@ -518,7 +526,8 @@ int main(int argc, char **argv)
                     ai_pc_input(&actors, &simulation, &game) ||
                     events_step(&events, &simulation, &actors, &game) ||
                     ai_update_objects(&actors, &simulation, &game, ticks) ||
-                    ai_pc_hand2hand(&actors, &simulation, &game)) goto out;
+                    ai_pc_hand2hand(&actors, &simulation, &game) ||
+                    events_countdown(&events, &simulation, &actors, &game)) goto out;
                 if (events.scene_requested.pending && next_scene(data, user)) goto out;
                 camera_follow();
                 if (snd_tick(&game)) goto out;
@@ -558,6 +567,8 @@ int main(int argc, char **argv)
                     }
                 }
             }
+            if (modern && ui.screen == UI_GAME && !shop_modal &&
+                controls_draw_map(&controls, &game, pixels)) goto out;
             if (ui_shop_draw(&ui, &events, &game, pixels)) goto out;
         }
 audio_output:

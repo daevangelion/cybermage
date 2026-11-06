@@ -20,16 +20,14 @@ $(B)/%.o: src/%.c
 	@mkdir -p $(@D)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -MMD -MP -c -o $@ $<
 
-check: $(B)/test_core $(B)/test_platform $(B)/test_touch $(B)/test_sim $(B)/test_exe $(B)/test_sim_loop $(B)/test_sim_fire $(B)/test_controls $(B)/test_controls_platform $(B)/test_controls_sim
+check: $(B)/test_core $(B)/test_platform $(B)/test_touch $(B)/test_sim $(B)/test_exe $(B)/test_sim_loop $(B)/test_sim_fire
 	$(B)/test_core
 	$(B)/test_platform $(B)/platform-keys.txt $(B)/platform-dump
 	$(B)/test_touch
 	$(B)/test_sim
 	$(B)/test_exe
 	$(B)/test_sim_loop $(B)/loop-user
-	$(B)/test_controls
-	$(B)/test_controls_platform
-	$(B)/test_controls_sim
+	$(MAKE) -f tests/controls.mk B=$(B) controls-check
 	$(abspath ../.venv/bin/python) ../tools/sim_fire_original.py $(B)/test_sim_fire
 	$(abspath ../.venv/bin/python) ../tools/test_rsc.py
 	$(MAKE) -f tests/audio.mk B=$(B)/audio check
@@ -67,7 +65,7 @@ $(B)/test_controls: tests/test_controls.c tests/media_error.c $(CONTROLS_CORE)
 	@mkdir -p $(@D)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
-$(B)/test_controls_platform: tests/test_controls_platform.c tests/media_error.c src/platform_sdl.c $(AUDIO_CORE) $(CONTROLS_CORE)
+$(B)/test_controls_platform: tests/test_controls_platform.c src/platform_sdl.c $(AUDIO_CORE) $(CONTROLS_CORE)
 	@mkdir -p $(@D)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 

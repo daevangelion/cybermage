@@ -17,6 +17,8 @@ void sim_loop_checks(void)
     assert(simulation.pc_mode == 5);
     assert((uint16_t)game.persons[0].unk_0038 == 40);
     assert((uint16_t)((uint32_t)game.persons[0].unk_0038 >> 16) == 40);
+    memset(ui.auto_slot, 0, sizeof ui.auto_slot);
+    memset(events.auto_slot, 0, sizeof events.auto_slot);
     events.cash = 123;
     events.energy = 31;
     game.persons[0].unk_0038 = 40 * 65536 + 23;
@@ -39,6 +41,30 @@ void sim_loop_checks(void)
     assert((uint16_t)game.persons[0].unk_0038 == 23);
     assert(game.objects[game.player_object].x == position.x);
     assert(game.objects[game.player_object].y == position.y);
+    events.events[1].value[0] = 765;
+    events.scene_requested.pending = 1;
+    events.scene_requested.auto_mode = 2;
+    assert(!next_scene("../orig/retail", test_user));
+    assert(auto_save == 0);
+    events.cash = 124;
+    events.energy = 30;
+    game.persons[0].unk_0038 = 40 * 65536 + 17;
+    events.scene_requested.pending = 1;
+    events.scene_requested.auto_mode = 1;
+    assert(!next_scene("../orig/retail", test_user));
+    assert(auto_save == -1);
+    assert(events.events[1].value[0] == 765);
+    assert(events.cash == 124 && events.energy == 30);
+    assert((uint16_t)game.persons[0].unk_0038 == 17);
+    assert(!death_start(10));
+    {
+        cm_input in = {0};
+        assert(!death_step(&in, 69, 0) && death_phase == 1);
+        assert(!death_step(&in, 70, 0) && death_phase >= 2);
+        in.pressed[1] = 1;
+        assert(!death_step(&in, 71, 0));
+        assert(death_phase == 3 && ui.screen == UI_DEATH);
+    }
     snd_close();
 }
 
