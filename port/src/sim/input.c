@@ -45,6 +45,11 @@ void sim_init(sim_state *s, uint32_t ticks)
     s->kb_jump_bit = 5;
     s->kb_crouch_bit = s->kb_look_center_bit = 1;
     s->kb_look_down_bit = s->kb_look_up_bit = 1;
+    s->kb_hand = 0x1c; s->kb_hand_bit = 5;
+    s->kb_exit = 0x0f; s->kb_exit_bit = 1;
+    s->kb_fly_up = 0x11; s->kb_fly_down = 0x2d;
+    s->kb_map = 0x32; s->kb_vdu = 0x2f;
+    s->kb_fly_up_bit = s->kb_fly_down_bit = s->kb_map_bit = s->kb_vdu_bit = 1;
 }
 
 /* Xox::LoadScene CM_HI.EXE:011F86..011FB0 derives body height after the
@@ -92,6 +97,7 @@ int sim_start_scene(sim_state *s, world *w)
 void sim_input(sim_state *s, const cm_input *input)
 {
     unsigned i;
+    s->modern_input = input->modern;
     s->mouse_present=!input->modern && s->input_device==1 && input->mouse_present;
     s->joystick_present=!input->modern && s->input_device==2 && input->joystick_present;
     s->selector_pointer=input->modern && s->events && s->events->selector_kind &&

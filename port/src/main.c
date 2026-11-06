@@ -255,6 +255,22 @@ static int game_draw(frame_draw *draw, unsigned phase)
     return draw->trace ? replay_draw_end(draw->trace) : 0;
 }
 
+static void configure_input(void)
+{
+    simulation.input_device = ui.config.in_device;
+    actors.pc.kb_fire = ui.config.key[0];
+    actors.pc.kb_fire_bit = ui.config.mask[0];
+#define KEY(field, index) \
+    simulation.kb_##field = ui.config.key[index]; \
+    simulation.kb_##field##_bit = ui.config.mask[index]
+    KEY(hand, 1); KEY(exit, 2);
+    KEY(side_toggle, 3); KEY(side_left, 4); KEY(side_right, 5);
+    KEY(jump, 6); KEY(crouch, 7);
+    KEY(look_down, 8); KEY(look_up, 9); KEY(look_center, 10);
+    KEY(fly_up, 11); KEY(fly_down, 12); KEY(map, 13); KEY(vdu, 14);
+#undef KEY
+}
+
 static int load_scene(const char *data, unsigned scene)
 {
     uint32_t regen_timer = actors.pc.sp_regen_timer;
@@ -275,6 +291,7 @@ static int load_scene(const char *data, unsigned scene)
         render_load(&game, &hipak) || snd_scene(&game)) return -1;
     if (gl_enabled && render_gl_load(&game, render_get_state(), palette)) return -1;
     actors.events = &events;
+    configure_input();
     if (ai_pc_equip(&actors, &simulation, &game)) return -1;
     ai_start_clock(&actors, simulation.previous_ticks);
     events.actors = &actors;
@@ -308,6 +325,7 @@ static int encode_save(uint32_t *size)
     int result;
     if (ai_set_difficulty(&actors, &game, 1)) return -1;
     sim_save_export(&simulation, save.unk_6D4);
+    save.unk_7B7[3] = (uint32_t)simulation.automap;
     save.FireCheck = (uint32_t)simulation.fire_check;
     save.FireDamage = (uint32_t)simulation.fire_damage;
     save.FireTilePanel = (uint32_t)simulation.fire_tile_panel;
@@ -356,6 +374,7 @@ static int save_sim_check(const uint8_t *data)
 static int import_sim(void)
 {
     uint32_t fire[4] = {save.FireCheck, save.FireTilePanel, save.FireTileArt, save.FireDamage};
+    simulation.automap = save.unk_7B7[3] & 1;
     return sim_save_import(&simulation, save.unk_6D4) ||
            sim_save_fire_import(&simulation, fire) ? -1 : 0;
 }
@@ -595,7 +614,7 @@ static ui_action menu_input(cm_input *input, uint32_t ticks)
         /* OptOptions05422D writes CMDATA before applying difficulty. */
         ui_options_to_config(&ui);
         if(ui_config_save(&ui.config,setup_path)) return UI_ERROR;
-        simulation.input_device=ui.config.in_device;
+        configure_input();
         if (game.scenes.data &&
             (ai_set_attack_difficulty(&actors, (unsigned)ui.options[8]) ||
              ai_set_difficulty(&actors, &game, (unsigned)ui.options[8])))
@@ -935,6 +954,7 @@ int main(int argc, char **argv)
     sim_init(&simulation, platform_ticks(0));
     simulation.input_device=ui.config.in_device;
     if (ai_init_pc(&events, &simulation, &game.rng, &exe, 1, platform_ticks(0))) goto out;
+    configure_input();
     while (!input.quit && (!frames || frame < frames)) {
         uint32_t ticks = platform_ticks(frame);
         frame_draw draw = {frame, trace ? &replay : NULL, &input};
@@ -1140,6 +1160,10 @@ int main(int argc, char **argv)
             if (ui.screen == UI_GAME && !shop_modal) {
                 uint32_t fast_ticks, normal_ticks;
                 if (sim_frame(&simulation, &game, &input, ticks)) goto out;
+                if (simulation.vdu_request) {
+                    ui.vdu = (ui.vdu + 1) % 3;
+                    simulation.vdu_request = 0;
+                }
                 if (death_resume) simulation.replay_delta = -1;
                 if (ai_pc_input(&actors, &simulation, &game) ||
                     events_step(&events, &simulation, &actors, &game)) goto out;

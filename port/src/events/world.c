@@ -1277,12 +1277,18 @@ int events_input(events_state *e, sim_state *s, ai_state *a, world *w)
         return 0;
     }
     if (e->selector_kind) return events_process_selector(e,s,w);
-    if(s->pc_mode==7 && (s->kb_scan_status[0x0F]&2u)) {
-        s->kb_scan_status[0x0F]=0;e->tank_flag=-1;
-    }
-    if (s->pc_mode!=7 && s->kb_scan_status[0x1C]) {
-        s->kb_scan_status[0x1C] = 0;
-        if (events_switch_search(e,s,a,w)) return -1;
+    {
+        unsigned exit = s->modern_input ? 0x0f : s->kb_exit;
+        unsigned exit_bit = s->modern_input ? 1 : s->kb_exit_bit;
+        unsigned hand = s->modern_input ? 0x1c : s->kb_hand;
+        unsigned hand_bit = s->modern_input ? 5 : s->kb_hand_bit;
+        if(s->pc_mode==7 && (s->kb_scan_status[exit] & (exit_bit * 2))) {
+            s->kb_scan_status[exit]=0;e->tank_flag=-1;
+        }
+        if (s->pc_mode!=7 && (s->kb_scan_status[hand] & (hand_bit | hand_bit * 2))) {
+            s->kb_scan_status[hand] = 0;
+            if (events_switch_search(e,s,a,w)) return -1;
+        }
     }
     return 0;
 }

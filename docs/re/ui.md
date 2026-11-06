@@ -278,6 +278,13 @@ English ReKeyDefaults052644..05277A. The missing file is created in `--user`;
 an existing malformed file is rejected at its file offset, not replaced.
 The codec retains all calibration and key/mask words. GUI options remain the
 separate LoadOptVals projection, including the original volume-order mapping.
+All fifteen pairs are applied after scene/AI input initialization and on Options
+exit. Classic fire, hand/use, exit, strafe, jump, crouch, look, flight, automap
+state and VDU consumers read those pairs; arrows/keypad and modal Enter remain
+literal as in HandleKeyboardEvents. Modern semantic transport keeps its own
+canonical action keys, independent of CMDATA rebinding. AutoMap's original
+142BF8 toggle is retained in SAVE's 7B7+12 word; its DOS artwork remains distinct
+from the explicitly Enhanced live-topology overlay.
 
 Main reads the real user file before InitPC or a replay's slot load. Leaving
 the real Options screen writes it; a failed write is an error, not a silent

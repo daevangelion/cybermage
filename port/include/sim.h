@@ -22,6 +22,7 @@ typedef struct {
     void *collision_context;
     int32_t pc_mode, previous_pc_mode;
     int modern_aim;
+    int modern_input, automap, vdu_request;
     int32_t vehicle_type, flight_mode, flight_active, flight_unk_144B48;
     int32_t tank_hand; /* PCTankHand global206824, not Xox vehicle_type130D14. */
     int32_t unk_131418; /* Flight height above the local supporting floor. */
@@ -62,6 +63,8 @@ typedef struct {
     unsigned kb_jump, kb_crouch, kb_look_down, kb_look_up, kb_look_center;
     unsigned kb_side_toggle_bit, kb_side_left_bit, kb_side_right_bit;
     unsigned kb_jump_bit, kb_crouch_bit, kb_look_down_bit, kb_look_up_bit, kb_look_center_bit;
+    unsigned kb_hand, kb_exit, kb_fly_up, kb_fly_down, kb_map, kb_vdu;
+    unsigned kb_hand_bit, kb_exit_bit, kb_fly_up_bit, kb_fly_down_bit, kb_map_bit, kb_vdu_bit;
 } sim_state;
 
 void sim_init(sim_state *s, uint32_t timer_ticks);

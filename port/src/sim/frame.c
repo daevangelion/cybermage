@@ -31,6 +31,14 @@ static int keyboard(sim_state *s, world *w)
     if (keys[0x2a]) {
         if (!s->shift_lock) { keys[0x2a] |= 2; s->shift_lock = 1; }
     } else s->shift_lock = 0;
+    if (down(s, s->kb_map, s->kb_map_bit * 2)) {
+        keys[s->kb_map] = 0;
+        if (!vehicle) s->automap ^= 1; /* Keyboard012FF9..01303B. */
+    }
+    if (down(s, s->kb_vdu, s->kb_vdu_bit * 2)) {
+        keys[s->kb_vdu] = 0;
+        s->vdu_request = 1;
+    }
     if(s->pc_mode==3) {
         s->movement_request=s->yaw_request=0;
         jump=down(s,s->kb_jump,s->kb_jump_bit | s->kb_jump_bit*2);
@@ -350,9 +358,15 @@ int sim_frame(sim_state *s, world *w, const cm_input *input, uint32_t timer_tick
     /* HandleKeyboardEvents 013E39 samples B10 once, before acceleration. */
     s->primary_fire = 0;
     if (s->ai) {
-        unsigned key = s->ai->pc.kb_fire, mask = s->ai->pc.kb_fire_bit;
+        unsigned key = input->modern ? 0x39 : s->ai->pc.kb_fire;
+        unsigned mask = input->modern ? 1 : s->ai->pc.kb_fire_bit;
         s->primary_fire = down(s, key, mask | mask * 2);
         if (s->primary_fire) s->kb_scan_status[key] &= (uint8_t)~(mask * 2);
+        if (!input->modern && s->pc_mode == 3 &&
+            down(s, s->kb_hand, s->kb_hand_bit * 2)) {
+            s->primary_fire = 1;
+            s->kb_scan_status[s->kb_hand] = 0;
+        }
     }
     if (s->mouse_present) mouse_input(s, input);
     if (!jump) s->unk_144b20 = 0;
@@ -370,13 +384,15 @@ int sim_frame(sim_state *s, world *w, const cm_input *input, uint32_t timer_tick
         ai_pc_prepare_input(s->ai, s, w)) return -1;
     acceleration(s, running ? RUN_ACCEL_MAX : WALK_ACCEL_MAX);
     if (s->flight_mode) {
-        if (down(s, 0x11, 1)) {
+        if (down(s, input->modern ? 0x11 : s->kb_fly_up,
+                 input->modern ? 1 : s->kb_fly_up_bit)) {
             if (s->key_hand_y < 8) s->key_hand_y = 8;
             s->key_hand_y *= 2;
             if (s->key_hand_y > 96) s->key_hand_y = 96;
             s->flight_action = 3;
         }
-        if (down(s, 0x2d, 1)) {
+        if (down(s, input->modern ? 0x2d : s->kb_fly_down,
+                 input->modern ? 1 : s->kb_fly_down_bit)) {
             if (s->key_hand_y > -8) s->key_hand_y = -8;
             s->key_hand_y *= 2;
             if (s->key_hand_y < -96) s->key_hand_y = -96;

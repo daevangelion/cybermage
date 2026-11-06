@@ -79,6 +79,21 @@ void sim_loop_checks(void)
     assert(simulation.pc_mode == 5);
     assert((uint16_t)game.persons[0].unk_0038 == 40);
     assert((uint16_t)((uint32_t)game.persons[0].unk_0038 >> 16) == 40);
+    {
+        unsigned scan = simulation.kb_look_down;
+        cm_input in = {0};
+        ui.config.key[8] = 0x14;
+        ui.config.mask[8] = 4;
+        ui_open(&ui, UI_OPTIONS);
+        in.pressed[1] = 1;
+        assert(menu_input(&in, 10) == UI_NONE);
+        assert(simulation.kb_look_down == 0x14 && simulation.kb_look_down_bit == 4);
+        ui.config.key[8] = scan;
+        ui.config.mask[8] = 1;
+        ui_open(&ui, UI_OPTIONS);
+        assert(menu_input(&in, 11) == UI_NONE);
+        ui_open(&ui, UI_GAME);
+    }
     memset(ui.auto_slot, 0, sizeof ui.auto_slot);
     memset(events.auto_slot, 0, sizeof events.auto_slot);
     events.cash = 123;
