@@ -582,3 +582,17 @@ fails before this producer/consumer cutover (assert134).
 Named cda7722 then passes all five phase groups, including the stationary
 and enhanced-aim controls. The actual72-record healing/strafe route matches
 all player state and10650 actor checkpoints/RNG, retaining its genuine heal.
+
+## Integrated pickup-queue closure
+
+Named archive `c2a3a0c57bc400225d31112b6fd871b8686f416c` includes Review2
+through87e5f55 and the original deferred ordinary-pickup queue. Its full
+134-scenario gate matches every player and actor/RNG comparison, including
+the139-record weapon-room route and20976 actor checkpoints that previously
+diverged at RNG71. Strict build, all five phase groups, six controls targets,
+and complete `make -C port check` exit0. Later earned segments replay on the
+same immutable source/binary; commands, input hashes and incremental counts
+are retained in [gate-c2a3a0c.json](gate-c2a3a0c.json). Fresh per-scenario user
+directories copy the actual original configuration: Normal mousea40f,
+campaign Easy4277, or newly original-written Easy mouseab22. Earlier reused-user
+Normal/Easy forecast comparisons were invalid, not gameplay divergences.

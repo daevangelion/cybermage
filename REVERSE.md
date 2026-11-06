@@ -96,37 +96,38 @@ known gaps are deliberate; implementation is not full-game parity.
 | target | Original combat order MATCH, conditional input scope below | `tools/compare_targets.py`:1298 completed checkpoints, all13 original nonempty, zero mismatches | Broader scenes/combat routes ([AI](docs/re/ai.md)) |
 | render_sw | Implemented; scoped complete newgame frame exact | Render gate and `tools/compare_frames.py`:completed newgame frame115 differs0/307200; renderer-only views exact outside hand footprints | Moving props, other scenes, painter ties/extreme pitch ([render](docs/re/render.md)) |
 | render_gl | Opt-in enhanced backend integrated | `tests/render_gl.mk check check-gl check-gl-es scene scene-es`; real640/1920 app replays MATCH; title/HUD exact against SW | Not DOS-raster-exact; broader scene/device acceptance ([render](docs/re/render.md)) |
-| classic input/Sim | Named126-scenario gate:125 actor/RNG MATCH,126 player MATCH | Both106-row movement traces,1299 combat,2033 water/127 wet, original mouse154 and real death/restart/load routes MATCH | One weapon-room pickup/RNG divergence; legacy joystick and broader flight/multi-scene routes unverified ([Sim](docs/re/sim.md)) |
+| classic input/Sim | Named138-scenario gate:138 actor/RNG MATCH,138 player MATCH | Both106-row movement traces,1299 combat,2033 water/127 wet, original mouse154 and real death/restart/load routes MATCH | No observed divergence in this cohort; legacy joystick and broader flight/multi-scene routes unverified ([Sim](docs/re/sim.md)) |
 | modern controls | Desktop opt-in; Android default action/touch/controller layer | `make -C port -f tests/controls.mk B=build/Controls controls-check`; Android virtual-stick walking verified | Physical-controller/long-play usability ([controls](docs/re/controls.md)) |
 | save/load | Codec, live bridges and genuine saved-start replay integrated | Retail SAVE010246045 bytes/GAMENAME288 round-trip; `--replay-load-slot 0`:earned Training94 and water94 player records MATCH | Full original-save playthrough and demo format ([UI](docs/re/ui.md),[Sim](docs/re/sim.md)) |
 | Events/inventory/vehicles | All90 dispatches; genuine tank entry/exit reducer MATCH | `tests/events.mk`; saved-start `events_trace`:Training639 frames/22,009,716 event bytes/116 vehicle rows MATCH; water94/3,237,736 bytes | Reducer consumes measured Sim phase inputs; full vehicle/multi-scene gameplay not established ([Events](docs/re/events.md)) |
-| AI/NPC combat | Conditional combat and genuine saved-fight parity | Named gate:197296 combat actor checkpoints and62550 earned Training stair-fight checkpoints; zero actor/RNG divergence | Normal PERSON+24 defined-zero deviation; one weapon-room pickup/RNG divergence and broader full game ([AI](docs/re/ai.md)) |
+| AI/NPC combat | Conditional combat and genuine saved-fight parity | Named gate:197296 combat actor checkpoints and62550 earned Training stair-fight checkpoints; zero actor/RNG divergence | Normal PERSON+24 defined-zero deviation; broader full-game coverage ([AI](docs/re/ai.md)) |
 | player fire/projectiles | Integrated; scoped original weapon/draw/respiration parity | `tests/pcfire.mk`, `tests/projectiles.mk`;193 fire frames/772 missile checkpoints and5040 respiration draws match; CollFire120 original sweeps | Broader integrated selector/firearm/vehicle and missile-path coverage ([AI](docs/re/ai.md),[PC fire](docs/re/pc_fire.md)) |
 | UI/HUD/shops | Integrated; scoped named pixel comparisons match | `tests/ui.mk` gate; title/options/HUD/composed-newgame/pause comparisons0 differences | Broader shop/vehicle/live-weapon/arena runtime comparisons ([UI](docs/re/ui.md)) |
 | timer/RNG/fixed math | Implemented integral semantics | World gate:6144 trig values,106 angle/distance,60 RNG,16 rotation vectors match; movement trace MATCH | Whole-game RNG call order still under comparison |
 | audio/speech/movies | Integrated native PCM/OPL/HMI/TGV | `make -C port -f tests/audio.mk check`:38 songs validate; first30 frames of three movies match FFmpeg | Not exact SOS driver/mixer/voice-allocation parity ([audio](docs/re/audio.md)) |
 | platform/Android | Full-engine APK and opt-in Android GL runtime verified | Frozen20117a3 x86_64 APK:API36/GLES3 `--es renderer gl` and SW title→NEW→scene1→modern touch walking, no crash; earlier dual-ABI gate atc699ea4 | Physical-device/long-play acceptance; no measured FPS logging ([APK/screenshots/logs](port/android/README.md)) |
 
-Named integrated gate: commit `5e322313524b3932138957a1a73bcebed07a7cad`,
+Named integrated gate: commit `c2a3a0c57bc400225d31112b6fd871b8686f416c`,
 isolated `git archive` snapshot, strict build and complete `make -C port check`
 and separate five-group phase/six-target controls gates exit0. Receipt
-[gate-5e32231.json](docs/re/gate-5e32231.json) pins binary SHA256
-`3d7f4ee874cefd7dd12ac13d46611549b03ecc45607be2fb27921b1c15aa6f90`
-and the full122-scenario gate plus four newly earned route segments:
-125/126 full actor/RNG MATCH,126/126 player MATCH,35,912 original state
-records and5,410,550 actor checkpoints. Type59 NPC144..146 heading at50 is
-now fixed and re-gated. The remaining weapon-room RNG71 divergence has an
-independent first cause: original DoDice12650/RND1 at logical call2887,
-step70, is absent natively because pickup903 is skipped after pickup904.
-Events2 owns the source-proven correction: ordinary CollItem435AA..435C9
-queues pickups, and CollObject4404C..44086 deactivates/removes them only
-after all four tiles; native removal happens too early. Kind17 bundles are
-intentionally immediate. No RNG-padding or saved-start PERSON+24 workaround
-is used. The original collision loop also reads the live next link, so
-caching next would be wrong. Actual draw-clock/UI-action and death-controller
-inputs are used; missing reads fail closed. Later Review2 commit18be842
-and subsequently earned segments are not certified by this snapshot.
-The earlier [112-route](docs/re/gate-cda7722.json),
+[gate-c2a3a0c.json](docs/re/gate-c2a3a0c.json) pins binary SHA256
+`999faea924a19e8f471f0b00d3f87bbf5b60863471758fd6164f1c6975e40429`
+and the full134-scenario gate plus four newly earned route segments:
+138/138 full actor/RNG MATCH,138/138 player MATCH,38,107 original state
+records and5,740,606 actor checkpoints. The archive includes Review2 through
+87e5f55 and Events2's deferred ordinary-pickup correction. All four originally
+reported divergences, type59 spawn heading, and weapon-room RNG71 are now
+fixed and re-gated. Original CollItem435AA..435C9 queues pickups;
+CollObject4404C..44086 removes them after all four tiles, preserving pickup903
+and its DoDice12650/RND1. Kind17 bundles intentionally remain immediate.
+No RNG-padding or saved-start PERSON+24 workaround is used. Actual draw-clock,
+UI-action and death-controller inputs are used; missing reads fail closed.
+Fresh per-scenario users load the actual original Normal or Easy configuration;
+earlier mismatched-config native survival forecasts are not parity evidence.
+No campaign exit or full-game completion is claimed, and future concurrent
+HEAD changes are not certified. The earlier
+[126-route](docs/re/gate-5e32231.json),
+[112-route](docs/re/gate-cda7722.json),
 [92-route](docs/re/gate-f0186a3.json) and
 [76-route](docs/re/gate-5bc4fde.json) baselines remain historical evidence.
 Boot comparisons import only the explicitly approved original undefined PERSON+24
