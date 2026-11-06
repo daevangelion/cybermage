@@ -10,6 +10,50 @@ static events_state e;
 static sim_state s;
 static ai_state a;
 
+static void deferred_pickups(void)
+{
+    unsigned pass,i,quantity[4];
+    for(pass=0;pass<2;++pass) {
+        world_rng expected;
+        int32_t x=pass?0x20000:0x18000,y=0x18000;
+        memset(&w,0,sizeof w);memset(&s,0,sizeof s);memset(&e,0,sizeof e);
+        w.object_count=5;w.person_count=1;w.player_object=1;w.prop_count=3;
+        w.persons[0].object=1;w.persons[0].unk_0038=40*65536+40;
+        w.objects[1].x=x;w.objects[1].y=y;w.objects[1].active=1;
+        e.foot_object=1;e.definition_count=3;s.events=&e;s.body_height=0x10000;
+        for(i=0;i<3;++i) {
+            world_object *o=&w.objects[i+2];
+            w.prop_objects[i]=i+2;w.prop_items[i]=(int16_t)(i+1);
+            o->x=x;o->y=y;o->z=0x2000;o->height=0x1000;
+            o->radius=o->unk_74AF0=0x2000;o->active=1;
+            o->targetable=2;o->person=(int16_t)i;
+            e.definitions[i+1].kind=i==2?10:9;
+            e.definitions[i+1].dice_count=1;
+        }
+        e.definitions[1].dice_sides=1;e.definitions[2].dice_sides=5;
+        e.definitions[3].dice_sides=7;
+        world_rng_init(&w.rng,44);expected=w.rng;
+        assert(!world_make_omap(&w));
+        if(pass) {
+            (void)world_rnd(&expected,1);
+            (void)world_rnd(&expected,7);
+            (void)world_rnd(&expected,5);
+            (void)world_rnd(&expected,7); /* Full-health item is not deduplicated. */
+        } else {
+            (void)world_rnd(&expected,7);
+            (void)world_rnd(&expected,5);
+            (void)world_rnd(&expected,1);
+        }
+        assert(!sim_coll_object(&s,&w,1,&x,&y));
+        memset(quantity,0,sizeof quantity);
+        for(i=0;i<EVENTS_ITEM_MAX;++i)
+            if(e.items[i].type>0) quantity[e.items[i].type]+=(unsigned)e.items[i].quantity;
+        assert(quantity[1]==1 && quantity[2]==1 && !quantity[3]);
+        assert(!w.objects[2].active && !w.objects[3].active && w.objects[4].active);
+        assert(!memcmp(w.rng.word,expected.word,sizeof expected.word));
+    }
+}
+
 static void jumble_axis_proposals(void)
 {
     static const struct {
@@ -137,5 +181,6 @@ int main(void)
     assert(x == 944128 - 7680 - SIM_OBJECT_MARGIN - 1);
     crouch_contact();
     jumble_axis_proposals();
+    deferred_pickups();
     return 0;
 }

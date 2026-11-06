@@ -55,6 +55,26 @@ disk+146 s16 console icon; disk+32 s16; disk+24 spell byte; disk+34 value;
 dice at disk150/151/152. PROP placement auxiliary s16 disk+26 is the item
 definition id passed by CollObject to CollItem042700, not the PROP definition.
 
+Ordinary accepted pickups are retired through the original bounded deletion
+queue, not during the live OMap walk. `CollObject04369C` clears the count at
+`1E3B58`; `CollItem04270D..042737` skips objects already queued. The common
+success tail `0435AA..0435C9` appends an active physical object to `1E3B5C` and
+reports overflow when the count reaches16. Only `04404C..044086`, after all four
+collision tile chains, clears active bytes and calls OMapDelete. Rejected pickups
+are not queued: a full-health/ammo contact can legitimately call CollItem again
+from another tile and consume its initial dice again. Kind17 bundles retain their
+separate immediate removal at `0433C1..0433CD`.
+
+The native Events queue is transient and is not serialized. Sim brackets each
+real CollObject walk with `events_pickups_begin/end`; the isolated reducer
+brackets its recorded pre-MoveWorld pickup batch (it does not claim collision
+pass grouping or physics parity). Direct pickup fixtures use the same API.
+Single-tile adjacent items expose premature deletion skipping a successor;
+cross-tile fixtures distinguish accepted-object deduplication from rejected-item
+retries and check exact RNG order. Queue-limit and immediate-bundle fixtures
+cover the16-entry bound and the exception. No successor-cache or RNG padding is
+used: the original itself reads the live next link at `0438D7..0438E1`.
+
 UseItem01A85C: kind9 fills player life to maximum and consumes one only on
 change; kind11 repairs every positive armor part and consumes one only on
 change. Kind14 type22 selects power5; type111 toggles flight3; other keys

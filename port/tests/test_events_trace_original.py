@@ -100,7 +100,8 @@ def main():
         changed_clocks = [list(row) for row in clocks]
         changed_clocks[1][3] = "193a4"
         put_csv(no_clock / "draw-clocks.csv", changed_clocks)
-        check(full_args(), 1, "missing or wrong measured timer read")
+        check(full_args(), 1,
+              "wanted draw=0 phase=0 pc=16391; observed frame=0 draw=0 phase=0 pc=193a4")
         changed_clocks = [list(row) for row in clocks]
         deadline = next(row for row in changed_clocks[1:] if row[0] == "0" and row[3] == "193a4")
         deadline[4] = str((int(deadline[4]) + 1) & 0xFFFFFFFF)

@@ -15,7 +15,7 @@ static ui_save_state saved;
 static events_event *event_setup(unsigned type)
 {
     memset(&w,0,sizeof(w));memset(&e,0,sizeof(e));
-    memset(&s,0,sizeof(s));memset(&a,0,sizeof(a));
+    sim_init(&s,0);memset(&a,0,sizeof(a));
     w.player_object=1;w.object_count=4;w.person_count=3;
     w.persons[0].object=1;w.persons[1].object=2;w.persons[2].object=3;
     e.event_count=511;e.switch_count=4;e.event_heads[0]=1;a.events=&e;
@@ -399,14 +399,18 @@ static void skipped_props(void)
     w.scene_sections[1].data=props;w.scene_sections[1].size=sizeof(props);
     props[56]=2;props[86]=1; /* first disk slot skipped, second grants item1 */
     e.definition_count=1;e.definitions[1].kind=9;
+    events_pickups_begin(&e);
     assert(events_coll_item(&e,&w,2,1)==0 && e.items[0].type==1);
+    assert(events_pickups_end(&e,&w)==0);
     w.prop_definitions.data=definitions;w.prop_definitions.size=sizeof(definitions);
     store32(props+38,54321);store32(props+68,12345);store32(definitions+1059,10000);
     definitions[1081]=100;w.texture_count=1;
     w.textures[0].kind=WORLD_TEX_PROP;w.textures[0].height=w.textures[0].width=1;
     assert(events_rescale_prop(&w,0,50)==0 && w.objects[2].z==17345);
     w.prop_placements[0]=UINT32_MAX;
+    events_pickups_begin(&e);
     assert(events_coll_item(&e,&w,2,1)==0); /* already collected; no disk read */
+    assert(events_pickups_end(&e,&w)==0);
     assert(events_rescale_prop(&w,0,50)<0);
 }
 
@@ -419,11 +423,49 @@ static void non_item_prop(void)
     w.scene_sections[1].data=props;w.scene_sections[1].size=sizeof(props);
     e.definition_count=1;
     memcpy(rng,w.rng.word,sizeof(rng));
+    events_pickups_begin(&e);
     assert(events_coll_item(&e,&w,2,1)==0);
+    assert(events_pickups_end(&e,&w)==0);
     assert(w.objects[2].active && !e.items[0].type && !e.item_up_type);
     assert(!memcmp(rng,w.rng.word,sizeof(rng)));
     w.prop_items[0]=2;
     assert(events_coll_item(&e,&w,2,1)<0);
+}
+
+static void pickup_queue_limits(void)
+{
+    unsigned i;
+    event_setup(0);w.object_count=EVENTS_PICKUP_MAX+2;
+    w.prop_count=EVENTS_PICKUP_MAX;e.definition_count=1;
+    e.definitions[1].kind=9;
+    events_pickups_begin(&e);
+    for(i=0;i<EVENTS_PICKUP_MAX;++i) {
+        w.prop_objects[i]=i+2;w.prop_items[i]=1;w.objects[i+2].active=1;
+        if(i+1<EVENTS_PICKUP_MAX) assert(!events_coll_item(&e,&w,i+2,1));
+        else assert(events_coll_item(&e,&w,i+2,1)<0);
+        assert(w.objects[i+2].active && e.pickup_count==i+1);
+        assert(!events_coll_item(&e,&w,i+2,1)); /* Accepted object is queued once. */
+        assert(e.items[0].quantity==(int32_t)(i+1));
+    }
+    assert(!events_pickups_end(&e,&w));
+    for(i=0;i<EVENTS_PICKUP_MAX;++i) assert(!w.objects[i+2].active);
+    events_pickups_begin(&e);assert(!e.pickup_count);
+}
+
+static void bundle_immediate_removal(void)
+{
+    event_setup(0);w.prop_count=1;w.prop_objects[0]=2;w.prop_items[0]=2;
+    w.objects[2].active=1;w.objects[2].x=w.objects[2].y=0x18000;
+    e.definition_count=2;e.definitions[1].kind=9;
+    e.definitions[2].kind=17;e.definitions[2].subtype=1;
+    e.definitions[2].dice_add=1;e.definitions[2].extra[0]=1;
+    world_rng_init(&w.rng,44);
+    assert(!world_make_omap(&w));
+    events_pickups_begin(&e);
+    assert(!events_coll_item(&e,&w,2,1));
+    assert(!w.objects[2].active && !e.pickup_count);
+    assert(e.items[0].type==1 && e.items[0].quantity==3);
+    assert(!events_pickups_end(&e,&w));
 }
 
 int main(int argc, char **argv)
@@ -537,6 +579,8 @@ int main(int argc, char **argv)
     assert(events_save_import(&restored,&saved)==0 && restored.autoDTime==0);
     skipped_props();
     non_item_prop();
+    pickup_queue_limits();
+    bundle_immediate_removal();
     assert(world_add32(INT32_MAX,1)==INT32_MIN && world_sub32(0,INT32_MIN)==INT32_MIN);
     assert(world_mul32(INT32_MAX,2)==-2);
     event_setup(0);w.objects[1].floor_z=INT32_MAX;w.objects[1].z=INT32_MAX;

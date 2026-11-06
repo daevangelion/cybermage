@@ -12,6 +12,7 @@ int events_init(events_state *e, world *w)
     memset(e->switches,0,sizeof(e->switches));
     memset(e->event_heads,0,sizeof(e->event_heads));
     e->event_count=e->switch_count=0;
+    e->pickup_count=0;
     e->scene=w->scene;
     events_reset_selectors(e);
     e->selector_kind=e->selector_request=e->selector_confirm=e->selector_joy_latch=0;

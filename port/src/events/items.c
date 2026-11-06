@@ -198,7 +198,7 @@ static int grant_item(events_state *e, world *w, unsigned type, int object,
         unsigned pick,tries;
         enum { BUNDLE_DRAW_MAX=65536 };
         int nonempty=0;
-        if(object>=0) { world_omap_delete(w,(unsigned)object);w->objects[object].active=0; }
+        if(object>=0) { w->objects[object].active=0;world_omap_delete(w,(unsigned)object); }
         for(i=0;i<6;++i) if(d->extra[i]) nonempty=1;
         if(!nonempty) return cm_fail("CollItem",type,"empty item bundle");
         pick=0;
@@ -224,7 +224,36 @@ static int grant_item(events_state *e, world *w, unsigned type, int object,
         v->quantity = (int32_t)((uint32_t)v->quantity + (uint32_t)amount);
     }
     notify(e,(int)type,d->icon);
-    if(object>=0) { world_omap_delete(w,(unsigned)object); w->objects[object].active = 0; }
+    if(object>=0 && w->objects[object].active) {
+        if(e->pickup_count>=EVENTS_PICKUP_MAX)
+            return cm_fail("CollItem/delete",e->pickup_count,"pickup queue overflow");
+        e->pickup_objects[e->pickup_count++]=(unsigned)object;
+        if(e->pickup_count==EVENTS_PICKUP_MAX)
+            return cm_fail("CollItem/delete",e->pickup_count,"pickup queue overflow");
+    }
+    return 0;
+}
+
+void events_pickups_begin(events_state *e)
+{
+    e->pickup_count=0;
+}
+
+/* CollObject04404C..044086, after all four live chain walks. */
+int events_pickups_end(events_state *e, world *w)
+{
+    unsigned i;
+    if(!e || !w || e->pickup_count>EVENTS_PICKUP_MAX)
+        return cm_fail("CollObject/delete",0,"invalid pickup queue");
+    for(i=0;i<e->pickup_count;++i) {
+        unsigned object=e->pickup_objects[i];
+        if(object>=w->object_count)
+            return cm_fail("CollObject/delete",object,"invalid queued pickup");
+        if(w->objects[object].active) {
+            w->objects[object].active=0;
+            world_omap_delete(w,object);
+        }
+    }
     return 0;
 }
 
@@ -235,6 +264,10 @@ int events_coll_item(events_state *e, world *w, unsigned object, unsigned source
     if(!e || !w || object>=w->object_count || source>=w->object_count)
         return cm_fail("CollItem",object,"invalid pickup object");
     if(source!=w->player_object || !w->objects[object].active || w->player_person!=e->foot_person) return 0;
+    if(e->pickup_count>EVENTS_PICKUP_MAX)
+        return cm_fail("CollItem/delete",e->pickup_count,"invalid pickup queue");
+    for(i=0;i<e->pickup_count;++i)
+        if(e->pickup_objects[i]==object) return 0;
     for(i=0;i<w->prop_count;++i) if(w->prop_objects[i]==object) {
         type=(unsigned)(uint16_t)w->prop_items[i];
         if(!type) return 0;

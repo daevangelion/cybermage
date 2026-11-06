@@ -10,6 +10,7 @@
 #define EVENTS_SWITCH_MAX 128
 #define EVENTS_AUTO_MAX 10
 #define EVENTS_ARMOR_MAX 6
+#define EVENTS_PICKUP_MAX 16
 
 struct ai_state;
 
@@ -68,6 +69,7 @@ typedef struct events_state {
     events_switch switches[EVENTS_SWITCH_MAX];
     events_definition definitions[256];
     unsigned definition_count;
+    unsigned pickup_count, pickup_objects[EVENTS_PICKUP_MAX];
     unsigned event_count, switch_count, scene;
     uint32_t event_heads[64]; /* LoadEVENTS reads 256 bytes, 0x27381. */
     int16_t armor[EVENTS_ARMOR_MAX], max_armor[EVENTS_ARMOR_MAX];
@@ -139,7 +141,11 @@ int events_key_search(events_state *e, sim_state *s, world *w, unsigned key);
 int events_toggle_switch(events_state *e, world *w, unsigned index);
 int events_use_item(events_state *e, sim_state *s, world *w, unsigned slot);
 void events_fly_landing(sim_state *s, const world_object *p);
-int events_coll_item(events_state *e, world *w, unsigned item, unsigned source);
+/* CollObject4369C..44086 brackets all four tile chains. CollItem queues
+ * accepted physical objects; only the final drain retires ordinary pickups. */
+void events_pickups_begin(events_state *e);
+int events_pickups_end(events_state *e, world *w);
+int events_coll_item(events_state *e, world *w, unsigned object, unsigned source);
 int events_set_tank_mode(events_state *e, sim_state *s, world *w, int enter);
 int events_clear_vehicle(sim_state *s, world *w, unsigned object);
 int events_make_selector(events_state *e, unsigned kind);

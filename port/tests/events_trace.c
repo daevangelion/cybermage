@@ -564,6 +564,7 @@ int main(int argc, char **argv)
             if(result<0) return 1;
             if(item_status>0 && item.frame<rows)
                 return cm_fail(item_path,rows,"stale external CollItem frame");
+            events_pickups_begin(&e);
             while(item_status>0 && item.frame==rows) {
                 if(input_status>0 && input.word[0]==(int64_t)rows) {
                     uint32_t start=(uint32_t)f.values[CM_TRACE_TICKS];
@@ -576,6 +577,7 @@ int main(int argc, char **argv)
                 item_status=next_item_input(item_file,&item,item_path);
                 if(item_status<0) return 1;
             }
+            if(events_pickups_end(&e,&w)) return 1;
             if(input_status>0 && input.word[0]<(int64_t)rows)
                 return cm_fail(argv[3],rows,"stale or duplicate MoveWorld input frame");
             if(input_status>0 && input.word[0]==(int64_t)rows) {

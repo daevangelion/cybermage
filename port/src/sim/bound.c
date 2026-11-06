@@ -20,6 +20,7 @@ int sim_coll_object(sim_state *s, world *w, unsigned object, int32_t *x, int32_t
     unsigned row, col;
     if (s->collision_observe)
         s->collision_observe(s->collision_context, w, object, *x, *y);
+    if(s->events) events_pickups_begin(s->events);
     for (row = 0; row < 2; ++row) {
         if (row && ty[0] == ty[1]) continue;
         for (col = 0; col < 2; ++col) {
@@ -86,7 +87,7 @@ int sim_coll_object(sim_state *s, world *w, unsigned object, int32_t *x, int32_t
             }
         }
     }
-    return 0;
+    return s->events?events_pickups_end(s->events,w):0;
 }
 
 static const world_aperture *old_aperture(const sim_state *s, const world *w,

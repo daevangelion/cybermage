@@ -143,12 +143,15 @@ static void pickup(void)
     w.prop_count=1;w.prop_objects[0]=2;w.prop_items[0]=6;
     e.definition_count=6;e.definitions[6].kind=9;e.definitions[6].dice_add=1;
     assert(!world_make_omap(&w));
+    events_pickups_begin(&e);
     item.type=5;assert(apply_item_input(&item,"item-test")<0);
     assert(!e.items[0].type && w.objects[2].active);
     item.type=6;item.source=2;assert(apply_item_input(&item,"item-test")<0);
     assert(!e.items[0].type && w.objects[2].active);
     item.source=1;assert(!apply_item_input(&item,"item-test"));
-    assert(e.items[0].type==6 && e.items[0].quantity==1 && !w.objects[2].active);
+    assert(e.items[0].type==6 && e.items[0].quantity==1 && w.objects[2].active);
+    assert(!apply_item_input(&item,"item-test") && e.items[0].quantity==1);
+    assert(!events_pickups_end(&e,&w) && !w.objects[2].active);
     assert((uint16_t)w.persons[0].unk_0038==17);
     assert(!events_use_item(&e,&s,&w,0));
     assert(!e.items[0].type && (uint16_t)w.persons[0].unk_0038==40);
