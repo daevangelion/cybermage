@@ -161,7 +161,7 @@ static int checks(void)
     }
     /* Selector completion is immediate, including during modern RMB aiming. */
     s.pc_mode = 1; s.previous_pc_mode = 5; s.modern_aim = 1;
-    e.previous_mode = 5; e.weapon = 3;
+    e.weapon = 3;
     a.pc.glow_frame = 3;
     a.pc.fire = a.pc.cooldown = a.pc.latch = 1;
     CHECK(!ai_pc_select(&a, &s, &w, 1));
@@ -175,13 +175,13 @@ static int checks(void)
     CHECK(a.pc_aim.aim_x == a.pc_rules.center_aim_x[0]);
     CHECK(a.pc_aim.aim_y == a.pc_rules.center_aim_y[0]);
     CHECK(a.pc.glow_frame == 3);
-    s.pc_mode = 5; e.previous_mode = 2; e.spell = 1;
+    s.pc_mode = 5; s.previous_pc_mode = 2; e.spell = 1;
     CHECK(!ai_pc_select(&a, &s, &w, 2));
     CHECK(a.pc_aim.hand_type == 1 && !a.pc.glow_frame);
     CHECK(a.pc.glow_set == a.pc_rules.glow_set[1]);
     CHECK(a.pc_aim.aim_x == a.pc_rules.center_aim_x[1]);
     CHECK(a.pc_aim.aim_y == a.pc_rules.center_aim_y[1]);
-    e.previous_mode = 5; e.spell = 2;
+    s.previous_pc_mode = 5; e.spell = 2;
     a.pc.glow_frame = 2; a.pc.muzzle_mode = 3;
     CHECK(!ai_pc_select(&a, &s, &w, 2));
     CHECK(a.pc.glow_frame == 2 && a.pc.muzzle_mode == 3);

@@ -9,6 +9,34 @@ void snd_close(void);
 static const char *test_user;
 static int training;
 
+static void dirty_selectors(void)
+{
+    unsigned i;
+    for(i=0;i<3;++i) {
+        events.selectors[i].count=2;
+        events.selectors[i].index=1;
+    }
+}
+
+static void selectors_reset(void)
+{
+    unsigned i;
+    for(i=0;i<3;++i)
+        assert(!events.selectors[i].count && events.selectors[i].index==UINT32_MAX);
+}
+
+static void selector_key(unsigned scan)
+{
+    cm_input key={0};
+    uint32_t ticks=simulation.timer_ticks+2;
+    key.pressed[scan]=1;
+    key.raw_count=2;key.raw_scans[0]=(uint8_t)scan;key.raw_scans[1]=(uint8_t)(scan|0x80);
+    assert(menu_input(&key,ticks)==UI_NONE && ui.screen==UI_GAME);
+    assert(!sim_frame(&simulation,&game,&key,ticks));
+    assert(!ai_pc_input(&actors,&simulation,&game));
+    assert(!events_step(&events,&simulation,&actors,&game));
+}
+
 /* Run while main still owns the loaded resources; no duplicated scene loader. */
 void sim_loop_checks(void)
 {
@@ -34,7 +62,9 @@ void sim_loop_checks(void)
     game.persons[1].unk_0038 = 12 * 65536 + 5;
     assert(!ai_set_difficulty(&actors, &game, 2));
     ui.options[8] = 2;
+    dirty_selectors();
     assert(!save_game(test_user, 0));
+    selectors_reset();
     assert(actors.difficulty == 2);
     events.cash = 0;
     events.energy = 0;
@@ -42,12 +72,48 @@ void sim_loop_checks(void)
     simulation.bios_shift = 3;
     actors.pc.sp_regen_timer = 123;
     ui.restart_game = 10;
+    dirty_selectors();
     assert(!load_game("../orig/retail", test_user, 0, 10));
+    selectors_reset();
     assert(simulation.kb_latch == 12 && simulation.bios_shift == 3);
     assert(actors.pc.sp_regen_timer == 123);
     assert(ui.restart_game == 0);
     assert(events.cash == 123 && events.energy == 31);
     assert((uint16_t)game.persons[0].unk_0038 == 23);
+    {
+        cm_input key={0};
+        ui_open(&ui,UI_GAME);
+        assert(!events.items[1].type && events_inventory_add(&events,4,1)==1);
+        selector_key(0x3B); /* Real menu_input must not turn F1 into Help. */
+        assert(events.selector_kind==EVENTS_SELECT_WEAPON && simulation.pc_mode==3);
+        selector_key(1);
+        assert(!events.selector_kind && simulation.pc_mode==5 && ui.screen==UI_GAME);
+        selector_key(0x3D);
+        assert(events.selector_kind==EVENTS_SELECT_KEY && simulation.pc_mode==3);
+        assert(events.selectors[EVENTS_SELECT_KEY-1].count==1);
+        selector_key(0x3F); /* Unmapped F5/F7 stay selector input, not file menus. */
+        assert(events.selector_kind==EVENTS_SELECT_KEY && ui.screen==UI_GAME);
+        selector_key(0x41);
+        assert(events.selector_kind==EVENTS_SELECT_KEY && ui.screen==UI_GAME);
+        key.quit=1;
+        assert(menu_input(&key,10)==UI_QUIT);
+        selector_key(1);
+        assert(!events.selector_kind && simulation.pc_mode==5 && ui.screen==UI_GAME);
+        selector_key(0x3C);
+        assert(events.selector_kind==EVENTS_SELECT_POWER && simulation.pc_mode==3);
+        selector_key(1);
+        assert(!events.selector_kind && simulation.pc_mode==5);
+        assert(events_inventory_remove(&events,1,1)==1);
+        key.quit=0;key.pressed[0x3F]=1;
+        assert(menu_input(&key,10)==UI_NONE && ui.screen==UI_SAVE);
+        ui_open(&ui,UI_GAME);
+        key.pressed[0x3F]=0;key.pressed[0x41]=1;
+        assert(menu_input(&key,10)==UI_NONE && ui.screen==UI_LOAD);
+        ui_open(&ui,UI_GAME);
+        key.pressed[0x41]=0;key.pressed[53]=1;
+        assert(menu_input(&key,10)==UI_NONE && ui.screen==UI_HELP);
+        ui_open(&ui,UI_GAME);
+    }
     assert(events.SAVELife == 23 && events.SAVELifeMax == 40);
     assert(actors.difficulty == 2);
     assert((uint16_t)game.persons[1].unk_0038 == 11);

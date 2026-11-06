@@ -142,7 +142,7 @@ int events_set_tank_mode(events_state *e, sim_state *s, world *w, int enter)
             return cm_fail("vehicle", (uint32_t)e->vehicle_person, "invalid vehicle person");
         object = (unsigned)w->persons[e->vehicle_person].object;
         if (!object || object >= w->object_count) return cm_fail("vehicle", object, "invalid vehicle object");
-        if (s->pc_mode != 3) e->previous_mode = s->pc_mode;
+        if (s->pc_mode != 3) s->previous_pc_mode = s->pc_mode;
         e->foot_object = w->player_object; e->foot_person = w->player_person;
         world_omap_delete(w,w->player_object);
         p = &w->objects[w->player_object]; p->x = p->y = 0x1F8000; p->active = 0;
@@ -156,7 +156,7 @@ int events_set_tank_mode(events_state *e, sim_state *s, world *w, int enter)
         w->player_object = object; w->player_person = e->foot_person;
         p = &w->objects[object]; p->x = old->x; p->y = old->y; p->floor_z = old->floor_z;
         p->heading = old->heading; p->active = 1;
-        s->pc_mode = e->previous_mode; s->flight_mode = 0;
+        s->pc_mode = s->previous_pc_mode; s->flight_mode = 0;
         world_omap_insert(w,object);
         if (events_clear_vehicle(s,w,object)) return -1;
     }

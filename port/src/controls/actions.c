@@ -56,6 +56,8 @@ void controls_frame(cm_controls *c, controls_context context,
     memset(output, 0, sizeof *output);
     output->modern = 1;
     output->quit = in->quit;
+    output->mouse_present=in->mouse_present;
+    output->joystick_present=in->joystick_present;
     output->mouse_x = in->mouse_x;
     output->mouse_y = in->mouse_y;
     if (context >= CONTROLS_CONTEXTS) context = CONTROLS_MENU;
@@ -116,6 +118,7 @@ void controls_frame(cm_controls *c, controls_context context,
     output->select_kind = (uint8_t)c->selection_kind;
     output->select_open = (uint8_t)(EDGE(WEAPONS) || EDGE(POWERS) || EDGE(ITEMS));
     if (gameplay) {
+        output_key(output,53,keys[53]); /* Original keyHELP962B8, not F1. */
         if (EDGE(MAP)) c->map_visible = !c->map_visible;
         mx = (double)HELD(RIGHT) - HELD(LEFT) + lx +
             (touch_move ? in->touch_move_x / 32768.0 : 0);

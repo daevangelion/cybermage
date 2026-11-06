@@ -237,6 +237,12 @@ static void queued_vehicle_exit(void)
     assert(events_frame_begin(&e,&s,&a,&w)==0 && s.pc_mode==5 && !e.tank_flag);
 }
 
+static int selector_step(void)
+{
+    if(events_keyboard(&e,&s,&a,&w)) return -1;
+    return events_process_selector(&e,&s,&w);
+}
+
 static void selector_shortcuts(void)
 {
     static const uint8_t codes[20]={0x3B,0x3C,0x3D,0x3E,0x3F,0x40,0x41,0x42,0x43,0x44,
@@ -244,16 +250,27 @@ static void selector_shortcuts(void)
     unsigned key,i;
     event_setup(0);e.items[0].type=120;e.items[0].kind=0;
     e.items[1].type=6;e.items[1].kind=9;e.items[1].quantity=1;
-    w.persons[0].unk_0038=40<<16|17;e.previous_mode=5;s.pc_mode=3;
+    w.persons[0].unk_0038=40<<16|17;s.previous_pc_mode=5;s.pc_mode=3;
     assert(events_make_selector(&e,3)==0 && e.selector_keys[3]==1);
     a.pc.fire=a.pc.cooldown=a.pc.latch=1;
     s.kb_scan_status[0x3E]=2;
-    assert(events_process_selector(&e,&s,&w)==0);
+    assert(selector_step()==0);
     assert((uint16_t)w.persons[0].unk_0038==40);
     assert(!e.items[1].type && !e.items[1].quantity && !e.selector_kind && s.pc_mode==5);
     assert(!a.pc.fire && !a.pc.cooldown && !a.pc.latch);
+    /* MakePCKeyList retains the now-stale F4 map after consuming Regen Pak.
+     * Original1E4D4..1E4F0 closes it without using an out-of-list item. */
+    assert(events_make_selector(&e,3)==0 && e.selectors[2].count==1 && e.selector_keys[3]==1);
+    s.pc_mode=3;s.kb_scan_status[0x3E]=2;
+    assert(selector_step()==0 && !e.selector_kind && s.pc_mode==5 && e.items[0].type==120);
+    assert(e.selectors[2].index==1 && !e.selectors[2].count);
+    assert(!a.pc.fire && !a.pc.cooldown && a.pc.cursor_flags==3 && !a.pc.mouse_hand_flag);
+    assert(events_make_selector(&e,3)==0);
+    s.pc_mode=3;e.selectors[2].index=UINT32_MAX;e.selector_confirm=1;
+    assert(events_process_selector(&e,&s,&w)==0 && e.items[0].type==120 && !e.selector_kind);
+    assert(s.pc_mode==5 && !e.selectors[2].count && !a.pc.fire && !a.pc.cooldown);
     for(key=0;key<20;++key) {
-        event_setup(0);e.selector_kind=3;e.selector_count=20;e.previous_mode=5;s.pc_mode=3;
+        event_setup(0);e.selector_kind=3;e.selectors[2].count=20;s.previous_pc_mode=5;s.pc_mode=3;
         w.persons[0].unk_0038=40<<16|17;
         for(i=0;i<20;++i) {
             e.selector_items[i]=(int32_t)i;e.selector_keys[i]=(int32_t)(19-i);
@@ -261,26 +278,67 @@ static void selector_shortcuts(void)
         }
         s.kb_scan_status[codes[key]]=2;
         if(key==19) s.kb_scan_status[0x3B]=s.kb_scan_status[0x58]=2;
-        assert(events_process_selector(&e,&s,&w)==0);
+        assert(selector_step()==0);
         assert(!e.items[19-key].type && !e.items[19-key].quantity);
         for(i=0;i<20;++i) {
             assert(!s.kb_scan_status[codes[i]]);
             if(i!=19-key) assert(e.items[i].type==6 && e.items[i].quantity==1);
         }
     }
-    event_setup(0);e.selector_kind=3;e.selector_count=2;e.previous_mode=5;s.pc_mode=3;
+    event_setup(0);e.selector_kind=3;e.selectors[2].count=2;s.previous_pc_mode=5;s.pc_mode=3;
     w.persons[0].unk_0038=40<<16|17;
     for(i=0;i<2;++i) {
         e.selector_items[i]=(int32_t)i;e.items[i].type=6;e.items[i].kind=9;e.items[i].quantity=1;
     }
     e.selector_keys[3]=-1;s.kb_scan_status[0x3E]=2;
-    assert(events_process_selector(&e,&s,&w)==0 && e.selector_kind==3 && e.items[0].type==6);
+    assert(selector_step()==0 && e.selector_kind==3 && e.items[0].type==6);
     s.kb_scan_status[0x0A]=s.kb_scan_status[0x0B]=2;
-    assert(events_process_selector(&e,&s,&w)==0 && e.selector_kind==3);
+    assert(selector_step()==0 && e.selector_kind==3);
     assert(s.kb_scan_status[0x0A]==2 && s.kb_scan_status[0x0B]==2);
     e.selector_keys[3]=1;s.kb_scan_status[0x1C]=s.kb_scan_status[0x3E]=s.kb_scan_status[0x4D]=2;
-    assert(events_process_selector(&e,&s,&w)==0 && !e.items[0].type && e.items[1].type==6);
+    assert(selector_step()==0 && !e.items[0].type && e.items[1].type==6);
     for(i=0;i<SIM_SCAN_COUNT;++i) assert(!s.kb_scan_status[i]);
+}
+
+static void selector_pointer(void)
+{
+    static const int x[5]={-73,-38,16,70,110},y[4]={140,96,52,20};
+    static const int dx[5]={-1,-1,0,1,1},dy[4]={-3,0,3,3};
+    static const int xx[8]={-49,-48,1,2,49,50,89,90},columns[8]={0,1,1,2,2,3,3,4};
+    static const int yy[6]={135,134,92,91,48,47},rows[6]={0,1,1,2,2,3};
+    unsigned col,row,i;
+    cm_input input={0};
+    for(row=0;row<4;++row) for(col=0;col<5;++col) {
+        event_setup(0);e.selector_kind=3;e.selectors[2].count=20;
+        input.mouse_present=1;input.mouse_x=(x[col]+160)*2;input.mouse_y=(200-y[row])*2;
+        sim_input(&s,&input);a.pc.sword_aim_step=4;
+        assert(events_process_selector(&e,&s,&w)==0);
+        assert(e.selectors[2].index==row*5+col);
+        assert(a.pc_aim.aim_x==x[col] && a.pc_aim.aim_y==y[row]);
+        assert(a.pc.sword_aim_step==4+dx[col]+dy[row]);
+    }
+    for(row=0;row<6;++row) for(col=0;col<8;++col) {
+        event_setup(0);e.selector_kind=3;e.selectors[2].count=20;
+        input.mouse_x=(xx[col]+160)*2;input.mouse_y=(200-yy[row])*2;
+        sim_input(&s,&input);
+        assert(events_process_selector(&e,&s,&w)==0);
+        assert(e.selectors[2].index==(unsigned)(rows[row]*5+columns[col]));
+    }
+    event_setup(0);e.selector_kind=3;e.selectors[2].count=7;
+    input.mouse_x=540;input.mouse_y=360;sim_input(&s,&input);
+    assert(events_process_selector(&e,&s,&w)==0 && e.selectors[2].index==6);
+    event_setup(0);e.selector_kind=3;e.selectors[2].count=20;
+    sim_input(&s,&input);s.kb_scan_status[0x4D]=8;
+    assert(events_process_selector(&e,&s,&w)==0 && e.selectors[2].index==1);
+    assert(a.pc_aim.aim_x==-38 && a.pc_aim.aim_y==140 && !s.kb_scan_status[0x4D]);
+    e.selector_keys[7]=11;
+    events_reset_selectors(&e);
+    for(i=0;i<3;++i) assert(!e.selectors[i].count && e.selectors[i].index==UINT32_MAX);
+    assert(e.selector_keys[7]==11 && e.selector_kind==3 && !events_selector_needs_input(&e));
+    /* A real pointer release does not imply a missing driver; modern aim is separate. */
+    input.mouse_x=100000;input.mouse_y=-100000;sim_input(&s,&input);
+    assert(s.mouse_present && s.mouse_hand_x==156 && s.mouse_hand_y==-96);
+    input.modern=1;sim_input(&s,&input);assert(!s.mouse_present);
 }
 
 static void retail_cosmetics(const char *data)
@@ -381,19 +439,19 @@ int main(int argc, char **argv)
     e.items[0].type = 5; e.items[0].kind = 5;
     e.items[1].type = 4; e.items[1].kind = 6;
     assert(events_make_selector(&e, 1) == 0);
-    assert(e.selector_count == 2);
+    assert(e.selectors[0].count == 2);
     assert(e.selector_items[0] == 1 && e.selector_items[1] == 0);
     e.items[1].variant=7;s.kb_scan_status[0x1C]=1;
-    assert(events_process_selector(&e,&s,&w)==0);
+    assert(selector_step()==0);
     assert(e.weapon_slot==1 && e.item_spell==7 && s.pc_mode==1);
     e.items[0].unk_0024=0x12345678;
-    assert(events_make_selector(&e,1)==0);e.selector_index=1;s.kb_scan_status[0x1C]=1;
-    assert(events_process_selector(&e,&s,&w)==0);
+    assert(events_make_selector(&e,1)==0);e.selectors[0].index=1;s.kb_scan_status[0x1C]=1;
+    assert(selector_step()==0);
     assert(e.hh_dice==0x12345678 && s.pc_mode==2);
     memset(e.items, 0, sizeof(e.items));
     e.spells[0] = 1;
     assert(events_make_selector(&e, 2) == 0);
-    assert(e.selector_count == 1 && e.selector_items[0] == 0);
+    assert(e.selectors[1].count == 1 && e.selector_items[0] == 0);
     w.scene = 1;
     w.persons[84].object = 2; w.persons[84].type = 1;
     a.monster_count = 2; a.monsters[1].kind = 5;
@@ -442,6 +500,7 @@ int main(int argc, char **argv)
     pending_vehicle();
     queued_vehicle_exit();
     selector_shortcuts();
+    selector_pointer();
     event_setup(0);snd_enable(0,0);e.autoDestruct=4;e.autoDTime=16800;e.autoMSlot=-1;
     e.ticks=2400;
     assert(events_countdown(&e,&s,&a,&w)==0 && e.autoDestruct==4);

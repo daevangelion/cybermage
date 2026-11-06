@@ -252,7 +252,9 @@ static int save_game(const char *user, unsigned slot)
     if (auto_save >= 0) ui.auto_slot[auto_save] = 1;
     memcpy(events.auto_ptr, ui.auto_ptr, sizeof events.auto_ptr);
     memcpy(events.auto_slot, ui.auto_slot, sizeof events.auto_slot);
-    return game_names_write();
+    if(game_names_write()) return -1;
+    events_reset_selectors(&events); /* SaveGame050A8F..050AC1, after file writes. */
+    return 0;
 }
 
 static int save_sim_check(const uint8_t *data)
@@ -314,6 +316,7 @@ static int load_game(const char *data, const char *user, unsigned slot, uint32_t
     death_phase = 0;
     camera_follow();
     ui.restart_game = (int32_t)slot;
+    events_reset_selectors(&events); /* LoadGame0515F8..05162A, after import. */
     return 0;
 }
 
@@ -462,7 +465,13 @@ static int death_start(uint32_t ticks)
 
 static ui_action menu_input(const cm_input *input, uint32_t ticks)
 {
-    ui_action action = ui_input(&ui, input, ticks);
+    ui_action action;
+    if(input->quit) return UI_QUIT;
+    /* Keyboard012F04/01340D owns Escape and all twenty shortcuts before
+     * pause/save/load. Classic no-list hand mode also skips the foot menu. */
+    if(ui.screen==UI_GAME && (events_selector_needs_input(&events) ||
+       (!input->modern && simulation.pc_mode==3))) return UI_NONE;
+    action = ui_input(&ui, input, ticks);
     if (ui.screen != UI_GAME && simulation.swim_loop != -1) {
         snd_abort(simulation.swim_loop, 4);
         simulation.swim_loop = -1;

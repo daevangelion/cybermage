@@ -95,6 +95,32 @@ int main(int argc, char **argv)
     assert(!sim_frame(&s, &w, &in, 2));
     assert(s.unk_144b1c > 0 && w.objects[1].floor_z > 0 && s.pc_mode == 5);
     /* Dedicated jump does not open the stationary Ctrl hand screen. */
+    arena();memset(&e,0,sizeof e);s.events=&e;e.actors=&a;e.ambient_slot=-1;
+    w.persons[0].unk_0038=40<<16|17;s.unk_144b30=1;
+    sim_scan(&s,0x9C); /* Genuine post-load Enter release primes IRQ9's latch. */
+    memset(&in,0,sizeof in);in.raw_count=1;in.raw_scans[0]=0x1D;
+    assert(!sim_frame(&s,&w,&in,2));
+    assert(s.pc_mode==3 && s.previous_pc_mode==5 && !s.unk_144b1c);
+    assert(a.pc.latch==1 && !a.pc.fire && !a.pc.cooldown);
+    assert(a.pc_aim.aim_x==a.pc_rules.center_aim_x[0] && a.pc_aim.aim_y==a.pc_rules.center_aim_y[0]);
+    in.raw_count=2;in.raw_scans[0]=0xE0;in.raw_scans[1]=0x48;
+    assert(!sim_frame(&s,&w,&in,4) && s.pc_mode==3 && !s.movement_request && !s.yaw_request);
+    in.raw_count=1;in.raw_scans[0]=0x9D;
+    assert(!sim_frame(&s,&w,&in,6) && s.pc_mode==5 && a.pc.latch==1);
+    assert(a.pc_aim.aim_x==a.pc_rules.center_aim_x[1] && a.pc_aim.aim_y==a.pc_rules.center_aim_y[1]);
+    e.items[0].type=120;e.items[0].kind=0;e.items[1].type=6;e.items[1].kind=9;e.items[1].quantity=1;
+    in.raw_scans[0]=0x3D;
+    assert(!sim_frame(&s,&w,&in,8) && s.pc_mode==3 && e.selector_request==3);
+    assert(!events_selector_needs_input(&e) && !events_input(&e,&s,&a,&w));
+    assert(e.selector_kind==3 && e.selectors[2].count==2 && s.previous_pc_mode==5);
+    in.raw_count=0;
+    assert(!sim_frame(&s,&w,&in,10) && s.pc_mode==3 && !s.movement_request);
+    assert(events_selector_needs_input(&e) && !events_input(&e,&s,&a,&w));
+    in.raw_count=1;in.raw_scans[0]=0x3E;
+    assert(!sim_frame(&s,&w,&in,12) && e.selector_confirm && s.pc_mode==3);
+    assert(!ai_pc_input(&a,&s,&w) && !events_input(&e,&s,&a,&w));
+    assert(s.pc_mode==5 && !e.selector_kind && !e.items[1].quantity && !e.items[1].type);
+    assert((uint16_t)w.persons[0].unk_0038==40);
     arena();
     memset(&e, 0, sizeof e);
     memset(&in, 0, sizeof in);
@@ -113,11 +139,11 @@ int main(int argc, char **argv)
     in.cycle = 0;
     in.select_open = 1;
     assert(!sim_modern_input(&s, &w, &in));
-    assert(e.selector_kind == 1 && s.pc_mode == 3 && e.previous_mode == 1);
+    assert(e.selector_kind == 1 && s.pc_mode == 3 && s.previous_pc_mode == 1);
     e.spells[0] = 1;
     in.select_kind = 2;
     assert(!sim_modern_input(&s, &w, &in));
-    assert(e.selector_kind == 2 && e.previous_mode == 1);
+    assert(e.selector_kind == 2 && s.previous_pc_mode == 1);
     in.select_open = 0;
     in.select_slot = 1;
     assert(!sim_modern_input(&s, &w, &in));

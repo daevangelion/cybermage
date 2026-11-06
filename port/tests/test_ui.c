@@ -152,6 +152,9 @@ int main(int argc, char **argv)
     assert(press(1) == UI_NONE && ui.screen == UI_TITLE);
     assert(press(28) == UI_NEW_GAME);
     ui_open(&ui, UI_GAME);
+    assert(press(59) == UI_NONE && ui.screen == UI_GAME);
+    assert(press(53) == UI_NONE && ui.screen == UI_HELP);
+    assert(press(1) == UI_RESUME && ui.screen == UI_GAME);
     assert(press(1) == UI_NONE && ui.screen == UI_PAUSE);
     assert(press(28) == UI_RESUME && ui.screen == UI_GAME);
     ui_open(&ui,UI_DEATH);

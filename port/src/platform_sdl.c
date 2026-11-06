@@ -277,6 +277,19 @@ static int pointer_point(int x, int y, int *game_x, int *game_y)
            x < rect.x + rect.w && y < rect.y + rect.h;
 }
 
+void platform_mouse_warp(int x, int y)
+{
+    SDL_Rect rect;
+    int w,h;
+    if(is_headless || !window || modern_controls) return;
+    SDL_GetWindowSize(window,&w,&h);rect=viewport(w,h);
+    if(!rect.w || !rect.h) return;
+    if(x<0) x=0;else if(x>=CM_WIDTH) x=CM_WIDTH-1;
+    if(y<0) y=0;else if(y>=CM_HEIGHT) y=CM_HEIGHT-1;
+    SDL_WarpMouseInWindow(window,rect.x+(int)((int64_t)x*rect.w/CM_WIDTH),
+                         rect.y+(int)((int64_t)y*rect.h/CM_HEIGHT));
+}
+
 static void mouse_button(cm_input *input, unsigned bit, int down)
 {
     if (down) {
@@ -614,6 +627,8 @@ static int extended_key(SDL_Scancode key)
 int platform_poll(cm_input *input, unsigned frame)
 {
     SDL_Event e;
+    input->mouse_present=!is_headless && window!=NULL;
+    input->joystick_present=modern_controls && controller!=NULL;
     memset(input->pressed, 0, sizeof input->pressed);
     memset(input->released, 0, sizeof input->released);
     input->raw_count = 0;

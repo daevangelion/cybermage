@@ -683,7 +683,7 @@ int ai_pc_select(ai_state *a, const sim_state *s, const world *w, unsigned kind)
     if ((kind == 1 && mode != 1 && mode != 2) || (kind == 2 && mode != 5))
         return cm_fail("selector", (uint32_t)mode, "selected mode does not match item kind");
     if ((kind == 1 && (mode == 1 || mode == 2)) ||
-        (kind == 2 && e->previous_mode != 5)) {
+        (kind == 2 && s->previous_pc_mode != 5)) {
         a->pc.last_mode = 0;
         if (equip(a, w, mode)) return -1;
     } else {
@@ -695,6 +695,36 @@ int ai_pc_select(ai_state *a, const sim_state *s, const world *w, unsigned kind)
         if (reset_aim(a, mode)) return -1;
     }
     a->pc.fire = a->pc.cooldown = a->pc.latch = 0;
+    a->pc.mouse_hand_flag=0;
+    if(kind) a->pc.cursor_flags=3;
+    return 0;
+}
+
+/* ClipGloveAim1B4EC. The caller initializes the per-frame step to four. */
+void ai_pc_glove_aim(ai_state *a, int32_t x, int32_t y)
+{
+    if(y<20) y=20;else if(y>152) y=152;
+    if(y<64) a->pc.sword_aim_step=ai_add32(a->pc.sword_aim_step,3);
+    else if(y>108) a->pc.sword_aim_step=ai_sub32(a->pc.sword_aim_step,3);
+    if(x<-73) x=-73;else if(x>110) x=110;
+    if(x<-12) a->pc.sword_aim_step=ai_sub32(a->pc.sword_aim_step,1);
+    else if(x>49) a->pc.sword_aim_step=ai_add32(a->pc.sword_aim_step,1);
+    a->pc_aim.aim_x=x;a->pc_aim.aim_y=y;
+}
+
+/* ProcessInputEvents14EED/14FAA: the non-running jump-key hand mode. */
+int ai_pc_hand_mode(ai_state *a, sim_state *s, const world *w, int enter)
+{
+    if(pc_ready(a,s,w)) return -1;
+    if(enter) { s->previous_pc_mode=s->pc_mode;s->pc_mode=3; }
+    else s->pc_mode=s->previous_pc_mode;
+    if(reset_aim(a,s->pc_mode)) return -1;
+    a->pc.fire=a->pc.cooldown=0;a->pc.latch=1;
+    if(!enter) { a->pc.mouse_hand_flag=0;a->pc.cursor_flags|=1; }
+    if(enter && s->mouse_present) {
+        a->pc.mouse_hand_flag=1;
+        platform_mouse_warp((160+a->pc_aim.aim_x)*2,(200-a->pc_aim.aim_y)*2);
+    }
     return 0;
 }
 
@@ -705,7 +735,8 @@ int ai_pc_prepare_input(ai_state *a, sim_state *s, world *w)
     ai_pc_state *p;
     if (pc_ready(a, s, w)) return -1;
     mode = combat_mode(s); p = &a->pc;
-    if (equip(a, w, mode)) return -1;
+    if (mode!=3 && equip(a, w, mode)) return -1;
+    if(mode==3) { s->movement_request=0;s->flight_action=1; }
     /* HandleNextFrame 0x1BA49: the four glow frames use the 2-tick gate. */
     if (s->bp_limit_flag) p->glow_frame = (p->glow_frame+1)%4;
     if (mode == 7 && s->vehicle_type) {
@@ -724,6 +755,9 @@ int ai_pc_prepare_input(ai_state *a, sim_state *s, world *w)
         }
     }
     keyboard_hand(p, s, mode);
+    if(s->mouse_present && p->mouse_hand_flag) {
+        p->hand_x=s->mouse_hand_x;p->hand_y=s->mouse_hand_y;
+    }
     fire_input(a, s, &w->persons[w->player_person], mode);
     player_loops(a, s, w, mode);
     return 0;
@@ -737,6 +771,18 @@ int ai_pc_prepare_motion(ai_state *a, sim_state *s, world *w)
     mode = combat_mode(s);
     if (ai_pc_hit_response(a, s, w) || prepare_aim(a, s, mode) ||
         (mode == 2 && hand_stance(a, s, w))) return -1;
+    if(mode==3 && !a->events->selector_kind && !a->events->selector_request) {
+        int32_t x=a->pc_aim.aim_x,y=a->pc_aim.aim_y;
+        int32_t hx=a->pc.hand_x,hy=a->pc.hand_y;
+        if(s->mouse_present) { x=hx;y=ai_sub32(100,hy); }
+        else {
+            if(hx<-8) x=ai_add32(x,ai_add32(hx,8)/2);
+            else if(hx>8) x=ai_add32(x,ai_sub32(hx,8)/2);
+            if(hy<-8) y=ai_add32(y,ai_add32(hy,8)/2);
+            else if(hy>8) y=ai_add32(y,ai_sub32(hy,8)/2);
+        }
+        ai_pc_glove_aim(a,x,y);
+    }
     return 0;
 }
 
@@ -747,6 +793,8 @@ int ai_pc_input(ai_state *a, sim_state *s, world *w)
     ai_pc_state *p;
     if (pc_ready(a, s, w)) return -1;
     mode = combat_mode(s); p = &a->pc;
+    if(mode==3 && (p->fire || p->latch))
+        p->sword_aim_step=ai_add32(p->sword_aim_step,9); /*1E445*/
     if ((mode == 1 && ranged_fire(a, s, w)) ||
         (mode == 5 && spell_fire(a, s, w)) ||
         (mode == 7 && tank_fire(a, s, w))) return -1;

@@ -27,6 +27,7 @@ typedef struct {
     uint8_t held[CM_KEY_COUNT]; /* DOS set-1 scan codes */
     uint8_t pressed[CM_KEY_COUNT];
     uint8_t released[CM_KEY_COUNT];
+    int mouse_present, joystick_present; /* Driver/device availability, not coordinates. */
     int mouse_x, mouse_y;
     int mouse_dx, mouse_dy;
     unsigned mouse_buttons;
@@ -66,6 +67,7 @@ int platform_directory(const char *path);
 void platform_shutdown(void);
 int platform_keys(const char *path);
 int platform_poll(cm_input *input, unsigned frame);
+void platform_mouse_warp(int x, int y); /* 640x480 game coordinates. */
 int platform_controls(int modern, int gameplay);
 /* RGB 160,220,220; window/output coordinates, top-left origin. */
 unsigned platform_touch_rects(int width, int height,

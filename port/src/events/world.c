@@ -1230,7 +1230,6 @@ int events_frame_begin(events_state *e, sim_state *s, ai_state *a, world *w)
 
 int events_input(events_state *e, sim_state *s, ai_state *a, world *w)
 {
-    unsigned i;
     if (!e || !s || !a || !w || w->player_object >= w->object_count) return cm_fail("MoveWorld",0,"missing simulation state");
     e->ticks=s->timer_ticks;e->actors=a;
     {
@@ -1245,12 +1244,26 @@ int events_input(events_state *e, sim_state *s, ai_state *a, world *w)
         if(e->text_trigger) { snd_message_stop();e->text_skip_pending=1; }
     }
     if(!e->text_skip_pending && dialogue_tick(e,w)) return -1;
-    if (e->selector_kind) return events_process_selector(e,s,w);
-    for (i = 0; i < 3; ++i) if (s->kb_scan_status[0x3B+i]) {
-        s->kb_scan_status[0x3B+i] = 0; e->previous_mode = s->pc_mode;
-        if (events_make_selector(e,i+1)) return -1;
-        s->pc_mode = 3; return 0;
+    if(e->selector_request) {
+        unsigned kind=e->selector_request;
+        events_selector *q;
+        e->selector_request=0;
+        if(events_make_selector(e,kind)) return -1;
+        q=&e->selectors[kind-1];
+        if(!q->count) {
+            e->selector_kind=0;s->pc_mode=s->previous_pc_mode;
+            if(ai_pc_select(a,s,w,0)) return -1;
+            a->pc.cursor_flags=3;
+        } else if(s->mouse_present) {
+            a->pc.mouse_hand_flag=1;
+            a->pc.sword_aim_step=4;
+            ai_pc_glove_aim(a,(int32_t)(q->index%5)*54-92,140-(int32_t)(q->index/5)*44);
+            platform_mouse_warp((160+a->pc_aim.aim_x)*2,(200-a->pc_aim.aim_y)*2);
+        }
+        a->pc.fire=a->pc.cooldown=a->pc.latch=0;
+        return 0;
     }
+    if (e->selector_kind) return events_process_selector(e,s,w);
     if(s->pc_mode==7 && (s->kb_scan_status[0x0F]&2u)) {
         s->kb_scan_status[0x0F]=0;e->tank_flag=-1;
     }

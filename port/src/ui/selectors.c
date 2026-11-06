@@ -123,11 +123,15 @@ static void outline(uint8_t *dst, int x, int y)
 
 int ui_draw_selector(const cm_ui *ui, const world *w, const events_state *e, uint8_t *dst)
 {
+    const events_selector *q;
     unsigned i;
-    if (e->selector_count > EVENTS_SELECTOR_MAX ||
-        (e->selector_count && e->selector_index >= e->selector_count))
-        return cm_fail("selector",e->selector_count,"invalid selector extent");
-    for (i = 0; i < e->selector_count; ++i) {
+    if(e->selector_kind<1 || e->selector_kind>3)
+        return cm_fail("selector",e->selector_kind,"invalid selector kind");
+    q=&e->selectors[e->selector_kind-1];
+    if (q->count > EVENTS_SELECTOR_MAX ||
+        (q->count && q->index >= q->count))
+        return cm_fail("selector",q->count,"invalid selector extent");
+    for (i = 0; i < q->count; ++i) {
         char name[15], shortcut[16], value[32];
         const char *label;
         int x = 14+(int)(i%5)*116, y = 128+(int)(i/5)*88;
@@ -151,7 +155,7 @@ int ui_draw_selector(const cm_ui *ui, const world *w, const events_state *e, uin
         }
         if (e->selector_kind == 2 &&
             (icon < 0 || ui_draw_scon_bitmap(ui,dst,x+1,y+1,(unsigned)icon,32))) return -1;
-        if (i == e->selector_index) outline(dst,x,y);
+        if (i == q->index) outline(dst,x,y);
         if (snprintf(shortcut,sizeof shortcut,order < 12 ? "%d" : "#%d",
                      order < 12 ? order+1 : order-11) < 0) return -1;
         if (ui_text_mode(dst,&ui->fonts[0],x+2,y+2,shortcut,117,0,1,0)) return -1;

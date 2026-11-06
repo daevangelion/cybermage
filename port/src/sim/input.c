@@ -91,6 +91,14 @@ int sim_start_scene(sim_state *s, world *w)
 void sim_input(sim_state *s, const cm_input *input)
 {
     unsigned i;
+    s->mouse_present=!input->modern && input->mouse_present;
+    s->joystick_present=!input->modern && input->joystick_present;
+    if(s->mouse_present) {
+        int32_t x=world_sub32(input->mouse_x,320)/2;
+        int32_t y=world_sub32(input->mouse_y/2,100);
+        s->mouse_hand_x=x<-156?-156:x>156?156:x;
+        s->mouse_hand_y=y<-96?-96:y>96?96:y;
+    }
     if (input->modern) {
         for (i = 0; i < SIM_SCAN_COUNT; ++i)
             s->kb_scan_status[i] = (uint8_t)((input->held[i] ? 1 : 0) |

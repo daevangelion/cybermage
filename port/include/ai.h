@@ -100,6 +100,7 @@ typedef struct {
 typedef struct {
     int32_t fire, cooldown, latch; /* Xox+144AB0/144AB4/144AB8 */
     int32_t hand_x, hand_y; /* +144AA8/+144AAC */
+    int32_t cursor_flags, mouse_hand_flag; /* +144AC8, mouseHANDFlag206854. */
     int32_t bob_phase; /* +144AD4 */
     int32_t sword_aim_step, sword_frame; /* +144A44/+144A4C */
     int32_t muzzle_frame, muzzle_mode, muzzle_count; /* +144A5C/60/64 */
@@ -179,6 +180,8 @@ int ai_pc_equip(ai_state *a, const sim_state *s, const world *w);
 /* Selector commit after its caller assigns the selected raw PC mode.
  * kind:0 cancel,1 weapon,2 power,3 inventory. No rendering/asset allocation. */
 int ai_pc_select(ai_state *a, const sim_state *s, const world *w, unsigned kind);
+void ai_pc_glove_aim(ai_state *a, int32_t x, int32_t y);
+int ai_pc_hand_mode(ai_state *a, sim_state *s, const world *w, int enter);
 void ai_pc_hand_bob(ai_state *a, const sim_state *s);
 /* Sim: input before acceleration; motion after body and before MovePerson.
  * Main: actual weapon fire after Sim, before world/NPC updates. */

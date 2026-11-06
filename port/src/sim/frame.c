@@ -1,5 +1,6 @@
 #include "sim_internal.h"
 #include "ai.h"
+#include "events.h"
 
 #define MOVE_FAST 768
 #define MOVE_WALK 640
@@ -29,6 +30,12 @@ static int keyboard(sim_state *s, world *w)
     if (keys[0x2a]) {
         if (!s->shift_lock) { keys[0x2a] |= 2; s->shift_lock = 1; }
     } else s->shift_lock = 0;
+    if(s->pc_mode==3) {
+        s->movement_request=s->yaw_request=0;
+        jump=down(s,s->kb_jump,s->kb_jump_bit | s->kb_jump_bit*2);
+        if(jump) keys[s->kb_jump]&=(uint8_t)~(s->kb_jump_bit*2);
+        return jump;
+    }
     if (down(s, s->kb_look_down, s->kb_look_down_bit) && w->camera.pitch < PITCH_LIMIT)
         w->camera.pitch += PITCH_STEP;
     if (down(s, s->kb_look_up, s->kb_look_up_bit) && w->camera.pitch > -PITCH_LIMIT)
@@ -282,12 +289,20 @@ int sim_frame(sim_state *s, world *w, const cm_input *input, uint32_t timer_tick
     s->unk_144aec = s->unk_144af0 = s->unk_144af4 = 0;
     jump = input->modern ? sim_modern_input(s, w, input) : keyboard(s, w);
     if (jump < 0) return -1;
+    if(!input->modern && s->events && s->ai &&
+       events_keyboard(s->events,s,s->ai,w)) return -1;
     /* HandleKeyboardEvents 013E39 samples B10 once, before acceleration. */
     s->primary_fire = 0;
     if (s->ai) {
         unsigned key = s->ai->pc.kb_fire, mask = s->ai->pc.kb_fire_bit;
         s->primary_fire = down(s, key, mask | mask * 2);
         if (s->primary_fire) s->kb_scan_status[key] &= (uint8_t)~(mask * 2);
+    }
+    if(s->mouse_present && s->ai) {
+        unsigned buttons=input->mouse_buttons | input->mouse_pressed;
+        if(!(buttons&1)) s->ai->pc.cursor_flags&=~1;
+        if(!(buttons&2)) s->ai->pc.cursor_flags&=~2;
+        if((buttons&1) && !s->ai->pc.cursor_flags) s->primary_fire=1;
     }
     if (!jump) s->unk_144b20 = 0;
     can_jump = !s->flight_mode && !s->unk_144b20 && !s->unk_144b1c && !s->unk_144b30 &&
@@ -298,10 +313,10 @@ int sim_frame(sim_state *s, world *w, const cm_input *input, uint32_t timer_tick
         !(s->pc_mode == 2 && s->primary_fire) && (input->modern ?
         input->run && s->movement_request > 0 : s->movement_request > RUN_THRESHOLD);
     s->running = running;
+    s->flight_action=0;
     if (s->ai && s->ai->tables_loaded && s->ai->events &&
         ai_pc_prepare_input(s->ai, s, w)) return -1;
     acceleration(s, running ? RUN_ACCEL_MAX : WALK_ACCEL_MAX);
-    s->flight_action = 0;
     if (s->flight_mode) {
         if (down(s, 0x11, 1)) {
             if (s->key_hand_y < 8) s->key_hand_y = 8;
@@ -333,12 +348,16 @@ int sim_frame(sim_state *s, world *w, const cm_input *input, uint32_t timer_tick
         s->unk_144b2c = p->unk_007C ? p->unk_0080 : o->floor_z;
         p->unk_007C = 0;
         s->unk_144b24 = s->unk_144ae8;
-    } else if (!input->modern && jump && can_jump && !s->flight_mode &&
+    } else if (!input->modern && jump && !s->unk_144b1c && !s->unk_144b20 && !s->flight_mode &&
                (s->pc_mode == 1 || s->pc_mode == 2 || s->pc_mode == 5)) {
-        s->previous_pc_mode = s->pc_mode;
-        s->pc_mode = 3;
-    } else if (!input->modern && !jump && s->pc_mode == 3) {
-        s->pc_mode = s->previous_pc_mode;
+        if(s->ai && s->ai->tables_loaded && s->ai->events) {
+            if(ai_pc_hand_mode(s->ai,s,w,1)) return -1;
+        } else { s->previous_pc_mode=s->pc_mode;s->pc_mode=3; }
+    } else if (!input->modern && !jump && s->pc_mode == 3 &&
+               (!s->events || (!s->events->selector_kind && !s->events->selector_request))) {
+        if(s->ai && s->ai->tables_loaded && s->ai->events) {
+            if(ai_pc_hand_mode(s->ai,s,w,0)) return -1;
+        } else s->pc_mode=s->previous_pc_mode;
     }
     momentum(s);
     if (flight(s, w, o)) return -1;

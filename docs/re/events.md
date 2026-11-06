@@ -308,6 +308,42 @@ F4 Regen Pak use (HP17→40, item6 quantity1→0). Selection completion/cancella
 uses AI's original equip/aim/fire-reset provider rather than changing equipment
 words alone. Active and newly opened selectors still proceed through MoveWorld.
 
+Counts/indices are independent for weapons (+144814/+144818), powers
+(+14491C/+144920) and keys (+144974/+144978). The temporary item/order lists
+and twenty-entry map at+14497C are shared. MakeWeapon057165 and MakeSpell056DED
+clear that map to-1; MakeKey does not. A stale F4 entry after consuming the last
+Regen Pak is legal: signed index<0 or index>=current key count skips only
+UseItem at01E4D4..01E4F0, while mode/aim/cursor/fire/cooldown still close/reset.
+The regression drives consumption, rebuild and stale confirmation, not a
+fabricated expected index. Weapon/power and item-id bounds remain checked.
+
+ProcessSelector01B580 ports keyboard navigation, mouse hover thresholds and
+ragged-last-row clamping, joystick debounce, grid aim, ClipGloveAim01B4EC and
+pointer warps. Classic mouse coordinates/device availability pass through the
+existing physical input struct; modern relative aim stays separate. Fixtures
+exercise all20 grid positions, every mouse threshold edge, ragged lists and
+released E0 key edges. The genuine regeneration fixture has **mouse0/joystick0**,
+so it does not establish hardware mouse or joystick parity.
+
+The non-running jump-key hand path is ProcessInputEvents014D47..014F1F, not a
+Ctrl special case: running jumps; otherwise a grounded foot player enters
+mode3 without the extra running-eligibility restrictions. Release014F75 restores
+the single Sim-owned previous mode (+144810), resets aim and leaves latch1.
+Mode3 skips foot keyboard motion and preserves active selectors. Aim clipping,
+mouse-hand/cursor flags and late sword-step+9 use the original player fields.
+The separate Events copy of previous mode has been removed.
+
+SaveGame050A8F..050AC1 and LoadGame0515F8..05162A perform exactly six writes:
+three counts0 and three indices-1. `events_reset_selectors` makes only these
+writes; native phase flags are initialized separately on scene initialization.
+Main calls it after successful durable save/name writes and successful load
+import, never on a failed operation. A real-main fixture drives `menu_input`,
+Sim, player input and Events: F1/F2/F3 open selectors, F5/F7 stay inside the
+active selector, Escape cancels before pause, and OS quit still works.
+Outside selectors the file-menu shortcuts remain available; Help uses original
+keyHELP=53 decimal (scan35 hex; data0962B8, handler014026), not F1.
+F4 opens the regular pause menu only outside selectors (0135C3).
+
 `events_frame_begin` owns the prior vehicle-request/dead-vehicle transition at
 01C1CB..01C23F, after missile/soul updates and before keyboard/motion. Late
 `events_input` cannot consume a request: fixtures explicitly distinguish those

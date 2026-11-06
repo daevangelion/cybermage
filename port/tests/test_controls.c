@@ -106,6 +106,10 @@ int main(void)
     frame(&c, CONTROLS_VEHICLE, &in, &out);
     assert(out.fly == -1 && out.held[0x20] && out.pressed[0x1f]);
     controls_init(&c);
+    memset(&in,0,sizeof in);in.held[53]=1;
+    frame(&c,CONTROLS_FOOT,&in,&out);
+    assert(out.pressed[53] && !out.pressed[59]);
+    controls_init(&c);
     for (i=2;i<=57;++i) {
         memset(&in,0,sizeof in);
         frame(&c,CONTROLS_MENU,&in,&out);

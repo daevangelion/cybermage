@@ -196,8 +196,8 @@ ui_action ui_input(cm_ui *ui, const cm_input *in, uint32_t ticks)
         if (in->pressed[26] && ui->con_size<4) ++ui->con_size;
         if (in->pressed[27] && ui->con_size) --ui->con_size;
         if (in->pressed[16]) ui->vdu=(ui->vdu+1)%3;
-        if (in->pressed[1]) ui_open(ui, UI_PAUSE);
-        else if (in->pressed[59]) ui_open(ui, UI_HELP);
+        if (in->pressed[1] || in->pressed[0x3E]) ui_open(ui, UI_PAUSE); /*135C3*/
+        else if (in->pressed[53]) ui_open(ui, UI_HELP); /* keyHELP962B8/14026 */
         else if (in->pressed[63] || in->pressed[65]) {
             ui->return_screen = UI_GAME;
             ui_open(ui, in->pressed[63] ? UI_SAVE : UI_LOAD);

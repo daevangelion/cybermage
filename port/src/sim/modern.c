@@ -3,37 +3,38 @@
 static int select_action(sim_state *s, world *w, const cm_input *in)
 {
     events_state *e = s->events;
+    events_selector *q;
     unsigned i, index = 0, kind;
     if (!e || (!in->cycle && !in->select_slot && !in->select_open)) return 0;
     kind = e->selector_kind && !in->select_open ? e->selector_kind : in->select_kind;
     if (kind < 1 || kind > 3) kind = 1;
+    q=&e->selectors[kind-1];
     if (!e->selector_kind || in->select_open) {
-        if (!e->selector_kind)
-            e->previous_mode = s->modern_aim ? s->previous_pc_mode : s->pc_mode;
+        if (!e->selector_kind && !s->modern_aim) s->previous_pc_mode=s->pc_mode;
         if (events_make_selector(e, kind)) return -1;
-        for (i = 0; i < e->selector_count; ++i) {
+        for (i = 0; i < q->count; ++i) {
             unsigned slot = (unsigned)e->selector_items[i];
             if ((kind == 2 && (int32_t)slot == e->spell) ||
                 (kind == 1 && e->items[slot].subtype ==
-                    (e->previous_mode == 2 ? e->hh_weapon : e->weapon))) index = i;
+                    (s->previous_pc_mode == 2 ? e->hh_weapon : e->weapon))) index = i;
         }
-        e->selector_index = index;
+        q->index = index;
     }
-    if (in->select_open) { s->pc_mode = 3; s->modern_aim = 0; return 0; }
-    if (!e->selector_count) {
+    if (!q->count) {
         e->selector_kind = 0;
-        s->pc_mode = e->previous_mode;
+        s->pc_mode = s->previous_pc_mode;
         return 0;
     }
+    if (in->select_open) { s->pc_mode = 3; s->modern_aim = 0; return 0; }
     if (in->select_slot) {
         unsigned key = in->select_slot - 1;
         if (key >= EVENTS_SELECTOR_MAX || e->selector_keys[key] < 0) return 0;
-        e->selector_index = (unsigned)e->selector_keys[key];
-    } else if (in->cycle > 0) e->selector_index = (e->selector_index + 1) % e->selector_count;
-    else e->selector_index = (e->selector_index + e->selector_count - 1) % e->selector_count;
+        q->index = (unsigned)e->selector_keys[key];
+    } else if (in->cycle > 0) q->index = (q->index + 1) % q->count;
+    else q->index = (q->index + q->count - 1) % q->count;
     if (kind == 3 && !in->select_slot) { s->pc_mode = 3; return 0; }
     s->kb_scan_status[0x1c] = 2;
-    if (events_process_selector(e, s, w)) return -1;
+    if (events_keyboard(e,s,s->ai,w) || events_process_selector(e, s, w)) return -1;
     if (s->modern_aim) {
         s->previous_pc_mode = s->pc_mode;
         s->pc_mode = 3;

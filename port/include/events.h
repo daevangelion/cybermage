@@ -55,6 +55,12 @@ typedef struct {
     int32_t auto_mode;
 } events_scene_request;
 
+enum { EVENTS_SELECT_WEAPON=1, EVENTS_SELECT_POWER, EVENTS_SELECT_KEY };
+/* Counts/indices at +144814/+144818, +14491C/+144920, +144974/+144978.
+ * Native array layout is not the original stride. The +14497C shortcut map
+ * and the temporary item/order lists are shared by all three selectors. */
+typedef struct { unsigned count, index; } events_selector;
+
 typedef struct events_state {
     struct ai_state *actors;
     events_item items[EVENTS_ITEM_MAX];
@@ -77,7 +83,8 @@ typedef struct events_state {
     uint8_t speechLog[63];
     int32_t selector_items[EVENTS_SELECTOR_MAX], selector_order[EVENTS_SELECTOR_MAX];
     int32_t selector_keys[EVENTS_SELECTOR_MAX];
-    unsigned selector_count, selector_index, selector_kind;
+    events_selector selectors[3];
+    unsigned selector_kind, selector_request, selector_confirm, selector_joy_latch;
     int32_t text_trigger, text_object, text_message;
     int text_skip_pending;
     uint32_t text_serial;
@@ -102,7 +109,7 @@ typedef struct events_state {
     uint32_t waterTimer, miscTimer;
     uint16_t prop_base_texture[2048];
     int tables_loaded;
-    int32_t tank_flag, vehicle_person, vehicle_type, previous_mode;
+    int32_t tank_flag, vehicle_person, vehicle_type;
     unsigned foot_object, foot_person;
     int16_t auto_slot[EVENTS_AUTO_MAX], auto_ptr[EVENTS_AUTO_MAX];
     uint32_t ticks;
@@ -113,6 +120,10 @@ int events_load_tables(events_state *e, const char *asset_dir);
 int events_step(events_state *e, sim_state *s, struct ai_state *a, world *w);
 /* HandleNextFrame01C1CB..01C23F, after missile/soul updates, before input. */
 int events_frame_begin(events_state *e, sim_state *s, struct ai_state *a, world *w);
+/* HandleKeyboardEvents: after key motion sampling, before ProcessInputEvents. */
+int events_keyboard(events_state *e, sim_state *s, struct ai_state *a, world *w);
+int events_selector_needs_input(const events_state *e);
+void events_reset_selectors(events_state *e);
 /* Input: -1 error, 0 proceed to world. Selectors do not stop MoveWorld. */
 int events_input(events_state *e, sim_state *s, struct ai_state *a, world *w);
 int events_move_world(events_state *e, sim_state *s, struct ai_state *a, world *w);
