@@ -9,3 +9,4 @@ __pycache__/
 *.pyc
 unpacked/
 out/
+labels.csv.lock

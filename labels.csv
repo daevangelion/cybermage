@@ -1676,3 +1676,7 @@ CM_HI.EXE,0x209ABC,___wcpp_1_data_vc_,cppdata | kind=2 | ___wcpp_1_data_vc_
 CM_HI.EXE,0x209AE8,___minreal,minreal | kind=2 | ___minreal
 CM_HI.EXE,0x209AEC,____Argv,___argc | kind=2 | ____Argv
 CM_HI.EXE,0x209AF0,____Argc,___argc | kind=2 | ____Argc
+CM_HI.EXE,0x02178F,hipak_directory_read,"OpenGLOBALFILES: u32 capacity64,count then64 offsets and64 explicit sizes; docs/re/formats.md",
+CM_HI.EXE,0x0555BA,title_draw_option,TitleMenu inclusive box translation bright2/shadow22 then centered font1 text; titleOpX/Y titleBoxX/Y; docs/re/formats.md,
+CM_HI.EXE,0x023D12,gsx_frame_extents,LoadGSX: half dimensions times scale; offsets from ANIMOBJ +270/+450; docs/re/formats.md,
+CM_HI.EXE,0x024FBA,prop_frame_extents,LoadPROPOBJ: half dimensions and disk per-frame +43/+47 offsets times percent*512/100; docs/re/formats.md,
