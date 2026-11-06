@@ -20,7 +20,7 @@ $(B)/%.o: src/%.c
 	@mkdir -p $(@D)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -MMD -MP -c -o $@ $<
 
-check: $(B)/test_core $(B)/test_platform $(B)/test_touch $(B)/test_sim $(B)/test_replay $(B)/test_exe $(B)/test_sim_loop $(B)/test_sim_collision $(B)/test_sim_swim $(B)/test_sim_swim_original $(B)/test_sim_fire $(B)/test_sim_fire_ubsan
+check: $(B)/test_core $(B)/test_platform $(B)/test_touch $(B)/test_sim $(B)/test_replay $(B)/test_exe $(B)/test_sim_loop $(B)/test_sim_collision $(B)/test_sim_swim $(B)/test_sim_swim_ubsan $(B)/test_sim_swim_original $(B)/test_sim_fire $(B)/test_sim_fire_ubsan
 	$(B)/test_core
 	$(B)/test_platform $(B)/platform-keys.txt $(B)/platform-dump
 	$(B)/test_touch
@@ -30,6 +30,7 @@ check: $(B)/test_core $(B)/test_platform $(B)/test_touch $(B)/test_sim $(B)/test
 	$(B)/test_sim_loop $(B)/loop-user
 	$(B)/test_sim_collision
 	$(B)/test_sim_swim ../orig/retail
+	$(B)/test_sim_swim_ubsan ../orig/retail
 	$(abspath ../.venv/bin/python) ../tools/sim_swim_original.py $(B)/test_sim_swim_original
 	$(abspath ../.venv/bin/python) ../tools/sim_swim_original.py $(B)/test_sim_swim_original 7
 	$(abspath ../.venv/bin/python) tests/test_swim_trace.py
@@ -75,6 +76,10 @@ $(B)/test_sim_collision: tests/test_sim_collision.c $(filter-out $(B)/main.o,$(O
 $(B)/test_sim_swim: tests/test_sim_swim.c $(filter-out $(B)/main.o,$(OBJECTS))
 	@mkdir -p $(@D)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+
+$(B)/test_sim_swim_ubsan: tests/test_sim_swim.c src/sim/frame.c $(filter-out $(B)/main.o $(B)/sim/frame.o,$(OBJECTS))
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -O1 -fsanitize=undefined -fno-sanitize-recover=undefined $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 $(B)/test_sim_swim_original: tests/test_sim_swim_original.c $(filter-out $(B)/main.o,$(OBJECTS))
 	@mkdir -p $(@D)

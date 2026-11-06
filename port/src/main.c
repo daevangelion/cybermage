@@ -5,6 +5,7 @@
 #include "gfx.h"
 #include "platform.h"
 #include "render.h"
+#include "render_gl.h"
 #include "replay.h"
 #include "rsc.h"
 #include "sim.h"
@@ -19,6 +20,7 @@
 
 #define PATH_BYTES 1024
 #define STATE_TEXT_BYTES (2048 + CM_OBJECT_MAX * 5)
+#define ACTOR_STATE_LINE_BYTES 256
 
 static uint8_t pixels[CM_WIDTH * CM_HEIGHT], palette[768];
 static uint8_t base_palette[768];
@@ -28,6 +30,9 @@ static uint8_t death_background[CM_WIDTH * CM_HEIGHT];
 static unsigned death_columns[CM_WIDTH];
 static uint32_t death_deadline;
 static int death_phase;
+static int gl_enabled, gl_recording, gl_overlay_valid, gl_death_prepared;
+static unsigned gl_width, gl_height;
+static cm_overlay gl_overlay;
 static world game;
 static ai_state actors;
 static events_state events;
@@ -86,6 +91,74 @@ static int game_names_read(const char *directory)
     return result;
 }
 
+static int gl_overlay_begin(void)
+{
+    if (!gl_recording) {
+        if (gfx_overlay_begin(&gl_overlay, pixels)) return -1;
+        gl_recording = gl_overlay_valid = 1;
+    }
+    return 0;
+}
+
+static int gl_overlay_end(void)
+{
+    if (!gl_recording) return 0;
+    gl_recording = 0;
+    return gfx_overlay_end();
+}
+
+static int64_t floor_ratio(int64_t n, int64_t d)
+{
+    return n >= 0 ? n / d : -((-n + d - 1) / d);
+}
+
+static int canvas_edge(int64_t n, int64_t d, int limit, int upper)
+{
+    int64_t value = upper ? -floor_ratio(-n, d) : floor_ratio(n, d);
+    return value < 0 ? 0 : value > limit ? limit : (int)value;
+}
+
+/* The HUD remains centred4:3. Extend the legacy view horizontally, preserving
+ * its vertical focal length; do not stretch either the hands or HUD bitmaps. */
+static int gl_world_view(ui_view view, ui_view *hole)
+{
+    int64_t num, den, margin_x, margin_y;
+    int right, bottom;
+    cm_gl_view native;
+    if ((uint64_t)gl_width * CM_HEIGHT <= (uint64_t)gl_height * CM_WIDTH) {
+        num = gl_width; den = CM_WIDTH;
+    } else { num = gl_height; den = CM_HEIGHT; }
+    margin_x = (int64_t)gl_width * den - CM_WIDTH * num;
+    margin_y = (int64_t)gl_height * den - CM_HEIGHT * num;
+    native.x = (int)(view.x * num / den);
+    native.y = (int)((margin_y + 2 * view.y * num) / (2 * den));
+    right = (int)gl_width - (int)((CM_WIDTH - view.x - view.width) * num / den);
+    bottom = (int)((margin_y + 2 * (view.y + view.height) * num + 2 * den - 1) / (2 * den));
+    native.width = (unsigned)(right - native.x);
+    native.height = (unsigned)(bottom - native.y);
+    native.reference_width = (unsigned)view.width;
+    native.reference_height = (unsigned)view.height;
+    native.preserve_outside = 0;
+    hole->x = canvas_edge(2 * native.x * den - margin_x, 2 * num, CM_WIDTH, 0);
+    hole->y = canvas_edge(2 * native.y * den - margin_y, 2 * num, CM_HEIGHT, 0);
+    right = canvas_edge(2 * right * den - margin_x, 2 * num, CM_WIDTH, 1);
+    bottom = canvas_edge(2 * bottom * den - margin_y, 2 * num, CM_HEIGHT, 1);
+    hole->width = right - hole->x;
+    hole->height = bottom - hole->y;
+    return render_gl_draw_view(&game, &game.camera, &native);
+}
+
+/* Read the actual indexed GPU composite only at frozen-bitmap transitions,
+ * never during ordinary gameplay or menu presentation. */
+static int gl_bitmap_snapshot(void)
+{
+    if (gl_overlay_end() ||
+        render_gl_read_canvas(gl_overlay_valid ? &gl_overlay : NULL, pixels) ||
+        render_gl_clear(0) || gl_overlay_begin()) return -1;
+    gfx_cover(pixels, sizeof pixels);
+    return 0;
+}
+
 static void camera_follow(void)
 {
     const world_object *o = &game.objects[game.player_object];
@@ -116,6 +189,7 @@ static int load_scene(const char *data, unsigned scene)
         world_finalize_scene(&game) || sim_start_scene(&simulation, &game) ||
         events_init(&events, &game) || events_load_tables(&events, data) ||
         render_load(&game, &hipak) || snd_scene(&game)) return -1;
+    if (gl_enabled && render_gl_load(&game, render_get_state(), palette)) return -1;
     actors.events = &events;
     if (ai_pc_equip(&actors, &simulation, &game)) return -1;
     ai_start_clock(&actors, simulation.previous_ticks);
@@ -123,6 +197,7 @@ static int load_scene(const char *data, unsigned scene)
     events.ticks = simulation.timer_ticks;
     ui.shop_kind = 0;
     death_phase = 0;
+    gl_death_prepared = 0;
     ui_save_init(&save, &game);
     ui_open(&ui, UI_GAME);
     return 0;
@@ -250,6 +325,7 @@ static int load_requested(const char *data, const char *user, uint32_t ticks)
     if (result) {
         if (result == -2) {
             snd_kill(&game);
+            actors.pc.sword_hum_slot = -1;
             render_unload();
             world_close(&game);
             death_phase = 0;
@@ -370,6 +446,7 @@ static int death_start(uint32_t ticks)
     simulation.swim_loop = -1;
     actors.pc_sound = -1;
     actors.pc.loop_sound = -1;
+    actors.pc.sword_hum_slot = -1;
     for (x = 0; x < CM_WIDTH; ++x) death_columns[x] = 7;
     death_deadline = ticks + 60;
     death_phase = 1;
@@ -386,20 +463,30 @@ static ui_action menu_input(const cm_input *input, uint32_t ticks)
     return action;
 }
 
-static int death_step(const cm_input *input, uint32_t ticks, int no_sound)
+static int death_step(const cm_input *input, uint32_t ticks, int no_sound, ui_view view)
 {
     int song, finished;
     if (death_phase == 1) {
         const uint8_t *image;
         uint32_t size;
         unsigned x, y;
-        if (render_draw(&game, &game.camera, pixels)) return -1;
+        if (gl_enabled) {
+            ui_view hole;
+            if (gl_world_view(view, &hole)) return -1;
+            if (!gl_death_prepared) {
+                for (y = (unsigned)hole.y; y < (unsigned)(hole.y + hole.height); ++y)
+                    memset(gl_overlay.coverage + y * CM_WIDTH + hole.x, 0, (size_t)hole.width);
+                gl_overlay.world_map = 0;
+                gl_death_prepared = 1;
+            }
+        } else if (render_draw(&game, &game.camera, pixels)) return -1;
         if ((int32_t)(ticks - death_deadline) < 0) return 0;
         if (simulation.pc_mode == 7 &&
             events_set_tank_mode(&events, &simulation, &game, 0)) return -1;
         if (rsc_entry(&hipak, 1, &image, &size)) return -1;
         if (size != 320u * 240u)
             return cm_fail(resource_path, 1, "invalid death backdrop dimensions");
+        if (gl_enabled && gl_bitmap_snapshot()) return -1;
         for (y = 0; y < CM_HEIGHT; ++y)
             for (x = 0; x < CM_WIDTH; ++x)
                 death_background[y * CM_WIDTH + x] = image[y / 2 * 320 + x / 2];
@@ -418,11 +505,17 @@ static int death_step(const cm_input *input, uint32_t ticks, int no_sound)
 
 static int state_dump(const char *directory, unsigned frame)
 {
-    char text[STATE_TEXT_BYTES];
-    const world_object *o = &game.objects[game.player_object];
-    const world_person *pc = &game.persons[game.player_person];
+    static char text[STATE_TEXT_BYTES + CM_OBJECT_MAX * ACTOR_STATE_LINE_BYTES];
+    const world_object *o;
+    const world_person *pc;
     unsigned i;
-    int n = snprintf(text, sizeof text,
+    int n;
+    if (game.person_count > CM_OBJECT_MAX || game.player_person >= game.person_count ||
+        game.player_object >= game.object_count)
+        return cm_fail("state", frame, "invalid actor/player pool");
+    o = &game.objects[game.player_object];
+    pc = &game.persons[game.player_person];
+    n = snprintf(text, sizeof text,
         "frame=%u ticks=%" PRIu32 " delta=%" PRId32 " x=%" PRId32 " y=%" PRId32
         " z=%" PRId32 " heading=%u pitch=%" PRId32
         " e8=%" PRId32 " ec=%" PRId32 " f0=%" PRId32 " f4=%" PRId32
@@ -486,12 +579,15 @@ static int state_dump(const char *directory, unsigned frame)
     {
         int add = snprintf(text + n, sizeof text - (size_t)n,
                            "swim=%" PRId32 " swim_deadline=%" PRIu32
-                           " hp=%d rng0=%u rng1=%u rng2=%u\n"
+                           " hp=%d rng0=%u rng1=%u rng2=%u bios_shift=%u\n"
+                           "original_undefined_person=%u original_undefined_distance=%" PRId32 "\n"
                            "targets count=%u objects=",
                            simulation.unk_144b50, simulation.swim_damage_time,
                            (int)(int16_t)(uint16_t)pc->unk_0038,
                            (unsigned)game.rng.word[0], (unsigned)game.rng.word[1],
-                           (unsigned)game.rng.word[2], actors.targets.count);
+                           (unsigned)game.rng.word[2], (unsigned)simulation.bios_shift,
+                           actors.undefined_distance_person, actors.undefined_distance_value,
+                           actors.targets.count);
         if (actors.targets.count > CM_OBJECT_MAX || add < 0 ||
             (size_t)add >= sizeof text - (size_t)n)
             return cm_fail("state", frame, "target state text overflow");
@@ -507,6 +603,26 @@ static int state_dump(const char *directory, unsigned frame)
             return cm_fail("state", frame, "target state text overflow");
         text[n++] = '\n';
     }
+    for (i = 0; i < game.person_count; ++i) {
+        const world_person *p = &game.persons[i];
+        const world_object *actor;
+        int add;
+        if (p->object < 0 || (unsigned)p->object >= game.object_count)
+            return cm_fail("state/actor", i, "invalid actor object");
+        actor = &game.objects[p->object];
+        add = snprintf(text + n, sizeof text - (size_t)n,
+            "actor=%u actor_object=%d actor_x=%" PRId32 " actor_y=%" PRId32
+            " actor_z=%" PRId32 " actor_heading=%u actor_state=%d actor_status=%d"
+            " actor_hp=%d actor_target=%" PRId32
+            " actor_animation=%u actor_cursor=%u actor_active=%u\n",
+            i, (int)p->object, actor->x, actor->y, actor->floor_z,
+            (unsigned)actor->heading, (int)p->state, (int)p->status,
+            (int)(int16_t)(uint16_t)p->unk_0038, p->target,
+            (unsigned)p->unk_00BC, (unsigned)p->unk_00BD, (unsigned)actor->active);
+        if (add < 0 || (size_t)add >= sizeof text - (size_t)n)
+            return cm_fail("state", frame, "actor state text overflow");
+        n += add;
+    }
     return platform_state_dump(directory, frame, text, (size_t)n);
 }
 
@@ -515,6 +631,7 @@ int main(int argc, char **argv)
     const char *data = "orig/retail", *dump = NULL, *keys = NULL, *trace = NULL;
     const char *state_directory = NULL, *user = NULL, *undefined_path = NULL;
     const char *control_mode = "classic";
+    const char *renderer = "sw";
     const uint8_t *pal_data;
     uint32_t pal_size;
     /* MenuOptions 04E830: initial aim (63,133), in desktop coordinates. */
@@ -527,6 +644,8 @@ int main(int argc, char **argv)
     int modern = 0;
     int replay_load = 0;
     int applied_settings[5], settings_applied = 0;
+    gl_enabled = gl_recording = gl_overlay_valid = gl_death_prepared = 0;
+    gl_width = gl_height = 0;
     for (i = 1; i < argc; ++i) {
         if (!strcmp(argv[i], "--headless")) headless = 1;
         else if ((!strcmp(argv[i], "--data") || !strcmp(argv[i], "--dump") ||
@@ -534,6 +653,8 @@ int main(int argc, char **argv)
                   !strcmp(argv[i], "--state-dump") ||
                   !strcmp(argv[i], "--user") || !strcmp(argv[i], "--bios-seed") ||
                   !strcmp(argv[i], "--controls") ||
+                  !strcmp(argv[i], "--renderer") || !strcmp(argv[i], "--width") ||
+                  !strcmp(argv[i], "--height") ||
                   !strcmp(argv[i], "--replay-load-slot") || !strcmp(argv[i], "--import-undefined") ||
                   !strcmp(argv[i], "--replay")) && i + 1 < argc) {
             const char *arg = argv[i++];
@@ -543,6 +664,14 @@ int main(int argc, char **argv)
             else if (!strcmp(arg, "--state-dump")) state_directory = argv[i];
             else if (!strcmp(arg, "--user")) user = argv[i];
             else if (!strcmp(arg, "--controls")) control_mode = argv[i];
+            else if (!strcmp(arg, "--renderer")) renderer = argv[i];
+            else if (!strcmp(arg, "--width") || !strcmp(arg, "--height")) {
+                unsigned *dimension = !strcmp(arg, "--width") ? &gl_width : &gl_height;
+                if (number(argv[i], dimension) || !*dimension || *dimension > CM_GL_SIZE_MAX) {
+                    cm_fail("arguments", 0, "GL dimensions must be 1..8192");
+                    return 2;
+                }
+            }
             else if (!strcmp(arg, "--import-undefined")) undefined_path = argv[i];
             else if (!strcmp(arg, "--replay-load-slot")) {
                 if (number(argv[i], &replay_slot) || replay_slot > UI_SAVE_SLOTS) {
@@ -564,10 +693,21 @@ int main(int argc, char **argv)
                 return 2;
             }
         } else {
-            platform_report("usage: cybermage [--data DIR] [--user DIR] [--bios-seed N] [--controls classic|modern] [--headless] [--frames N] [--dump DIR] [--state-dump DIR] [--keys FILE | --replay TRACE [--replay-load-slot N | --import-undefined PERSONS]]");
+            platform_report("usage: cybermage [--data DIR] [--user DIR] [--bios-seed N] [--controls classic|modern] [--renderer sw|gl] [--width N --height N] [--headless] [--frames N] [--dump DIR] [--state-dump DIR] [--keys FILE | --replay TRACE [--replay-load-slot N | --import-undefined PERSONS]]");
             return 2;
         }
     }
+    if (strcmp(renderer, "sw") && strcmp(renderer, "gl")) {
+        cm_fail("arguments", 0, "--renderer must be sw or gl");
+        return 2;
+    }
+    gl_enabled = !strcmp(renderer, "gl");
+    if (!gl_enabled && (gl_width || gl_height)) {
+        cm_fail("arguments", 0, "--width and --height require --renderer gl");
+        return 2;
+    }
+    if (!gl_width) gl_width = headless ? CM_WIDTH : 960;
+    if (!gl_height) gl_height = headless ? CM_HEIGHT : 720;
     if (strcmp(control_mode, "classic") && strcmp(control_mode, "modern")) {
         cm_fail("arguments", 0, "--controls must be classic or modern");
         return 2;
@@ -606,6 +746,11 @@ int main(int argc, char **argv)
         ui_init(&ui, &hipak, &strings) || ui_load_hand_tables(&ui, data) ||
         snd_open(data) || game_names_read(user)) goto out;
     memcpy(base_palette, palette, sizeof base_palette);
+    if (gl_enabled) {
+        if (render_gl_open(headless, gl_width, gl_height) || render_gl_palette(palette)) goto out;
+        render_gl_dimensions(&gl_width, &gl_height);
+        platform_report(render_gl_driver());
+    }
     if (trace) snd_enable(0, 0); /* The original oracle runs its -x option. */
     if (keys && platform_keys(keys)) goto out;
     if (trace && replay_open(&replay, trace)) goto out;
@@ -617,6 +762,16 @@ int main(int argc, char **argv)
         uint32_t ticks = platform_ticks(frame);
         ui_action action;
         int shop_modal = 0;
+        int movie_canvas = 0, drawable = 1;
+        if (gl_enabled) {
+            unsigned width, height;
+            platform_gl_size(&width, &height);
+            drawable = width && height;
+            if (drawable) {
+                if (render_gl_resize(width, height)) goto out;
+                gl_width = width; gl_height = height;
+            }
+        }
         if (modern) {
             controls_context context = !playing || ui.screen != UI_GAME ||
                 death_phase || events.selector_kind ? CONTROLS_MENU :
@@ -627,9 +782,13 @@ int main(int argc, char **argv)
             controls_frame(&controls, context, &physical, &input);
         } else if (platform_poll(&input, frame)) goto out;
         if (snd_movie_active()) {
-            int result = snd_movie_step(ticks, input.pressed[1] || input.pressed[0x1c],
-                                       pixels, palette);
+            int result;
+            if (gl_enabled && (render_gl_clear(0) || gl_overlay_begin())) goto out;
+            result = snd_movie_step(ticks, input.pressed[1] || input.pressed[0x1c],
+                                   pixels, palette);
             if (result < 0) goto out;
+            movie_canvas = 1;
+            if (gl_enabled) gfx_cover(pixels, sizeof pixels);
             if (!result) {
                 if (gfx_palette(palette, pal_data, pal_size, resource_path)) goto out;
                 settings_applied = 0;
@@ -728,18 +887,21 @@ int main(int argc, char **argv)
             } else {
                 int loaded = load_requested(data, user, ticks);
                 if (loaded > 0) playing = 1;
-                else if (loaded < 0) playing = 0;
+                else if (loaded < 0) {
+                    if (gl_enabled && gl_bitmap_snapshot()) goto out;
+                    playing = 0;
+                }
             }
         }
         if (playing) {
-            ui_view view;
+            ui_view view, backdrop_view;
             if (death_phase == 1 || death_phase == 2) {
                 sim_input(&simulation, &input);
                 simulation.previous_ticks = simulation.bp_limit_time = ticks;
                 ai_start_clock(&actors, ticks);
                 if (ui_game_view(&ui, simulation.pc_mode, simulation.vehicle_type, &view) ||
                     render_set_view(view.x, view.y, view.width, view.height)) goto out;
-                if (death_step(&input, ticks, trace != NULL)) goto out;
+                if (death_step(&input, ticks, trace != NULL, view)) goto out;
                 goto audio_output;
             }
             if (ui.screen == UI_GAME && !shop_modal) {
@@ -783,24 +945,32 @@ int main(int argc, char **argv)
                 if (target_query(&actors.targets, &game, &game.camera, &target)) goto out;
             }
             if (ui.screen != UI_GAME) memset(pixels, 0, sizeof pixels);
-            if (render_draw(&game, &game.camera, pixels)) goto out;
+            backdrop_view = view;
+            if (gl_enabled) {
+                if (gl_world_view(view, &backdrop_view) || gl_overlay_begin()) goto out;
+            } else if (render_draw(&game, &game.camera, pixels)) goto out;
             if (ui.screen == UI_GAME && !shop_modal) {
                 ui_hud hud = {0};
+                int visual_mode = simulation.modern_aim && simulation.pc_mode == 3 ?
+                    simulation.previous_pc_mode : simulation.pc_mode;
                 if (ui_draw_backdrop(&ui, pixels, simulation.pc_mode,
-                                     simulation.vehicle_type, view)) goto out;
+                                     simulation.vehicle_type, backdrop_view) ||
+                    ui_draw_pc_tint(&ui, pixels, &actors, view, 0)) goto out;
                 if (simulation.pc_mode == 7 &&
                     ((simulation.vehicle_type == 1 &&
                       ui_draw_vehicle_muzzle(&ui, &actors, pixels)) ||
                      ui_draw_vehicle(&ui, &game, pixels, simulation.vehicle_type,
                                      simulation.flight_unk_144B48, simulation.unk_131418)))
                      goto out;
-                if ((simulation.pc_mode == 1 || simulation.pc_mode == 2 || simulation.pc_mode == 5) &&
-                    ui_draw_live_hand(&ui, &game, pixels, simulation.pc_mode,
+                if ((visual_mode == 1 || visual_mode == 2 || visual_mode == 5) &&
+                    ui_draw_live_hand(&ui, &game, pixels, visual_mode,
                                       &events, &actors, view)) goto out;
-                if ((simulation.pc_mode == 3 || simulation.pc_mode == 4) &&
+                if (!simulation.modern_aim && (simulation.pc_mode == 3 || simulation.pc_mode == 4) &&
                     ui_draw_selector(&ui, &game, &events, pixels)) goto out;
-                if (ui_hud_from_world(&hud, &game, &events, ui.hp_count, simulation.pc_mode) ||
+                if (ui_draw_pc_tint(&ui, pixels, &actors, view, 1)) goto out;
+                if (ui_hud_from_world(&hud, &game, &events, ui.hp_count, visual_mode) ||
                     ui_render_bells_and_whistles(&ui, pixels, &hud)) goto out;
+                if (!death_phase && ai_pc_draw_advance(&actors, &simulation, &game)) goto out;
                 {
                     const snd_dialogue *dialogue = snd_text();
                     if (dialogue->active && !dialogue->spoken) {
@@ -816,6 +986,13 @@ int main(int argc, char **argv)
             if (ui_shop_draw(&ui, &events, &game, pixels)) goto out;
         }
 audio_output:
+        /* Movie start keeps the last complete GL scene until its first decoded
+         * bitmap. Death keeps its frozen HUD operators across melt frames. */
+        if (gl_enabled && !gl_recording &&
+            !(snd_movie_active() && !movie_canvas) && !death_phase) {
+            if ((!playing && render_gl_clear(0)) || gl_overlay_begin()) goto out;
+            if (!playing) gfx_cover(pixels, sizeof pixels);
+        }
         if (headless && !trace) {
             while (audio_ticks != ticks) {
                 audio_mix(headless_pcm, 48000 / CM_TICK_HZ);
@@ -829,12 +1006,21 @@ audio_output:
             if (ui_draw_menu_cursor(&ui, &game, pixels, aim_x, aim_y,
                                     ui_cursor_pose(aim_x, aim_y, input.mouse_buttons != 0))) goto out;
         }
-        if (platform_present(pixels, palette)) goto out;
-        if (playing && ui.screen == UI_GAME && !shop_modal && !death_phase)
-            ai_pc_draw_advance(&actors, &simulation);
-        if ((dump && platform_dump(dump, frame, pixels, palette)) ||
-            (playing && (state_directory || dump) &&
-             state_dump(state_directory ? state_directory : dump, frame))) goto out;
+        if (gl_enabled) {
+            if (gl_overlay_end()) goto out;
+            if (drawable) {
+                if (render_gl_present(gl_overlay_valid ? &gl_overlay : NULL) ||
+                    (dump && platform_gl_dump(dump, frame, gl_width, gl_height,
+                                               render_gl_read_rgba)) ||
+                    platform_gl_swap()) goto out;
+            } else if (dump) {
+                cm_fail("GL dump", 0, "window has no drawable framebuffer");
+                goto out;
+            }
+        } else if (platform_present(pixels, palette) ||
+                   (dump && platform_dump(dump, frame, pixels, palette))) goto out;
+        if (playing && (state_directory || dump) &&
+            state_dump(state_directory ? state_directory : dump, frame)) goto out;
         platform_wait(frame++);
     }
     if (trace) {
@@ -844,9 +1030,11 @@ audio_output:
     }
     status = divergence ? 3 : 0;
 out:
+    if (gl_recording) (void)gl_overlay_end();
     snd_movie_end();
     snd_close();
     replay_close(&replay);
+    render_gl_close();
     render_unload();
     world_close(&game);
     platform_file_release(&strings);
