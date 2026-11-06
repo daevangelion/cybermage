@@ -86,7 +86,8 @@ Focused reducer comparison:
 
 ```
 tools/run_capped.sh make -C port -f tests/events.mk B=build/Events2 check build/Events2/events_trace
-tools/run_capped.sh port/build/Events2/events_trace orig/retail captures/events-door/frames.csv
+tools/run_capped.sh port/build/Events2/events_trace orig/retail \
+  captures/vehicle-earthmother/frames.csv captures/vehicle-earthmother/events-input.csv
 ```
 
 The original door run matched252 pre-frame checkpoints and2,806,272 event/switch bytes.
@@ -100,8 +101,9 @@ movement/AI/pixel parity. There are251 observed frame-to-frame result edges.
 invalid slot rejection, sorted weapon/power selection, free/full auto-slot search,
 strict vehicle distance and heading acceptance, original BuyItem consumable
 stacking, inventory selling, saved event511 round-trip and descending-flat
-maximum4000 rider movement. The three printed ERROR diagnostics are intentional
-negative tests (invalid inventory slot, absent prop placement and invalid actor mapping).
+maximum4000 rider movement. Printed ERROR diagnostics are intentional negative
+tests for invalid inventory slots, absent/stale prop placements, invalid actor
+mappings and wrapped out-of-map coordinates.
 
 StrictC99 focused tests and the complete desktop target linked successfully with
 `B=build/Events2`. Running `port/build/Events2/test_events orig/retail` also loaded
@@ -143,11 +145,12 @@ path, then recenter with C, continue forward with Control jump, and turn in the
 post-door brown corridor. They were captured with the zero-hook original wrapper:
 
 ```
-tools/oracle.sh events-corridor --frame-trace \
+tools/oracle.sh vehicle-earthmother --frame-trace --event-trace \
   --trace-range x:139190:1536 --trace-range x:139d90:32768 \
   --trace-range x:142b78:128 --trace-range l:206820:8 \
   --trace-range x:14480c:8 --snapshot
-tools/run_capped.sh port/build/Events2/events_trace orig/retail captures/events-corridor/frames.csv
+tools/run_capped.sh port/build/Events2/events_trace orig/retail \
+  captures/vehicle-earthmother/frames.csv captures/vehicle-earthmother/events-input.csv
 ```
 
 Ladder matched425 checkpoints /14,638,700 independently computed bytes;
@@ -155,6 +158,32 @@ corridor matched592 checkpoints /20,390,848 bytes. Corridor ended in scene1,
 object936/person0, x640939,y1310719,floor_z131072,heading33792. Only switch51
 changed in these routes; neither reached another scene or a vehicle.
 The corridor has591 observed result edges; its final row is a pre-frame state.
+
+The later spirit/Earthmother route exposed the position sampling boundary:
+feeding HandleNextFrame-entry coordinates reached event131's tile trigger one
+frame late (first mismatch at frame1387). That approximation is removed.
+`--event-trace` now records **original MoveWorld037CF4 entry** observations in
+`events-input.csv`, keyed by frame: actual ticks, player identity, position,
+shape height, heading, body/pitch, scene/mode/stance and key bytes.
+`events_input` runs the independent switch/vehicle key reducer first; computed
+identity/mode is checked against the observed MoveWorld identity, never imported.
+Only Sim-owned position/clock inputs then feed `events_move_world`. No next-row
+post-event position or event output is used as input.
+
+With the actual boundary, `vehicle-earthmother` matched1459 checkpoints /
+50,253,796 independently computed bytes, including event131 and the141/142
+spirit/message sequence. There are1458 observed result edges and zero vehicle
+rows. Earlier door/ladder/corridor counts above describe their historical
+pre-frame-input runs, not the corrected phase's runtime evidence.
+
+The genuine `vehicle-river` route uses original Backslash64.3 to finish
+Earthmother's message, opens door143 and advances out of the cave. It matched
+1650 checkpoints /56,832,600 bytes (1649 result edges), still with zero vehicle
+rows. Keyboard01309A's full skip stops all speech segments; completion links
+are consumed after MoveWorld, matching the original console phase.
+Its endpoint is scene1 x24.9897,y13.75,floor2,headingC000. The route has not
+reached the first tank: the remaining walkthrough path is river/lifts, Mung and
+his access card, the bridge gap and the tank compound. No later scene is claimed.
 
 The comparator now checks computed player object/person identity **before**
 position inputs, and optional tankFlag/PCTankHand/hand-mode observations.
@@ -165,6 +194,21 @@ It rejects traces missing complete loaded event-state/payload/switch-state range
 Controlled negatives rejected both an empty-range trace (previously accepted
 with zero compared bytes) and a changed tankFlag byte at frame0; the unchanged
 corridor trace still matched. The negative copies live only under ignored captures.
+Deleting an idle interior MoveWorld observation and supplying a header-only
+phase file both fail explicitly; only an uncompleted final frame may omit its
+phase observation. Unused trailing observations also reject.
+
+## Review corrections
+
+Compact runtime props now retain their source disk record index; CollItem and
+ReScaleProp use it rather than treating skipped disk records as runtime slots.
+Fixtures cover a skipped leading record, the correct item/shape z and stale
+record rejection. Inactive countdown save intervals are zero; active intervals
+remain relative to the supplied save/load clock (original05014D/051515).
+Inventory/weapon/switch save errors name SAVE file offsets, not Xox addresses.
+Shared unsigned wrap helpers now cover event motion, plane/corner arithmetic,
+lighting, position/shape transforms, timer subtraction and vehicle tile/body
+calculations. Boundary fixtures cover INT32 wrapping and out-of-map rejection.
 
 Integration contracts: `events_init` now resets scene metadata, **preserving**
 player inventory/status. AI's `ai_init_pc` owns original boot/new-game

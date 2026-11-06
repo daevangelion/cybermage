@@ -134,6 +134,32 @@ static void retail_cosmetics(const char *data)
     puts("retail cosmetics: all 11 scenes, 80 ticks each");
 }
 
+static void store32(uint8_t *p, uint32_t value)
+{
+    unsigned i;
+    for(i=0;i<4;++i) p[i]=(uint8_t)(value>>(i*8));
+}
+
+static void skipped_props(void)
+{
+    static uint8_t props[90],definitions[2102];
+    event_setup(0);
+    w.prop_count=1;w.prop_objects[0]=2;w.prop_types[0]=1;w.prop_placements[0]=1;
+    w.objects[2].active=1;
+    w.scene_sections[1].data=props;w.scene_sections[1].size=sizeof(props);
+    props[56]=2;props[86]=1; /* first disk slot skipped, second grants item1 */
+    e.definition_count=1;e.definitions[1].kind=9;
+    assert(events_coll_item(&e,&w,2,1)==0 && e.items[0].type==1);
+    w.prop_definitions.data=definitions;w.prop_definitions.size=sizeof(definitions);
+    store32(props+38,54321);store32(props+68,12345);store32(definitions+1059,10000);
+    definitions[1081]=100;w.texture_count=1;
+    w.textures[0].kind=WORLD_TEX_PROP;w.textures[0].height=w.textures[0].width=1;
+    assert(events_rescale_prop(&w,0,50)==0 && w.objects[2].z==17345);
+    w.prop_placements[0]=UINT32_MAX;
+    assert(events_coll_item(&e,&w,2,1)==0); /* already collected; no disk read */
+    assert(events_rescale_prop(&w,0,50)<0);
+}
+
 int main(int argc, char **argv)
 {
     unsigned i;
@@ -232,6 +258,15 @@ int main(int argc, char **argv)
     assert(events_countdown(&e,&s,&a,&w)==0 && e.autoDestruct==5 && e.autoDMsgTimer==2561);
     e.ticks=16800;
     assert(events_countdown(&e,&s,&a,&w)==0 && !e.autoDestruct && e.pc_dead_man==1);
+    e.autoDestruct=0;e.autoDTime=123456;e.ticks=100;
+    assert(events_save_export(&e,&saved)==0 && saved.autoDTime==0);
+    saved.autoDestruct=0;saved.autoDTime=123456;restored.ticks=300;
+    assert(events_save_import(&restored,&saved)==0 && restored.autoDTime==0);
+    skipped_props();
+    assert(world_add32(INT32_MAX,1)==INT32_MIN && world_sub32(0,INT32_MIN)==INT32_MIN);
+    assert(world_mul32(INT32_MAX,2)==-2);
+    event_setup(0);w.objects[1].floor_z=INT32_MAX;w.objects[1].z=INT32_MAX;
+    assert(events_step(&e,&s,&a,&w)<0);
     if(argc==2) retail_cosmetics(argv[1]);
     return 0;
 }

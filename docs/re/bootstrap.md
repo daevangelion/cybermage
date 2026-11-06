@@ -217,3 +217,19 @@ boot. Current traces contain 117 and 106 frame-entry records respectively.
 The movement trace includes changed x/y, heading C000→A800 and a jump with
 floor_z 131072..152319. These demonstrate original scenario coverage, not a
 claim that the C replay matches.
+
+### MoveWorld input boundary
+
+`--event-trace` requires `--frame-trace` and writes `events-input.csv`.
+The read-only observer samples original CM_HI.EXE037CF4 before its first opcode,
+using EAX as `this`, and associates the row with the current HandleNextFrame
+index. It records actual `_CMTimerTicks`, object/person, x/y/floor_z/shape_z,
+heading/body/pitch, scene/current/previous hand mode, stance and key bytes.
+It installs no hook and changes no guest instruction, state, input or time.
+`run.json` names the additional file and retains producer binary/patch hashes.
+
+This boundary matters: MoveWorld follows Sim, so HandleNextFrame's earlier
+position is not generally its input. The Events comparator requires both files,
+checks independently computed switch/vehicle identity before accepting the
+Sim-owned position observations, and compares event outputs at the next
+pre-frame checkpoint. See `docs/re/events.md` for the Earthmother route result.

@@ -130,17 +130,18 @@ index cfdf063..d8fbaf4 100644
          if self.mode == 3 {
 diff --git a/crates/game/src/frame_trace.rs b/crates/game/src/frame_trace.rs
 new file mode 100644
-index 0000000..3ff2577
+index 0000000..e146713
 --- /dev/null
 +++ b/crates/game/src/frame_trace.rs
-@@ -0,0 +1,212 @@
+@@ -0,0 +1,289 @@
 +use std::io::{BufWriter, Write};
-+use x86::{Cpu, EAX, ESI, ESP};
++use x86::{Cpu, EAX, EBX, ECX, EDX, ESI, ESP};
 +use crate::le::rt;
 +
 +const FRAME_ENTRY: u32 = 0x01B9DC;
 +const FRAME_DELTA_READY: u32 = 0x01BA1F;
 +const KEYBOARD_ENTRY: u32 = 0x012DD4;
++const MOVE_WORLD_ENTRY: u32 = 0x037CF4;
 +const WORLD_BYTES: u32 = 0x144B74;
 +const RANGE_MAX: usize = 8;
 +const RANGE_BYTES_MAX: usize = 65536;
@@ -159,6 +160,8 @@ index 0000000..3ff2577
 +    seed: BufWriter<std::fs::File>,
 +    rng: Option<BufWriter<std::fs::File>>, rng_calls: u64,
 +    steering: Option<BufWriter<std::fs::File>>, steering_calls: u64,
++    events: Option<BufWriter<std::fs::File>>,
++    collision: Option<BufWriter<std::fs::File>>, collision_object: u32, collision_calls: u64,
 +}
 +
 +impl FrameTrace {
@@ -205,8 +208,19 @@ index 0000000..3ff2577
 +            writeln!(out,"sequence,frame,object,x,y,heading,target,mode,collisions,flags,mask").expect("steering header");
 +            out
 +        });
++        let events = std::env::var_os("CM_EVENT_TRACE").map(|path| {
++            let mut out = BufWriter::new(std::fs::File::create(path).expect("create event input trace"));
++            writeln!(out,"frame,ticks,object,person,x,y,z,object_z,heading,body,pitch,scene,mode,previous_mode,stance,keys").expect("event input header");
++            out
++        });
++        let collision = std::env::var_os("CM_COLLISION_TRACE").map(|path| {
++            let mut out = BufWriter::new(std::fs::File::create(path).expect("create collision trace"));
++            writeln!(out,"sequence,frame,object,proposed_x,proposed_y,source_x,source_y,source_floor,source_z,source_height,source_radius,node,candidate,targetable,flags,x,y,floor,z,height,radius,active").expect("collision header");
++            out
++        });
++        let collision_object = std::env::var("CM_COLLISION_OBJECT").unwrap_or_default().parse().unwrap_or(0);
 +        Some(Self { file, ranges, pending: None, frame: 0, this: 0, actors, seed, rng, rng_calls: 0,
-+                    steering, steering_calls: 0 })
++                    steering, steering_calls: 0, events, collision, collision_object, collision_calls: 0 })
 +    }
 +
 +    fn hex(file: &mut BufWriter<std::fs::File>, bytes: &[u8]) {
@@ -228,6 +242,67 @@ index 0000000..3ff2577
 +
 +    pub fn observe(&mut self, c: &Cpu, time: f64) {
 +        match c.eip {
++            p if p == rt(0x435EC) && c.r[EDX] == self.collision_object => {
++                if let Some(out) = &mut self.collision {
++                    let x = c.r[EAX]; let obj = c.r[EDX];
++                    let px = c.rd32(c.r[EBX]) as i32; let py = c.rd32(c.r[ECX]) as i32;
++                    let mut row = |node: u32, candidate: u32| {
++                        let signed = |off, id| c.rd32(x+off+id*4) as i32 as i64;
++                        let values = [self.collision_calls as i64,self.frame as i64-1,obj as i64,
++                            px as i64,py as i64,signed(0x61418,obj),signed(0x64080,obj),
++                            signed(0x78D8C,obj),signed(0x66CE8,obj),signed(0x6C5B8,obj),
++                            c.rd16(x+0x74AF0+obj*2) as i16 as i64,node as i64,candidate as i64,
++                            c.rd8(x+0x7D028+candidate) as i64,c.rd32(x+0x5E7B0+candidate*4) as i64,
++                            signed(0x61418,candidate),signed(0x64080,candidate),signed(0x78D8C,candidate),
++                            signed(0x66CE8,candidate),signed(0x6C5B8,candidate),
++                            c.rd16(x+0x74AF0+candidate*2) as i16 as i64,c.rd8(x+0x7DB42+candidate) as i64];
++                        for (i,v) in values.iter().enumerate() {
++                            write!(out,"{}{v}",if i==0 {""} else {","}).expect("write collision trace");
++                        }
++                        writeln!(out).expect("write collision trace");
++                    };
++                    row(0,0);
++                    let tx = [px.wrapping_sub(0x4000)>>16,px.wrapping_add(0x4000)>>16];
++                    let ty = [py.wrapping_sub(0x4000)>>16,py.wrapping_add(0x4000)>>16];
++                    let chain = c.rd32(x+0xD7240);
++                    for iy in 0..2 {
++                        if iy==1 && ty[0]==ty[1] {continue;}
++                        for ix in 0..2 {
++                            if ix==1 && tx[0]==tx[1] {continue;}
++                            if !(0..32).contains(&tx[ix]) || !(0..32).contains(&ty[iy]) {continue;}
++                            let mut node = (ty[iy]*32+tx[ix]) as u32; let mut count=0;
++                            while node!=0 {
++                                assert!(node<12392 && count<12392,"invalid collision chain");
++                                let candidate = c.rd16(chain+node*4+2) as u32;
++                                assert!(candidate<2842,"invalid collision candidate");
++                                row(node,candidate);
++                                node=c.rd16(chain+node*4) as u32; count+=1;
++                            }
++                        }
++                    }
++                    self.collision_calls+=1;
++                }
++            }
++            p if p == rt(MOVE_WORLD_ENTRY) => {
++                if let Some(out) = &mut self.events {
++                    let frame = self.frame.checked_sub(1).expect("MoveWorld before first traced frame");
++                    let x = c.r[EAX];
++                    assert!(x == self.this, "MoveWorld this differs from current frame");
++                    let obj = c.rd32(x+0x130D04);
++                    assert!(obj < 2842, "invalid event input player object");
++                    let signed = |off| c.rd32(x+off) as i32;
++                    write!(out,"{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},",
++                        frame,c.rd32(rt(0x207473)),obj,c.rd32(x+0x130D08),
++                        signed(0x61418+obj*4),signed(0x64080+obj*4),signed(0x78D8C+obj*4),
++                        signed(0x66CE8+obj*4),c.rd16(x+0x7E65C+obj*2),signed(0x130D1C),
++                        signed(0xE33F8),signed(0x130CEC),signed(0x14480C),signed(0x144810),
++                        signed(0x144B34))
++                        .expect("write event input trace");
++                    Self::hex(out,c.read_bytes(rt(0x207C54),128));
++                    writeln!(out).expect("write event input trace");
++                    out.flush().expect("flush event input trace");
++                }
++            }
 +            p if p == rt(0x46507) => {
 +                if let Some(out) = &mut self.steering {
 +                    let x = c.r[ESI];
@@ -344,5 +419,7 @@ index 0000000..3ff2577
 +        self.flush_pending();
 +        if let Some(out) = &mut self.rng { out.flush().expect("flush RNG trace"); }
 +        if let Some(out) = &mut self.steering { out.flush().expect("flush steering trace"); }
++        if let Some(out) = &mut self.collision { out.flush().expect("flush collision trace"); }
++        if let Some(out) = &mut self.events { out.flush().expect("flush event input trace"); }
 +    }
 +}

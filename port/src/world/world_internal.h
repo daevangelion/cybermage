@@ -21,6 +21,7 @@ static inline int32_t world_mul16(int32_t a, int32_t b)
 int world_load_panels(world *w);
 int world_load_placements(world *w);
 int world_load_persons(world *w);
+int world_load_prop_icons(world *w);
 int world_load_gsx(world *w, unsigned id);
 int world_load_gsx_flags(world *w, unsigned id, unsigned mode);
 int world_texture_package(world *w, unsigned kind, unsigned resource,

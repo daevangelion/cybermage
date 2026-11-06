@@ -79,6 +79,7 @@ typedef struct events_state {
     int32_t selector_keys[EVENTS_SELECTOR_MAX];
     unsigned selector_count, selector_index, selector_kind;
     int32_t text_trigger, text_object, text_message;
+    int text_skip_pending;
     uint32_t text_serial;
     int32_t text_switch1, text_switch0, text_event;
     int32_t recorder_requested, item_up_type, item_up_icon;
@@ -110,6 +111,9 @@ typedef struct events_state {
 int events_init(events_state *e, world *w);
 int events_load_tables(events_state *e, const char *asset_dir);
 int events_step(events_state *e, sim_state *s, struct ai_state *a, world *w);
+/* Input: -1 error, 0 proceed to world, 1 modal selector consumed the frame. */
+int events_input(events_state *e, sim_state *s, struct ai_state *a, world *w);
+int events_move_world(events_state *e, sim_state *s, struct ai_state *a, world *w);
 void events_scene_cosmetics(events_state *e, const world *w);
 int events_cosmetics(events_state *e, sim_state *s, struct ai_state *a, world *w);
 int events_countdown(events_state *e, sim_state *s, struct ai_state *a, world *w);

@@ -12,6 +12,7 @@
 #define CM_PANEL_MAX 1536 /* Xox+A623C - Xox+A4A3C, pointer slots. */
 #define CM_TRIG_SIZE 2048
 #define CM_WORLD_PATH_MAX 1024
+#define CM_PROP_ICONS 256 /* SCENE item icon resource is one byte. */
 #define CM_WORLD_XY_MAX (CM_MAP_SIDE * 65536)
 /* Retail FXO z spans -98304..294912; scene11 PROP floor reaches -8192.
  * Preserve off-map art while excluding hostile int32 extremes. */
@@ -105,6 +106,11 @@ typedef struct { uint16_t next, object; } world_link;
 typedef struct { world_link nodes[CM_CHAIN_NODES]; } world_chain;
 typedef struct { const uint8_t *data; uint32_t size; } world_span;
 typedef struct {
+    world_span pixels;
+    int32_t width, height;
+    uint8_t packed;
+} world_prop_icon;
+typedef struct {
     uint32_t width, height;
     world_span pixels;
 } world_panel;
@@ -170,6 +176,7 @@ typedef struct world {
     unsigned loaded_monster_count;
     int16_t loaded_monster_types[109];
     world_texture textures[CM_PANEL_MAX];
+    world_prop_icon prop_icons[CM_PROP_ICONS];
     world_gsx gsx[55]; /* SCENE entry99: 55 records of 58 bytes. */
     uint16_t fxo_objects[2048], fxo_textures[2048], prop_objects[2048];
     int16_t fxo_types[2048], prop_types[2048];
@@ -193,8 +200,6 @@ int world_load_gsx(world *w, unsigned id);
 int world_set_person(world *w, unsigned person, unsigned type, unsigned state,
                       int32_t x, int32_t y, int32_t z, int32_t floor_z,
                       uint16_t heading);
-int world_prop_frame(world *w, unsigned resource, unsigned image,
-                      const world_texture **out);
 int world_load_fxo_news(world *w, unsigned resource, unsigned placement, unsigned object);
 int world_fxo_object(const world *w, unsigned index);
 int world_finalize_scene(world *w);

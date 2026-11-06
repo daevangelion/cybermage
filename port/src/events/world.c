@@ -6,7 +6,7 @@ static int tile_index(const world_object *p, int minimum)
 {
     int z = p->z < minimum ? minimum : p->z;
     return (p->x >> 16) + (p->y >> 16) * CM_MAP_SIDE +
-        ((p->floor_z + z) >> 16) * CM_MAP_CELLS;
+        (world_add32(p->floor_z,z) >> 16) * CM_MAP_CELLS;
 }
 
 static events_event *event_at(events_state *e, int32_t index)
@@ -118,12 +118,12 @@ static int talk_texture(events_state *e, sim_state *s, world *w, events_event *v
     int object=world_fxo_object(w,(unsigned)p[3]);
     if(object<0) return -1;
     if(e->text_trigger && e->text_object==object) {
-        if(per_frame) { if(p[13]) { --p[13];return 0; }p[13]=p[7]; }
+        if(per_frame) { if(p[13]) { p[13]=world_sub32(p[13],1);return 0; }p[13]=p[7]; }
         else { if(v->state) { if(s->bp_limit_flag) --v->state;return 0; }v->state=(uint8_t)p[7]; }
-        ++p[15];if(p[15]>=p[14]) p[15]=0;
-        return set_texture(w,p[3],p[3]+p[15]);
+        p[15]=world_add32(p[15],1);if(p[15]>=p[14]) p[15]=0;
+        return set_texture(w,p[3],world_add32(p[3],p[15]));
     }
-    return set_texture(w,p[3],p[3]+p[11]);
+    return set_texture(w,p[3],world_add32(p[3],p[11]));
 }
 
 /* MoveWorld type60, original03D4C9..03D93B. Numeric tables are read from LE. */
@@ -136,7 +136,7 @@ static int monitor(events_state *e, world *w, events_event *v)
     if(!e->tables_loaded) return cm_fail("MoveWorld/video",0,"monitor tables not loaded");
     if(object<0) return -1;
     if(pc->x<=p[6] || pc->x>=p[4] || pc->y<=p[5] || pc->y>=p[10] ||
-       ((pc->floor_z+pc->z)>>16)!=(w->objects[object].z>>16)) {
+       (world_add32(pc->floor_z,pc->z)>>16)!=(w->objects[object].z>>16)) {
         p[15]=p[11]=0;return 0;
     }
     if(!p[15]) {
@@ -177,8 +177,8 @@ static int monitor(events_state *e, world *w, events_event *v)
     }
     if(frame>=4) return cm_fail("MoveWorld/video",frame,"invalid monitor frame");
     p[7]=(int32_t)(e->ticks+(uint32_t)e->video_time[type*4+frame]);
-    if(set_texture(w,p[3],p[3]+(int32_t)frame)) return -1;
-    for(i=12;i<15;++i) if(p[i]>0 && set_texture(w,p[i],p[3]+(int32_t)frame)) return -1;
+    if(set_texture(w,p[3],world_add32(p[3],(int32_t)frame))) return -1;
+    for(i=12;i<15;++i) if(p[i]>0 && set_texture(w,p[i],world_add32(p[3],(int32_t)frame))) return -1;
     ++p[8];return 0;
 }
 
@@ -225,7 +225,7 @@ static int move_planes(events_state *e, sim_state *s, ai_state *a, world *w,
     if(v->value[8]) {
         other=world_fxo_object(w,(unsigned)v->value[8]);
         if(other<0) return -1;
-        result=move_plane(s,a,w,(unsigned)other,z+v->value[2],rising,crush);
+        result=move_plane(s,a,w,(unsigned)other,world_add32(z,v->value[2]),rising,crush);
         if(result<0) return -1;
         hit|=result;
     }
@@ -237,7 +237,7 @@ static int move_planes(events_state *e, sim_state *s, ai_state *a, world *w,
         other=world_fxo_object(w,(unsigned)group->value[i]);
         if(other<0) return -1;
         if((unsigned)other==object) continue;
-        result=move_plane(s,a,w,(unsigned)other,z+group->value[2],rising,crush);
+        result=move_plane(s,a,w,(unsigned)other,world_add32(z,group->value[2]),rising,crush);
         if(result<0) return -1;
         hit|=result;
     }
@@ -269,7 +269,10 @@ static int rotate_fxo(world *w, sim_state *s, events_event *v)
     if(!v->state) {
         motion_start(v,w,(unsigned)object);world_fxo_map_delete(w,(unsigned)object);
         increase=p[1]==p[9];
-        angle=(uint16_t)(angle+(increase?1:-1)*(int32_t)((int64_t)p[4]*s->frame_ticks/2));
+        {
+            int32_t step=world_mul32(p[4],s->frame_ticks)/2;
+            angle=(uint16_t)(increase?world_add32((int32_t)angle,step):world_sub32((int32_t)angle,step));
+        }
         if(increase && !p[5] && angle<0x1000) angle=0;
         if(!increase && !p[6] && angle>0xF000) angle=0;
         if(increase && angle>=(unsigned)p[5]) { angle=(uint16_t)p[5];reached=1; }
@@ -279,12 +282,14 @@ static int rotate_fxo(world *w, sim_state *s, events_event *v)
         dx=(int32_t)((int64_t)o->radius*w->trig.cos[trig]>>16);
         dy=(int32_t)((int64_t)o->radius*w->trig.sin[trig]>>16);
         if(p[8]) {
-            o->x=o->corner_x[1]+dx;o->y=o->corner_y[1]+dy;
-            o->corner_x[0]=o->corner_x[1]+dx*2;o->corner_y[0]=o->corner_y[1]+dy*2;
+            o->x=world_add32(o->corner_x[1],dx);o->y=world_add32(o->corner_y[1],dy);
+            o->corner_x[0]=world_add32(o->corner_x[1],world_mul32(dx,2));
+            o->corner_y[0]=world_add32(o->corner_y[1],world_mul32(dy,2));
             o->corner_x[3]=o->corner_x[0];o->corner_y[3]=o->corner_y[0];
         } else {
-            o->x=o->corner_x[0]+dx;o->y=o->corner_y[0]+dy;
-            o->corner_x[1]=o->corner_x[0]+dx*2;o->corner_y[1]=o->corner_y[0]+dy*2;
+            o->x=world_add32(o->corner_x[0],dx);o->y=world_add32(o->corner_y[0],dy);
+            o->corner_x[1]=world_add32(o->corner_x[0],world_mul32(dx,2));
+            o->corner_y[1]=world_add32(o->corner_y[0],world_mul32(dy,2));
             o->corner_x[2]=o->corner_x[1];o->corner_y[2]=o->corner_y[1];
         }
         if(reached) motion_stop(v,w,(unsigned)object);
@@ -307,14 +312,14 @@ static int ycrush_fxo(sim_state *s, ai_state *a, world *w, events_event *v)
     object=world_fxo_object(w,(unsigned)p[3]);other=world_fxo_object(w,(unsigned)p[11]);
     if(object<0 || other<0) return -1;
     o=&w->objects[object];motion_start(v,w,(unsigned)object);
-    increase=p[9]==p[1];step=(int32_t)((int64_t)p[4]*s->frame_ticks/2);
-    o->y+=(increase?step:-step);
+    increase=p[9]==p[1];step=world_mul32(p[4],s->frame_ticks)/2;
+    o->y=increase?world_add32(o->y,step):world_sub32(o->y,step);
     if(increase && o->y>p[5]) o->y=p[5];
     if(!increase && o->y<p[6]) o->y=p[6];
     hit=events_ycrush_crash(s,a,w,(unsigned)object,(unsigned)other);
     if(hit<0) return -1;
     if(hit) {
-        o->y+=increase?-2*p[4]:2*p[4];
+        o->y=increase?world_sub32(o->y,world_mul32(2,p[4])):world_add32(o->y,world_mul32(2,p[4]));
         if(increase && o->y<p[6]) o->y=p[6];
         if(!increase && o->y>p[5]) o->y=p[5];
     }
@@ -325,9 +330,9 @@ static int ycrush_fxo(sim_state *s, ai_state *a, world *w, events_event *v)
         if(other<0) return -1;
         if(other) {
             world_object *linked=&w->objects[other];
-            linked->y=o->y+p[2];
-            linked->corner_y[0]=linked->corner_y[3]=linked->y-linked->radius;
-            linked->corner_y[1]=linked->corner_y[2]=linked->y+linked->radius;
+            linked->y=world_add32(o->y,p[2]);
+            linked->corner_y[0]=linked->corner_y[3]=world_sub32(linked->y,linked->radius);
+            linked->corner_y[1]=linked->corner_y[2]=world_add32(linked->y,linked->radius);
         }
     }
     return 0;
@@ -345,7 +350,7 @@ static int move_fxo(events_state *e, sim_state *s, ai_state *a, world *w, events
     axis = v->type == 6 ? &p->z : v->type == 7 ? &p->x : &p->y;
     if (!v->state) {
         motion_start(v,w,(unsigned)object);
-        old = *axis; step = (int32_t)((int64_t)v->value[4] * s->frame_ticks / 2);
+        old = *axis; step = world_mul32(v->value[4],s->frame_ticks)/2;
         increase = v->value[1] == v->value[9];
         if (v->type != 6) world_fxo_map_delete(w,(unsigned)object);
         *axis = (int32_t)((uint32_t)*axis + (increase ? (uint32_t)step : 0u - (uint32_t)step));
@@ -368,8 +373,8 @@ static int move_fxo(events_state *e, sim_state *s, ai_state *a, world *w, events
         if (v->type != 6) {
             world_fxo_map_insert(w,(unsigned)object);
             for (i = 0; i < 4; ++i) {
-                if (v->type == 7) p->corner_x[i] = p->x + ((i == 0 || i == 3) ? -p->radius : p->radius);
-                else p->corner_y[i] = p->y + (i == 0 || i == 3 ? -p->radius : p->radius);
+                if (v->type == 7) p->corner_x[i] = i==0 || i==3?world_sub32(p->x,p->radius):world_add32(p->x,p->radius);
+                else p->corner_y[i] = i==0 || i==3?world_sub32(p->y,p->radius):world_add32(p->y,p->radius);
             }
         }
         if (reached) {
@@ -433,13 +438,13 @@ static int dispatch(events_state *e, sim_state *s, ai_state *a, world *w, unsign
     case 6: case 7: case 8: return move_fxo(e,s,a,w,v);
     case 9:
         if ((unsigned)p[3] >= 32) return cm_fail("MoveWorld/light",index,"invalid light index");
-        n = w->light_param[p[3]] + (p[1] ? p[4] : -p[4]);
+        n = p[1]?world_add32(w->light_param[p[3]],p[4]):world_sub32(w->light_param[p[3]],p[4]);
         if (p[1] && n > p[5]) { n = p[5]; p[1] = 0; }
         else if (!p[1] && n < p[6]) { n = p[6]; p[1] = 1; }
         w->light_param[p[3]] = (int16_t)n; break;
     case 10:
         if ((unsigned)p[3] >= 32) return cm_fail("MoveWorld/light",index,"invalid light index");
-        w->light_param[p[3]] = (int16_t)(world_rnd(&w->rng,p[4]) * (uint16_t)p[5] + (uint16_t)p[6]); break;
+        w->light_param[p[3]] = (int16_t)world_add32(world_mul32(world_rnd(&w->rng,p[4]),(uint16_t)p[5]),(uint16_t)p[6]); break;
     case 11: case 14: case 19: case 20:
         if (v->type == 19) {
             if (!target || target->value[1] == p[9]) break;
@@ -465,15 +470,21 @@ static int dispatch(events_state *e, sim_state *s, ai_state *a, world *w, unsign
             world_object *pc = &w->objects[object];
             int x = pc->x & 65535, y = pc->y & 65535;
             if (p[9] != 999) {
-                if (w->unk_5E7A8) { pc->z = 0x3800; x = p[4] + x * 60 / 100; y = p[10] + y * 60 / 100; s->unk_144b34 = s->unk_144b34 * 60 / 100; }
-                else { pc->z = 0x5D55; x = 0x8000 + (x-p[4])*10/6; y = 0x8000+(y-p[10])*10/6; s->unk_144b34 = s->unk_144b34*10/6; }
+                if (w->unk_5E7A8) {
+                    pc->z=0x3800;x=world_add32(p[4],x*60/100);y=world_add32(p[10],y*60/100);
+                    s->unk_144b34=world_mul32(s->unk_144b34,60)/100;
+                } else {
+                    pc->z=0x5D55;x=world_add32(0x8000,world_mul32(world_sub32(x,p[4]),10)/6);
+                    y=world_add32(0x8000,world_mul32(world_sub32(y,p[10]),10)/6);
+                    s->unk_144b34=world_mul32(s->unk_144b34,10)/6;
+                }
             }
             if (p[8]) pc->floor_z = (int32_t)((uint32_t)p[11] << 16);
             if (x < 0) x = 0;
             if (x > 65535) x = 65535;
             if (y < 0) y = 0;
             if (y > 65535) y = 65535;
-            s->body_height = pc->z + pc->z/2 + 0x1000 + s->unk_144b34;
+            s->body_height = world_add32(world_add32(world_add32(pc->z,pc->z/2),0x1000),s->unk_144b34);
             if (pc->active && move_actor(w,object,(p[6]&~65535)+x,(p[5]&~65535)+y,pc->floor_z,pc->heading)) return -1;
         }
         break;
@@ -483,7 +494,7 @@ static int dispatch(events_state *e, sim_state *s, ai_state *a, world *w, unsign
         for (i = 4; i < 15; ++i) if (p[i] > 0) {
             other = world_fxo_object(w,(unsigned)p[i]);
             if (other < 0) return cm_fail("MoveWorld/linkflat",index,"invalid linked FXO");
-            w->objects[other].z = w->objects[object].z + p[2];
+            w->objects[other].z = world_add32(w->objects[object].z,p[2]);
         }
         break;
     case 15:
@@ -542,8 +553,8 @@ static int dispatch(events_state *e, sim_state *s, ai_state *a, world *w, unsign
         break;
     case 23:
         if (v->state) { if (s->bp_limit_flag) --v->state; break; }
-        v->state = (uint8_t)p[7]; ++p[0]; if (p[0] >= p[5]) p[0] = 0;
-        return set_texture(w,p[3],p[0]+p[8]);
+        v->state = (uint8_t)p[7]; p[0]=world_add32(p[0],1); if (p[0] >= p[5]) p[0] = 0;
+        return set_texture(w,p[3],world_add32(p[0],p[8]));
     case 24:
         if (!target) return cm_fail("MoveWorld/event",index,"invalid relay target");
         if (!target->state && p[1] != target->value[1]) { p[1] = target->value[1]; if (event_set(e,p[3],-1)) return -1; }
@@ -631,7 +642,7 @@ static int dispatch(events_state *e, sim_state *s, ai_state *a, world *w, unsign
         if(v->state) break;
         if((unsigned)p[3]>=32) return cm_fail("MoveWorld/light",index,"invalid light index");
         if(p[11]) w->light_param[p[3]]=(int16_t)p[2];
-        n=(int16_t)(uint16_t)(w->light_param[p[3]]+(p[1]?p[4]:-p[4]));
+        n=(int16_t)(uint16_t)(p[1]?world_add32(w->light_param[p[3]],p[4]):world_sub32(w->light_param[p[3]],p[4]));
         if(p[1] && n>p[5]) { n=p[5];p[1]=0; }
         if(!p[1] && n<p[6]) { n=p[6];p[1]=1; }
         w->light_param[p[3]]=(int16_t)n;
@@ -756,8 +767,8 @@ static int dispatch(events_state *e, sim_state *s, ai_state *a, world *w, unsign
                 int32_t x=p[6],y=p[5],z=p[4]; uint16_t angle=(uint16_t)p[10];
                 if(p[15]) {
                     unsigned trig=(uint16_t)(pc->heading+0x8000u)>>5;
-                    x=pc->x+(int32_t)((int64_t)0x7000*w->trig.cos[trig]>>16);
-                    y=pc->y+(int32_t)((int64_t)0x7000*w->trig.sin[trig]>>16);
+                    x=world_add32(pc->x,(int32_t)((int64_t)0x7000*w->trig.cos[trig]>>16));
+                    y=world_add32(pc->y,(int32_t)((int64_t)0x7000*w->trig.sin[trig]>>16));
                     z=pc->floor_z;angle=pc->heading;
                 }
                 if(move_actor(w,object,x,y,z,angle)) return -1;
@@ -828,7 +839,7 @@ static int dispatch(events_state *e, sim_state *s, ai_state *a, world *w, unsign
                     world_omap_delete(w,(unsigned)person->object);
                     w->objects[person->object].active=0;
                 }
-                if(ai_set_person(a,w,i,(unsigned)person->type,p[0],p[6]+x,p[5]+y,0,p[4],(uint16_t)((uint32_t)p[9]>>16))) return -1;
+                if(ai_set_person(a,w,i,(unsigned)person->type,p[0],world_add32(p[6],x),world_add32(p[5],y),0,p[4],(uint16_t)((uint32_t)p[9]>>16))) return -1;
                 world_omap_insert(w,(unsigned)w->persons[i].object);
                 x+=0x4000;
                 if(x>=width) { x=0x4000;y+=0x4000; }
@@ -875,7 +886,7 @@ static int dispatch(events_state *e, sim_state *s, ai_state *a, world *w, unsign
         if(target->value[1]==!n) return event_set(e,p[0],n);
         break;
     case 65:
-        p[0]=(p[0]+1)%4;
+        p[0]=world_add32(p[0],1)%4;
         for(i=3;i<15;++i) if(p[i]>0) {
             object=world_fxo_object(w,(unsigned)p[i]);
             if(object<0) return -1;
@@ -893,7 +904,7 @@ static int dispatch(events_state *e, sim_state *s, ai_state *a, world *w, unsign
     case 67:
         if(v->state) break;
         if(e->cash>=p[2]) {
-            events_cash_add(e,-p[2]);
+            events_cash_add(e,world_sub32(0,p[2]));
             if(event_set(e,p[3],1)) return -1;
             if(p[7]>0) {
                 if((unsigned)p[7]>=e->switch_count) return cm_fail("MoveWorld",index,"invalid paid switch");
@@ -989,7 +1000,7 @@ static int dispatch(events_state *e, sim_state *s, ai_state *a, world *w, unsign
             else {
                 object=world_fxo_object(w,(unsigned)p[3]);
                 if(object<0) return -1;
-                if(start_text(e,w,w->scene,p[0]+p[8],object,2)) return -1;
+                if(start_text(e,w,w->scene,world_add32(p[0],p[8]),object,2)) return -1;
                 ++p[8];
             }
         }
@@ -1054,7 +1065,7 @@ static int dispatch(events_state *e, sim_state *s, ai_state *a, world *w, unsign
                 person->unk_0038=(int32_t)(max<<16|max);
             }
             if(p[4]>person->unk_0060) {
-                person->unk_0060+=0x800*s->frame_ticks/2;
+                person->unk_0060=world_add32(person->unk_0060,world_mul32(0x800,s->frame_ticks)/2);
                 if(person->unk_0060>p[4]) person->unk_0060=p[4];
             }
         }
@@ -1077,7 +1088,7 @@ static int dispatch(events_state *e, sim_state *s, ai_state *a, world *w, unsign
         if((unsigned)object>=w->object_count) return cm_fail("MoveWorld",index,"invalid alternating prop object");
         {
             world_object *o=&w->objects[object],*pc=&w->objects[w->player_object];
-            if(!o->active || ((pc->floor_z+0x4800)>>16)!=(o->floor_z>>16) ||
+            if(!o->active || (world_add32(pc->floor_z,0x4800)>>16)!=(o->floor_z>>16) ||
                cm_distance(o->x,o->y,pc->x,pc->y)>=p[2]) break;
             p[9]^=1;
             if(move_actor(w,object,p[p[9]?6:4],p[p[9]?5:10],o->floor_z,o->heading)) return -1;
@@ -1136,7 +1147,7 @@ static int dispatch(events_state *e, sim_state *s, ai_state *a, world *w, unsign
                 (void)snd_play(world_rnd(&w->rng,3)?28:29,32767,32768);
             }
             if(ai_damage_person(a,w,w->player_person,n,0,0)) return -1;
-            e->energy=(int16_t)(uint16_t)(e->energy-n);
+            e->energy=(int16_t)(uint16_t)world_sub32(e->energy,n);
             if(e->energy<0) e->energy=0;
             if(!near) { if(!e->unk_1444E8) e->unk_1444E8=2;break; }
             if(!world_rnd(&w->rng,4)) {
@@ -1146,7 +1157,7 @@ static int dispatch(events_state *e, sim_state *s, ai_state *a, world *w, unsign
                 }
             }
             e->unk_1444E8=0;e->unk_1444EC=world_rnd(&w->rng,5)+1;
-            p[7]-=n;
+            p[7]=world_sub32(p[7],n);
             if(p[7]<=0) {
                 if(p[8]<0 || (unsigned)p[8]>=w->person_count)
                     return cm_fail("MoveWorld",index,"invalid restored actor");
@@ -1189,10 +1200,9 @@ static int dispatch(events_state *e, sim_state *s, ai_state *a, world *w, unsign
     return 0;
 }
 
-int events_step(events_state *e, sim_state *s, ai_state *a, world *w)
+int events_input(events_state *e, sim_state *s, ai_state *a, world *w)
 {
-    unsigned i, event, hops;
-    int tile;
+    unsigned i;
     if (!e || !s || !a || !w || w->player_object >= w->object_count) return cm_fail("MoveWorld",0,"missing simulation state");
     e->ticks = s->timer_ticks;
     e->actors = a;
@@ -1203,12 +1213,16 @@ int events_step(events_state *e, sim_state *s, ai_state *a, world *w)
     if(e->ambient_slot!=-1 && e->ticks>=e->ambient_until) {
         snd_abort(e->ambient_slot,(unsigned)e->ambient_sample);e->ambient_slot=-1;
     }
-    if(dialogue_tick(e,w)) return -1;
-    if (e->selector_kind) return events_process_selector(e,s,w);
+    if(s->kb_scan_status[0x2B]) {
+        s->kb_scan_status[0x2B]=0;
+        if(e->text_trigger) { snd_message_stop();e->text_skip_pending=1; }
+    }
+    if(!e->text_skip_pending && dialogue_tick(e,w)) return -1;
+    if (e->selector_kind) return events_process_selector(e,s,w)?-1:1;
     for (i = 0; i < 3; ++i) if (s->kb_scan_status[0x3B+i]) {
         s->kb_scan_status[0x3B+i] = 0; e->previous_mode = s->pc_mode;
         if (events_make_selector(e,i+1)) return -1;
-        s->pc_mode = 3; return 0;
+        s->pc_mode = 3; return 1;
     }
     if (s->kb_scan_status[0x1C]) {
         s->kb_scan_status[0x1C] = 0;
@@ -1216,6 +1230,16 @@ int events_step(events_state *e, sim_state *s, ai_state *a, world *w)
         else if (events_switch_search(e,s,a,w)) return -1;
     }
     if (e->tank_flag && s->pc_mode != 7 && events_set_tank_mode(e,s,w,1)) return -1;
+    return 0;
+}
+
+int events_move_world(events_state *e, sim_state *s, ai_state *a, world *w)
+{
+    unsigned i,event,hops;
+    int tile;
+    if(!e || !s || !a || !w || w->player_object>=w->object_count)
+        return cm_fail("MoveWorld",0,"missing simulation state");
+    e->ticks=s->timer_ticks;e->actors=a;
     if(events_cosmetics(e,s,a,w)) return -1;
     tile = tile_index(&w->objects[w->player_object],0x5000);
     if (tile < 0 || tile >= CM_MAP_LEVELS*CM_MAP_CELLS) return cm_fail("MoveWorld/tile",(uint32_t)tile,"player tile outside map");
@@ -1229,5 +1253,16 @@ int events_step(events_state *e, sim_state *s, ai_state *a, world *w)
         if (v->enabled && dispatch(e,s,a,w,event,tile)) return -1;
         event = v->next;
     }
+    /* Keyboard01309A ends text; SpeechMessage completion is after MoveWorld. */
+    if(e->text_skip_pending) {
+        e->text_skip_pending=0;
+        if(dialogue_tick(e,w)) return -1;
+    }
     return 0;
+}
+
+int events_step(events_state *e, sim_state *s, ai_state *a, world *w)
+{
+    int result=events_input(e,s,a,w);
+    return result?result<0?-1:0:events_move_world(e,s,a,w);
 }

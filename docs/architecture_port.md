@@ -52,7 +52,9 @@ matches the original's undefined heap contents.
 | MakeCoderStr 0x4D3B0 | MoveWorld type56, events_state.coderStr |
 | Save/load inventory/event arrays | events_save_export; events_save_import |
 
-`events_step` reads the current simulation clock/key state and mutates caller-owned
+`events_step` combines `events_input` and `events_move_world`; the former handles
+key/vehicle interaction and the latter starts at the original post-Sim boundary.
+It reads the current simulation clock/key state and mutates caller-owned
 events, inventory and world objects. It reports scene/shop/ending requests rather
 than calling the game loop or UI. `events_countdown` runs in the console phase
 after world/actor work and signals `pc_dead_man` on expiry; the integrator owns
@@ -61,7 +63,9 @@ not destination geometry; both renderers remain read-only consumers.
 
 `port/tests/events_trace.c` isolates event reduction: recorded position/clock/key
 observations are inputs, not reproduced movement. Event/switch results and
-vehicle identity are independently computed. Complete event-state/payload/switch
+vehicle identity are independently computed. Position/clock inputs are observed
+at original MoveWorld entry, not inferred from the following frame's outputs.
+Complete event-state/payload/switch
 ranges are mandatory. Optional vehicle flags and hand mode are strict outputs;
 foot combat/input modes outside Events are not claimed as generally reproduced.
 The genuine routes and the runtime evidence ceiling are in `docs/re/events.md`.

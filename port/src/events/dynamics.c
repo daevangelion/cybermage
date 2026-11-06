@@ -6,17 +6,20 @@
 /* CM_HI.EXE ReScaleProp036F10: scale the shared PROP resource, then shape z. */
 int events_rescale_prop(world *w, unsigned placement, int32_t percent)
 {
-    unsigned type, object, i, resource;
+    unsigned type, object, i, resource, disk;
     const uint8_t *record, *definition;
     int32_t scale;
     int64_t value;
     if (placement >= w->prop_count || percent < 0)
         return cm_fail("ReScaleProp",placement,"invalid prop scale request");
     type=(unsigned)w->prop_types[placement]; object=w->prop_objects[placement];
+    disk=w->prop_placements[placement];
     if (type >= w->prop_definitions.size/1051 || object >= w->object_count ||
-        w->scene_sections[1].size < (placement+2)*30u)
+        !w->scene_sections[1].data || w->scene_sections[1].size<30 ||
+        disk>=(w->scene_sections[1].size-30)/30 ||
+        w->objects[object].texture>=w->texture_count)
         return cm_fail("ReScaleProp",placement,"invalid prop definition");
-    record=w->scene_sections[1].data+(placement+1)*30u;
+    record=w->scene_sections[1].data+(disk+1)*30u;
     definition=w->prop_definitions.data+type*1051u;
     value=(int64_t)cm_u16(definition+30)*percent/100;
     if(value>INT32_MAX/512) return cm_fail("ReScaleProp",placement,"scale overflow");
@@ -55,7 +58,7 @@ void events_zflat_drop(world *w, unsigned object, int32_t previous_z)
         p=&w->objects[index];
         if(!inside(p,flat) || p->floor_z<flat->z || p->floor_z>previous_z) continue;
         z=flat->z<0?0:flat->z;
-        if(z<p->floor_z-0x4000) z=p->floor_z-0x4000;
+        if(z<world_sub32(p->floor_z,0x4000)) z=world_sub32(p->floor_z,0x4000);
         p->floor_z=z;
     }
 }
@@ -94,8 +97,8 @@ int events_zwall_dcrash(sim_state *s, ai_state *a, world *w, unsigned object)
     int32_t dx=0x3800,dy=0x3800;
     unsigned i;
     int hit=0;
-    if(wall->heading==0x4000 || wall->heading==0xC000) dx+=wall->radius;
-    else if(!wall->heading || wall->heading==0x8000) dy+=wall->radius;
+    if(wall->heading==0x4000 || wall->heading==0xC000) dx=world_add32(dx,wall->radius);
+    else if(!wall->heading || wall->heading==0x8000) dy=world_add32(dy,wall->radius);
     else return cm_fail("ZWallDCrash",object,"non-cardinal crushing wall");
     for(i=0;i<w->person_count;++i) {
         int index=w->persons[i].object;
@@ -103,8 +106,8 @@ int events_zwall_dcrash(sim_state *s, ai_state *a, world *w, unsigned object)
         int64_t head,shoulder,lower=(int64_t)wall->z-wall->height;
         if(w->persons[i].status==2 || index<0 || (unsigned)index>=w->object_count) continue;
         p=&w->objects[index];
-        if((int64_t)p->x<=wall->x-dx || (int64_t)p->x>=wall->x+dx ||
-           (int64_t)p->y<=wall->y-dy || (int64_t)p->y>=wall->y+dy) continue;
+        if(p->x<=world_sub32(wall->x,dx) || p->x>=world_add32(wall->x,dx) ||
+           p->y<=world_sub32(wall->y,dy) || p->y>=world_add32(wall->y,dy)) continue;
         shoulder=(int64_t)p->floor_z+p->z; head=shoulder+p->height;
         if(i==w->player_person) head+=s->unk_144b34;
         if(lower>=head || lower<=shoulder) continue;
@@ -169,9 +172,10 @@ int events_ycrush_crash(sim_state *s, ai_state *a, world *w, unsigned object, un
     const world_object *wall=&w->objects[object],*back=&w->objects[other];
     unsigned i;
     int hit=0;
-    int32_t minx=wall->x-wall->radius-0x3800,maxx=wall->x+wall->radius+0x3800;
-    int32_t miny=wall->y-0x3800,maxy=wall->y+0x3800;
-    int32_t limit=back->y<wall->y?back->y+0x3800:back->y-0x3800;
+    int32_t minx=world_sub32(world_sub32(wall->x,wall->radius),0x3800);
+    int32_t maxx=world_add32(world_add32(wall->x,wall->radius),0x3800);
+    int32_t miny=world_sub32(wall->y,0x3800),maxy=world_add32(wall->y,0x3800);
+    int32_t limit=back->y<wall->y?world_add32(back->y,0x3800):world_sub32(back->y,0x3800);
     for(i=0;i<w->person_count;++i) {
         int index=w->persons[i].object,trapped=0;
         world_object *p;
@@ -180,8 +184,8 @@ int events_ycrush_crash(sim_state *s, ai_state *a, world *w, unsigned object, un
         if(p->x<=minx || p->x>=maxx || p->y<=miny || p->y>=maxy ||
            (int64_t)wall->z+wall->height<=p->floor_z ||
            (int64_t)p->floor_z+p->z+p->height<=(int64_t)wall->z-wall->height) continue;
-        if(p->x<=wall->x-wall->radius) p->x=minx;
-        else if(p->x>=wall->x+wall->radius) p->x=maxx;
+        if(p->x<=world_sub32(wall->x,wall->radius)) p->x=minx;
+        else if(p->x>=world_add32(wall->x,wall->radius)) p->x=maxx;
         else if(p->y<wall->y) { if(miny<limit) trapped=1; else p->y=miny; }
         else if(p->y>wall->y) { if(maxy>limit) trapped=1; else p->y=maxy; }
         if(!trapped || w->persons[i].status==2) continue;

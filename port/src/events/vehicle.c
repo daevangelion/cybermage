@@ -43,7 +43,7 @@ int events_key_search(events_state *e, sim_state *s, world *w, unsigned key)
 {
     const world_object *p = &w->objects[w->player_object];
     int32_t tile = (p->x >> 16) + (p->y >> 16) * CM_MAP_SIDE +
-        ((p->floor_z + p->z) >> 16) * CM_MAP_CELLS;
+        (world_add32(p->floor_z,p->z) >> 16) * CM_MAP_CELLS;
     unsigned i;
     for (i = 0; i < e->switch_count; ++i) {
         events_switch *v = &e->switches[i];
@@ -72,7 +72,7 @@ int events_switch_search(events_state *e, sim_state *s, ai_state *a, world *w)
     if (!e || !s || !w || !a || w->player_object >= w->object_count)
         return cm_fail("switch", 0, "invalid player state");
     p = &w->objects[w->player_object];
-    tile = (p->x >> 16) + (p->y >> 16) * CM_MAP_SIDE + ((p->floor_z + p->z) >> 16) * CM_MAP_CELLS;
+    tile = (p->x >> 16) + (p->y >> 16) * CM_MAP_SIDE + (world_add32(p->floor_z,p->z) >> 16) * CM_MAP_CELLS;
     for (i = 0; i < e->switch_count; ++i) {
         const events_switch *v = &e->switches[i];
         const world_object *o;
@@ -121,7 +121,7 @@ int events_clear_vehicle(sim_state *s, world *w, unsigned object)
 {
     if (!s || !w || object >= w->object_count) return cm_fail("vehicle", object, "invalid exit object");
     s->no_openings = 0; s->unk_130d18 = 0; s->save_pc_vector = w->objects[object].heading;
-    s->collision_level = (w->objects[object].floor_z + 0x4800) >> 16;
+    s->collision_level = world_add32(w->objects[object].floor_z,0x4800) >> 16;
     if (s->collision_level > w->top_level) s->collision_level = w->top_level;
     world_omap_delete(w,object);
     if (sim_clear_object(s,w,object)) return -1;
@@ -161,7 +161,7 @@ int events_set_tank_mode(events_state *e, sim_state *s, world *w, int enter)
         if (events_clear_vehicle(s,w,object)) return -1;
     }
     p = &w->objects[w->player_object];
-    s->body_height = p->z + p->z / 2 + 0x1000;
+    s->body_height = world_add32(world_add32(p->z,p->z/2),0x1000);
     s->unk_144b34 = s->unk_144b38 = s->unk_144b3c = 0;
     w->camera.pitch = 0;
     return 0;

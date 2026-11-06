@@ -105,7 +105,7 @@ int events_cosmetics(events_state *e, sim_state *s, ai_state *a, world *w)
         } else if(type==174) animate=1;
         else if(type==173) {
             animate=1;frame=(unsigned)e->candleflicker%2;
-            if(a->gem_count_down && (int32_t)(a->gem_count_down_timer-10)<(int32_t)e->ticks && world_rnd(&w->rng,2)) {
+            if(a->gem_count_down && (int32_t)((uint32_t)a->gem_count_down_timer-10u)<(int32_t)e->ticks && world_rnd(&w->rng,2)) {
                 e->unk_1444EC=world_rnd(&w->rng,5)+1;(void)snd_play(27,32767,32768);
             }
             if(a->gem_count_down && (int32_t)e->ticks>a->gem_count_down_timer) {

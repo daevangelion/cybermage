@@ -33,15 +33,17 @@ int events_save_import(events_state *e, const ui_save_state *save)
         v->kind=(uint8_t)get16(save,at+32); v->subtype=(uint8_t)(get16(save,at+32)>>8);
         v->flags=(uint8_t)get16(save,at+34); v->variant=(uint8_t)(get16(save,at+34)>>8);
         v->unk_0024=(int32_t)get32(save,at+36);
-        if (v->type < 0 || (v->type > 0 && (unsigned)v->type > e->definition_count)) return cm_fail("events/save",at,"invalid saved item type");
+        if (v->type < 0 || (v->type > 0 && (unsigned)v->type > e->definition_count))
+            return cm_fail("SAVE*.DAT",8+at+20-INVENTORY_BASE,"invalid saved item type");
     }
     e->cash=(int32_t)get32(save,0x1313A4); e->spell=(int32_t)get32(save,0x1313A8);
     e->hh_weapon=(int32_t)get32(save,0x1313AC); e->weapon=(int32_t)get32(save,0x1313B0);
     e->item_spell=(int32_t)get32(save,0x1313B4);e->weapon_slot=get32(save,0x1313B8);e->hh_dice=get32(save,0x1313BC);
-    if(e->weapon_slot>=EVENTS_ITEM_MAX) return cm_fail("events/save",0x1313B8,"invalid selected weapon slot");
+    if(e->weapon_slot>=EVENTS_ITEM_MAX) return cm_fail("SAVE*.DAT",0x670,"invalid selected weapon slot");
     e->PCBet=(int32_t)save->PCBet;e->PCBetPick=(int32_t)save->PCBetPick;
     e->PCBetOdds=(int32_t)save->PCBetOdds;e->JackPot=(int32_t)save->JackPot;
-    e->autoDestruct=(int32_t)save->autoDestruct;e->autoDTime=e->ticks+save->autoDTime;
+    e->autoDestruct=(int32_t)save->autoDestruct;
+    e->autoDTime=e->autoDestruct?e->ticks+save->autoDTime:0;
     e->energy=(int16_t)get16(save,0x131410); e->max_energy=(int16_t)get16(save,0x131412);
     for (i=0;i<8;++i) e->spells[i]=(uint8_t)(get16(save,0x1313C0+(i&~1u)) >> (i%2*8));
     for (i=0;i<EVENTS_ARMOR_MAX;++i) { e->armor[i]=(int16_t)get16(save,0x1313C8+i*2); e->max_armor[i]=(int16_t)get16(save,0x1313D4+i*2); }
@@ -53,7 +55,7 @@ int events_save_import(events_state *e, const ui_save_state *save)
     }
     for (i=0;i<EVENTS_SWITCH_MAX;++i) {
         e->switches[i].state=save->unk_142B78[i]; e->switches[i].key=(int16_t)cm_u16(save->unk_1428F8+i*2);
-        if (e->switches[i].state>1) return cm_fail("events/save",0x142B78+i,"invalid saved switch state");
+        if (e->switches[i].state>1) return cm_fail("SAVE*.DAT",0x34D89+i,"invalid saved switch state");
     }
     e->text_trigger=(int32_t)save->textTrigger; e->text_object=(int32_t)save->textObj; e->text_message=(int32_t)save->textMsgNum;
     e->text_switch1=(int32_t)save->textSwitch1; e->text_switch0=(int32_t)save->textSwitch0; e->text_event=(int32_t)save->textEvent;
@@ -80,7 +82,8 @@ int events_save_export(const events_state *e, ui_save_state *save)
     put32(save,0x1313B4,(uint32_t)e->item_spell);put32(save,0x1313B8,e->weapon_slot);put32(save,0x1313BC,e->hh_dice);
     save->PCBet=(uint32_t)e->PCBet;save->PCBetPick=(uint32_t)e->PCBetPick;
     save->PCBetOdds=(uint32_t)e->PCBetOdds;save->JackPot=(uint32_t)e->JackPot;
-    save->autoDestruct=(uint32_t)e->autoDestruct;save->autoDTime=e->autoDTime-e->ticks;
+    save->autoDestruct=(uint32_t)e->autoDestruct;
+    save->autoDTime=e->autoDestruct?e->autoDTime-e->ticks:0;
     put16(save,0x131410,(uint16_t)e->energy); put16(save,0x131412,(uint16_t)e->max_energy);
     for (i=0;i<8;i+=2) put16(save,0x1313C0+i,(uint16_t)(e->spells[i] | (uint16_t)e->spells[i+1]<<8));
     for (i=0;i<EVENTS_ARMOR_MAX;++i) { put16(save,0x1313C8+i*2,(uint16_t)e->armor[i]); put16(save,0x1313D4+i*2,(uint16_t)e->max_armor[i]); }

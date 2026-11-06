@@ -3,12 +3,39 @@
 #include "audio.h"
 #include "replay.h"
 #include <stdio.h>
+#include <stdlib.h>
+#include <errno.h>
 #include <string.h>
 
 static world w;
 static events_state e;
 static sim_state s;
 static ai_state a;
+
+enum { EVENT_INPUT_WORDS=15 };
+typedef struct { int64_t word[EVENT_INPUT_WORDS]; } event_input;
+
+static int next_event_input(FILE *file, event_input *input)
+{
+    char line[1024],*p,*end;
+    unsigned i;
+    if(!fgets(line,sizeof(line),file)) return ferror(file)?-1:0;
+    p=line;
+    for(i=0;i<EVENT_INPUT_WORDS;++i) {
+        errno=0;input->word[i]=strtoll(p,&end,10);
+        if(errno || end==p || *end!=',' || input->word[i]<INT32_MIN ||
+           input->word[i]>UINT32_MAX) return cm_fail("events-input.csv",i,"invalid input word");
+        p=end+1;
+    }
+    if(input->word[0]<0 || input->word[1]<0 || input->word[2]<0 ||
+       input->word[2]>=CM_OBJECT_MAX || input->word[3]<0 || input->word[3]>=CM_OBJECT_MAX ||
+       input->word[8]<0 || input->word[8]>65535 || input->word[11]<1 || input->word[11]>11)
+        return cm_fail("events-input.csv",0,"invalid input identity");
+    if(strlen(p)!=257 || p[256]!='\n') return cm_fail("events-input.csv",0,"invalid key span");
+    for(i=0;i<256;++i) if(!((p[i]>='0' && p[i]<='9') || (p[i]>='a' && p[i]<='f')))
+        return cm_fail("events-input.csv",i,"invalid key byte");
+    return 1;
+}
 
 static int covers(const cm_replay *replay, uint32_t address, uint32_t length)
 {
@@ -52,9 +79,20 @@ int main(int argc, char **argv)
 {
     cm_replay replay={0};
     cm_replay_frame f;
-    unsigned rows=0,checks=0,vehicle_rows=0;
-    int status;
-    if(argc!=3) return 2;
+    event_input input;
+    FILE *input_file;
+    char header[256];
+    unsigned rows=0,checks=0,vehicle_rows=0,moves=0;
+    int missing_world=0;
+    int status,input_status;
+    if(argc!=4) return 2;
+    input_file=fopen(argv[3],"r");
+    if(!input_file) return cm_fail(argv[3],0,"cannot open MoveWorld input observations");
+    if(!fgets(header,sizeof(header),input_file) ||
+       strcmp(header,"frame,ticks,object,person,x,y,z,object_z,heading,body,pitch,scene,mode,previous_mode,stance,keys\n"))
+        return cm_fail(argv[3],0,"invalid MoveWorld input header");
+    input_status=next_event_input(input_file,&input);
+    if(input_status<0) return 1;
     sim_init(&s,0);
     if(snd_open(argv[1]) || replay_open(&replay,argv[2])) return 1;
     status=replay_next(&replay,&f);
@@ -64,6 +102,7 @@ int main(int argc, char **argv)
     a.events=&e;
     while(status>0) {
         unsigned r,i;
+        if(missing_world) return cm_fail(argv[3],rows-1,"missing completed MoveWorld input frame");
         if((unsigned)f.values[CM_TRACE_SCENE]!=w.scene) {
             unsigned scene=(unsigned)f.values[CM_TRACE_SCENE];
             if(!e.scene_requested.pending || e.scene_requested.scene!=(int32_t)scene) {
@@ -115,12 +154,39 @@ int main(int argc, char **argv)
         s.timer_ticks=(uint32_t)f.values[CM_TRACE_TICKS]; s.frame_ticks=(int32_t)f.values[CM_TRACE_DELTA];
         s.bp_limit_flag=(uint32_t)f.values[CM_TRACE_LIMIT_FLAG]; s.body_height=(int32_t)f.values[CM_TRACE_BODY];
         memcpy(s.kb_scan_status,f.input_keys,sizeof(s.kb_scan_status));
-        if(events_step(&e,&s,&a,&w)) return 1;
+        {
+            int result=events_input(&e,&s,&a,&w);
+            if(result<0) return 1;
+            if(input_status>0 && input.word[0]<(int64_t)rows)
+                return cm_fail(argv[3],rows,"stale or duplicate MoveWorld input frame");
+            if(input_status>0 && input.word[0]==(int64_t)rows) {
+                world_object *pc=&w.objects[w.player_object];
+                if(result || w.player_object!=(unsigned)input.word[2] ||
+                   w.player_person!=(unsigned)input.word[3] || w.scene!=(unsigned)input.word[11] ||
+                   s.pc_mode!=(int32_t)input.word[12]) {
+                    fprintf(stderr,"event input identity/mode divergence frame=%u computed=%u/%u/%d observed=%lld/%lld/%lld\n",
+                        rows,w.player_object,w.player_person,s.pc_mode,(long long)input.word[2],
+                        (long long)input.word[3],(long long)input.word[12]);
+                    return 1;
+                }
+                /* Sim-owned state sampled before the original MoveWorld,
+                 * never the next frame's post-event position. */
+                pc->x=(int32_t)input.word[4];pc->y=(int32_t)input.word[5];pc->floor_z=(int32_t)input.word[6];
+                pc->z=(int32_t)input.word[7];pc->heading=(uint16_t)input.word[8];
+                s.body_height=(int32_t)input.word[9];w.camera.pitch=(int32_t)input.word[10];
+                s.unk_144b34=(int32_t)input.word[14];s.timer_ticks=(uint32_t)input.word[1];
+                if(events_move_world(&e,&s,&a,&w)) return 1;
+                ++moves;
+                input_status=next_event_input(input_file,&input);
+                if(input_status<0) return 1;
+            } else if(!result) missing_world=1;
+        }
         ++rows;
         status=replay_next(&replay,&f);
     }
-    replay_close(&replay); snd_close(); world_close(&w);
+    fclose(input_file);replay_close(&replay); snd_close(); world_close(&w);
     if(status<0) return 1;
+    if(!moves || input_status>0) return cm_fail(argv[3],rows,"empty or unused MoveWorld observations");
     printf("event reducer: %u frames %u independently computed state bytes matched; %u vehicle rows\n",rows,checks,vehicle_rows);
     return 0;
 }
