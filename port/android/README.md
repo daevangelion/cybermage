@@ -65,10 +65,12 @@ The screen is centered at4:3, with black bars rather than stretching640×480.
 Tapping inside the game maps to a left mouse click in menu coordinates; the input
 struct also carries bounded per-frame touch events with IDs, phases, coordinates,
 pressure and an inside-viewport flag. Touches in the black bars do not click.
-Classic controls remain the default. Opt into the modern action layer with:
+On Android the modern action layer (touch overlay) is the default, because DOS
+keyboard controls are unusable on a touch-only phone. Classic controls (exact DOS
+key semantics) remain available with:
 
 ```
-adb shell am start -S -n com.jshield.cybermage/.DataActivity --es controls modern
+adb shell am start -S -n com.jshield.cybermage/.DataActivity --es controls classic
 ```
 
 Modern gameplay has a virtual left stick, a right-side look swipe area and six
