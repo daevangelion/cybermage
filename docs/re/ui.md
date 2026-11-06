@@ -212,9 +212,10 @@ tools/oracle.sh ui-hud
 The earlier strict C99 full link and focused probe exited0. UI2's all-source
 focused test also exits0, including merchant purchases/sales, coder confirmation,
 overlay writes, malformed rows and completed-death-column detection. The latest
-full `make -C port B=build/UI2` compiled all objects cleanly but failed to link
-the concurrent Port symbols `ai_pc_input`/`ai_pc_hand2hand` and Render symbol
-`glr_common_fragment`; owners were notified. This is not a clean full-build claim.
+full `make -C port B=build/UI2` initially compiled all objects cleanly but failed
+to link the concurrent Port symbols `ai_pc_input`/`ai_pc_hand2hand` and Render
+symbol `glr_common_fragment`. After those owners landed their definitions, a
+fresh full build compiled and linked successfully under all strict flags.
 Expected negative-test
 diagnostics reject truncated GAMENAME, truncated PERSON tail, and undersized
 save output. The original retail SAVE010 scene1 loads into typed world state;
