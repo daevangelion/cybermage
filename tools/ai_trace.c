@@ -257,10 +257,11 @@ int main(int argc, char **argv)
         {
             const world_object *pc = &w.objects[w.player_object];
             w.camera.u = pc->x; w.camera.v = pc->y;
-            w.camera.z = pc->floor_z + s.body_height - 0x1000 + s.unk_144b38;
+            w.camera.z = pc->floor_z + s.body_height - 0x1000 + s.unk_144b38 + a.pc.hit_camera_z;
             w.camera.angle = pc->heading;
         }
         if (target_query(&a.targets, &w, &w.camera, &view)) return 1;
+        ai_pc_draw_advance(&a, &s);
     }
     replay_close(&replay); world_close(&w);
     if (clocks) {

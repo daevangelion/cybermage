@@ -14,6 +14,7 @@ executes original x86 AI states; it is not a complete native implementation.
 | TrackTarget | 0x0344E0 | atan64k(source,target), target-mode=2; optional +/-0x1555 chosen by unsigned angle-target-heading difference <0x8000 |
 | UpdatePCObject | 0x034488 | hidden +0x5C decrements on animation tick; object flags byte2 bit1 cleared at zero; aura +0x74 decremented when nonzero |
 | UpdateObjects | 0x0348C4 | PERSONs 1..count; animation ticks when timer > deadline, then deadline=timer+4 (kind9: +3; kind17 every frame); player effects first; acquisition rotates PERSON index mod10 each call |
+| HandleNextFrame hit response | 0x01CF71..0x01D09E | nonzero PCFlash consumes RND4096, RND8192, RND2; vertical view kick, lateral JumbleBound at heading±quarter-turn; no bp gate |
 
 ## Layout used by combat
 
@@ -33,8 +34,8 @@ divergence (do not inject oracle coordinates or target results):
 
 ```
 tools/run_capped.sh make -C port B=build/AimFix
-tools/run_capped.sh port/build/AimFix/cybermage --headless --data orig/retail --bios-seed 44 --replay captures/AimFix-target-combat/frames.csv --state-dump captures/AimFix-target-combat/native --user out/AimFix-combat-user
-tools/run_capped.sh .venv/bin/python tools/compare_targets.py captures/AimFix-target-combat/frames.csv captures/AimFix-target-combat/native
+tools/run_capped.sh port/build/AimFix/cybermage --headless --data orig/retail --bios-seed 44 --replay captures/Sim2-combat-collision/frames.csv --actor-clocks captures/Sim2-combat-collision/actor-clocks.csv --import-undefined captures/Sim2-combat-collision/scene-start.persons --state-dump captures/AimFix-target-combat/native --user out/AimFix-combat-user
+tools/run_capped.sh .venv/bin/python tools/compare_targets.py captures/Sim2-combat-collision/frames.csv captures/AimFix-target-combat/native
 ```
 
 The independent `target` module supplies ordered clipped projected props in the
@@ -210,6 +211,20 @@ hostile actors and turns while firing. The initial spell is semi-automatic:
 the scenario supplies genuine Space make/break pulses rather than a held key,
 which otherwise emits only one shot. The earlier held-fire capture damages the
 player but no NPC and is not a successful firefight-parity gate.
+Starter SpellPower[0] is5, from the separately supplied executable at0x92690;
+firing before turning spent the40 starting energy without hitting a monster.
+The scenario now saves that energy until49s, when the turn exposes enemies.
+
+The first clock-aligned pulsed-fire capture (1254 frames) matches actor/RNG
+state through frame896, including the player's first HP loss40→38.
+At frame896 the original then calls RND4096 from0x1CF88 while native formerly
+went directly to NPC steering RND512; frame897 positions first differ.
+`pc_hit.c` ports the missing HandleNextFrame feedback block, including
+arithmetic-right-shift fixed products and the physical sideways displacement.
+Its vertical spill is used only inside this original block, so the native stores
+only the current-frame camera increment. RenderBells separately consumes the
+one-frame+1444EC effect and decrements PCFlash once per draw, including headless
+replay; neither drawing transition is conditioned on bp_limit_flag.
 
 ## Player projectiles and radial effects
 

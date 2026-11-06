@@ -11,6 +11,53 @@ static sim_state simulation;
 static ui_save_state save;
 static events_state player;
 
+static int32_t expected_fixed(int32_t x, int32_t y)
+{
+    int64_t product = (int64_t)x * y;
+    return (int32_t)(product < 0 ? -((-product + 65535) / 65536) : product / 65536);
+}
+
+static void player_hit_response(void)
+{
+    unsigned i, seed, sides = 0;
+    const int32_t center = 16 * 65536 + 32768;
+    memset(&w, 0, sizeof w);
+    memset(&a, 0, sizeof a);
+    sim_init(&simulation, 0);
+    w.top_level = 3; w.object_count = 2; w.person_count = 1;
+    w.player_object = 1; w.objects[1].person = 0; w.persons[0].object = 1;
+    w.objects[1].active = 1; w.objects[1].x = w.objects[1].y = center;
+    w.objects[1].z = 0x3800; w.objects[1].radius = w.objects[1].height = 0x1000;
+    for (i = 0; i < CM_MAP_CELLS; ++i) w.cells[0][i].floor = 1;
+    world_trig_init(&w.trig);
+    assert(world_make_omap(&w) == 0 && sim_start_scene(&simulation, &w) == 0);
+    for (seed = 44; seed < 76 && sides != 3; ++seed) {
+        world_rng expected;
+        int32_t vertical, push;
+        unsigned side, angle;
+        world_rng_init(&w.rng, (uint16_t)seed);
+        expected = w.rng;
+        vertical = world_rnd(&expected, 4096) - 2048;
+        push = world_rnd(&expected, 8192) - 4096;
+        side = (unsigned)world_rnd(&expected, 2);
+        sides |= 1u << side;
+        w.objects[1].x = w.objects[1].y = center;
+        w.objects[1].heading = 0x1234;
+        angle = (uint16_t)(0x1234 + (side ? 0x4000 : 0xC000)) >> 5;
+        a.pc_flash = 2;
+        assert(ai_pc_hit_response(&a, &simulation, &w) == 0);
+        assert(a.pc.hit_camera_z == vertical && a.pc_flash == 2);
+        assert(w.objects[1].x == center + expected_fixed(push, w.trig.cos[angle]));
+        assert(w.objects[1].y == center + expected_fixed(push, w.trig.sin[angle]));
+        assert(memcmp(w.rng.word, expected.word, sizeof expected.word) == 0);
+        a.pc_flash = 0;
+        assert(ai_pc_hit_response(&a, &simulation, &w) == 0);
+        assert(a.pc.hit_camera_z == 0);
+        assert(memcmp(w.rng.word, expected.word, sizeof expected.word) == 0);
+    }
+    assert(sides == 3);
+}
+
 static void soul_prop_pool(void)
 {
     unsigned i;
@@ -340,6 +387,7 @@ int main(int argc, char **argv)
     independent_actor_clocks();
     explicit_undefined_input();
     soul_prop_pool();
+    player_hit_response();
     puts("AI data tests passed");
     return 0;
 }
