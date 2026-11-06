@@ -1,5 +1,31 @@
 # CyberMage Android
 
+## Review2 lifecycle acceptance
+
+Frozen source `18be842` built offline for x86_64 with the canonical wrapper,
+`KEEP_BUILD=1`, JDK21, NDK27.2.12479018, cached SDL2 release-2.30.10 and the
+shared Gradle9.4.1/AGP8.13.2 cache. Build succeeded (22 tasks executed,
+17 from cache). APK:1,966,637 bytes, SHA256
+`22d100d33426e8a30d28612bbfc460604b3103b60174604e106befcd42a886a4`.
+
+On the already-running `box-api36` / `emulator-5554`, launch through
+`DataActivity --es renderer gl` entered scene1 using Android's modern default.
+`KEYCODE_HOME`, ten seconds in the launcher, then bringing the existing task
+forward preserved PID23392. Inspected before/after screenshots show intact
+world textures and HUD. A subsequent one-second virtual-stick swipe visibly
+walked forward, proving resumed input/rendering rather than a frozen image.
+The PID-scoped log contained no fatal exception, fatal signal or engine ERROR.
+Evidence: `captures/Fix2-android/{run.json,before-home.png,after-resume.png,
+resume-walk.png,logcat.txt}`.
+
+This did not force Android to lose EGL. Separate Core GL and OpenGL ES runtime
+tests destroyed/recreated the real platform context, reset every renderer cache
+and checked the same scene pixel; both passed. The platform lifecycle unit test
+also advances a synthetic clock ten minutes across background/foreground events
+and checks no simulation-clock jump or pacing catch-up.
+SDL2's event contract is documented at
+<https://wiki.libsdl.org/SDL2/README-android#pause-resume-behaviour>.
+
 The APK contains the C port and SDL2, **no game data**. Supply your own installed
 retail CyberMage directory. DOS filenames must retain their uppercase spelling.
 
