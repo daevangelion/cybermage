@@ -178,7 +178,8 @@ Enter confirmation (`artifact://3794`); the expanded fixture covers these
 keyboard, pointer and context-ownership paths.
 Modern taps hit the drawn 112×76 tile at (14+116×column,128+88×row);
 gaps and space outside live tiles cannot confirm. Classic glove thresholds remain
-unchanged. The modern regression taps all twenty tile centres.
+unchanged. Rejected taps also discard their confirmation latch, so release cannot
+confirm the prior selection. The modern regression taps all twenty tile centres.
 
 ## Focused verification
 

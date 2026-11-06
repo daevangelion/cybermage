@@ -260,6 +260,22 @@ static void modern_selector(void)
             assert(!events_process_selector(&e, &s, &w));
             assert(!e.selector_kind && e.weapon_slot == tile);
         }
+        selector_arena();
+        memset(&semantic, 0, sizeof semantic);
+        semantic.modern = 1; semantic.select_kind = 3; semantic.select_open = 1;
+        assert(!sim_modern_input(&s, &w, &semantic));
+        semantic.select_open = 0;
+        semantic.mouse_x = 0; semantic.mouse_y = 0; semantic.mouse_pressed = 1;
+        sim_input(&s, &semantic);
+        assert(!sim_modern_input(&s, &w, &semantic) && !events_process_selector(&e, &s, &w));
+        assert(e.selector_kind == 3);
+        semantic.mouse_pressed = 0;
+        sim_input(&s, &semantic);
+        assert(!sim_modern_input(&s, &w, &semantic) && !events_process_selector(&e, &s, &w));
+        assert(e.selector_kind == 3 && e.items[1].quantity == 1);
+        semantic.pressed[1] = 1;
+        sim_input(&s, &semantic);
+        assert(!sim_modern_input(&s, &w, &semantic) && !e.selector_kind);
     }
 }
 
