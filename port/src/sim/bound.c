@@ -311,7 +311,12 @@ int sim_clear_object(sim_state *s, world *w, unsigned object)
                     if (b->targetable == 1 && b->person >= 0 &&
                         (unsigned)b->person < w->person_count && w->persons[b->person].status == 2) {
                         /* Dead actors do not block clearance. */
-                    } else if (object != w->player_object || b->targetable != 2) blocked = 1;
+                    } else if (object == w->player_object && b->targetable == 2) {
+                        if (b->person < 0 || (unsigned)b->person >= w->prop_count ||
+                            w->prop_objects[b->person] != id)
+                            return cm_fail("ClearObject", id, "invalid prop placement");
+                        if (!w->prop_items[b->person]) blocked = 1;
+                    } else blocked = 1;
                 }
                 node = w->omap.nodes[node].next;
             }

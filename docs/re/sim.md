@@ -627,3 +627,23 @@ The numeric Scene9 aperture28 descent is also matched; historical Temple
 capture names are not evidence of that scene's level identity. See
 [gate-ae2792a.json](gate-ae2792a.json) for commands and40,065 original records /
 6,058,542 actor checkpoints. No exit or complete campaign is claimed.
+
+## ClearObject scenery and pickup distinction
+
+Original0459AB..0459D1 exempts a player/PROP contact only when runtime PROP+6
+is nonzero: item-bearing props do not block clearance, ordinary scenery does.
+The prior native branch incorrectly exempted every targetable2 PROP. Its new
+collision regression fails before correction (named0e2fdcb, exit134,
+artifact5021), covering scenery versus item-bearing props for player and NPC
+movers, plus invalid placement indices/identity.
+
+The actual ladder-front-finish boundary reaches ClearObject at frame51 with
+player936 `(1165755,868352,24576)`, overlapping solid sceneryPROP890,
+placement49/item0. Original rejects the centre and selects the southeast
+radial candidate `(1183132,850974)`, then forced crouch emits047AD6/RND16384.
+Native accepted the centre, skipped that crouch and diverged at checkpoint52.
+One immutable read-only recapture preserves every old frame/range byte and
+actor/clock/event record while adding motion globals/RNG. All29 saved motion
+words and the first five post-save RND calls match, falsifying clock, extra-HUD
+and serialization hypotheses. The correction changes only this scenery/item
+admission branch; no clock/input/position/RNG values are fitted.
