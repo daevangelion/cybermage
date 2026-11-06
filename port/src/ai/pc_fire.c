@@ -79,14 +79,18 @@ int ai_pc_load_tables(ai_state *a, const cm_exe *exe)
 }
 
 /* Xox::ResetAim, CM_HI.EXE 0x12D60. */
-int ai_reset_aim(ai_state *a, const sim_state *s)
+static int reset_aim(ai_state *a, int mode)
 {
-    int mode = combat_mode(s);
     unsigned type = mode == 1 ? a->pc_aim.hand_type : mode == 5 ? 1u : 0u;
     if (type >= 16) return cm_fail("ResetAim", type, "invalid player hand type");
     a->pc_aim.aim_x = a->pc_rules.center_aim_x[type];
     a->pc_aim.aim_y = a->pc_rules.center_aim_y[type];
     return 0;
+}
+
+int ai_reset_aim(ai_state *a, const sim_state *s)
+{
+    return reset_aim(a, combat_mode(s));
 }
 
 static int low_word(int32_t n) { return signed16((uint32_t)n); }
@@ -169,7 +173,7 @@ static void keyboard_hand(ai_pc_state *p, const sim_state *s, int mode)
     p->hand_x = p->key_hand_x; p->hand_y = p->key_hand_y;
 }
 
-static int equip(ai_state *a, const sim_state *s, const world *w, int mode)
+static int equip(ai_state *a, const world *w, int mode)
 {
     ai_pc_state *p = &a->pc;
     ai_pc_aim *q = &a->pc_aim;
@@ -177,6 +181,8 @@ static int equip(ai_state *a, const sim_state *s, const world *w, int mode)
     const int32_t *b, *t;
     int weapon = mode == 2 ? e->hh_weapon : e->weapon;
     unsigned type;
+    if (mode == 3) return reset_aim(a, mode);
+    if (mode != 1 && mode != 2 && mode != 5) { p->last_mode = mode; return 0; }
     if (mode == 5) {
         if (e->spell < 0 || e->spell >= 16)
             return cm_fail("EquipWeapon", (uint32_t)e->spell, "invalid spell");
@@ -188,7 +194,7 @@ static int equip(ai_state *a, const sim_state *s, const world *w, int mode)
     if (mode == 2 && (weapon < 0 || weapon >= 4))
         return cm_fail("EquipHHWeapon", (uint32_t)weapon, "invalid melee weapon");
     type = mode == 1 ? (unsigned)weapon+2 : mode == 5 ? 1u : 0u;
-    q->hand_type = type;
+    if (mode != 2) q->hand_type = type; /* EquipHHWeapon103A4 only selects SwordProp. */
     if (mode == 1 || mode == 5) {
         /* EquipWeapon 0x10451..0x1055F, complete bound/trajectory row. */
         b = a->pc_rules.hand_bound[type];
@@ -205,9 +211,10 @@ static int equip(ai_state *a, const sim_state *s, const world *w, int mode)
         q->pistol_xoffset = a->pc_rules.center_aim_x[type];
         q->pistol_boffset = 20;
         p->muzzle_mode = p->muzzle_count = 0;
+        if (mode == 5) p->glow_frame = 0; /* EquipWeapon10441, magic branch only. */
     }
     p->last_mode = mode; p->last_weapon = weapon;
-    return ai_reset_aim(a, s);
+    return reset_aim(a, mode);
 }
 
 /* LoadScene 0x12148/0x12155 also equips before the first game frame. */
@@ -216,7 +223,9 @@ int ai_pc_equip(ai_state *a, const sim_state *s, const world *w)
     if (!a->events || !a->tables_loaded)
         return cm_fail("EquipWeapon", 0, "player combat is not initialized");
     a->pc.last_mode = 0;
-    return equip(a, s, w, combat_mode(s));
+    /* LoadScene equips the last gun as well as the active sword. */
+    if (combat_mode(s) == 2 && equip(a, w, 1)) return -1;
+    return equip(a, w, combat_mode(s));
 }
 
 static int prepare_aim(ai_state *a, const sim_state *s, int mode)
@@ -385,7 +394,7 @@ static int ranged_fire(ai_state *a, sim_state *s, world *w)
             if (!item->quantity) {
                 item->type = 0;
                 s->pc_mode = 5;
-                if (equip(a, s, w, 5)) return -1;
+                if (equip(a, w, 5)) return -1;
             }
         }
     } else {
@@ -662,6 +671,33 @@ static int pc_ready(const ai_state *a, const sim_state *s, const world *w)
     return 0;
 }
 
+/* HandleNextFrame1E4A0..1E768: commit equipment and reset the input latch
+ * in this frame, not at the next Hand2Hand/update pass. */
+int ai_pc_select(ai_state *a, const sim_state *s, const world *w, unsigned kind)
+{
+    events_state *e;
+    int mode;
+    if (pc_ready(a, s, w)) return -1;
+    if (kind > 3) return cm_fail("selector", kind, "invalid selection kind");
+    e = a->events; mode = s->pc_mode; /* Modern direct selection may still hold RMB. */
+    if ((kind == 1 && mode != 1 && mode != 2) || (kind == 2 && mode != 5))
+        return cm_fail("selector", (uint32_t)mode, "selected mode does not match item kind");
+    if ((kind == 1 && (mode == 1 || mode == 2)) ||
+        (kind == 2 && e->previous_mode != 5)) {
+        a->pc.last_mode = 0;
+        if (equip(a, w, mode)) return -1;
+    } else {
+        if (kind == 2) {
+            if (e->spell < 0 || e->spell >= 16)
+                return cm_fail("selector/power", (uint32_t)e->spell, "invalid selected power");
+            a->pc.glow_set = a->pc_rules.glow_set[e->spell];
+        }
+        if (reset_aim(a, mode)) return -1;
+    }
+    a->pc.fire = a->pc.cooldown = a->pc.latch = 0;
+    return 0;
+}
+
 /* ProcessInputEvents0x14754 precedes acceleration, water and hit response. */
 int ai_pc_prepare_input(ai_state *a, sim_state *s, world *w)
 {
@@ -669,7 +705,7 @@ int ai_pc_prepare_input(ai_state *a, sim_state *s, world *w)
     ai_pc_state *p;
     if (pc_ready(a, s, w)) return -1;
     mode = combat_mode(s); p = &a->pc;
-    if (equip(a, s, w, mode)) return -1;
+    if (equip(a, w, mode)) return -1;
     /* HandleNextFrame 0x1BA49: the four glow frames use the 2-tick gate. */
     if (s->bp_limit_flag) p->glow_frame = (p->glow_frame+1)%4;
     if (mode == 7 && s->vehicle_type) {

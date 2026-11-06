@@ -176,6 +176,9 @@ int ai_load_tables(ai_state *a, const char *asset_dir);
 int ai_pc_load_tables(ai_state *a, const cm_exe *exe);
 int ai_reset_aim(ai_state *a, const sim_state *s);
 int ai_pc_equip(ai_state *a, const sim_state *s, const world *w);
+/* Selector commit after its caller assigns the selected raw PC mode.
+ * kind:0 cancel,1 weapon,2 power,3 inventory. No rendering/asset allocation. */
+int ai_pc_select(ai_state *a, const sim_state *s, const world *w, unsigned kind);
 void ai_pc_hand_bob(ai_state *a, const sim_state *s);
 /* Sim: input before acceleration; motion after body and before MovePerson.
  * Main: actual weapon fire after Sim, before world/NPC updates. */
