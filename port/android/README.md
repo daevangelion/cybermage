@@ -61,7 +61,7 @@ pressure and an inside-viewport flag. Touches in the black bars do not click.
 Classic controls remain the default. Opt into the modern action layer with:
 
 ```
-adb shell am start -n com.jshield.cybermage/.GameActivity --es controls modern
+adb shell am start -S -n com.jshield.cybermage/.DataActivity --es controls modern
 ```
 
 Modern gameplay has a virtual left stick, a right-side look swipe area and six

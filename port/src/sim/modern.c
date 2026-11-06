@@ -8,7 +8,8 @@ static int select_action(sim_state *s, world *w, const cm_input *in)
     kind = e->selector_kind && !in->select_open ? e->selector_kind : in->select_kind;
     if (kind < 1 || kind > 3) kind = 1;
     if (!e->selector_kind || in->select_open) {
-        e->previous_mode = s->modern_aim ? s->previous_pc_mode : s->pc_mode;
+        if (!e->selector_kind)
+            e->previous_mode = s->modern_aim ? s->previous_pc_mode : s->pc_mode;
         if (events_make_selector(e, kind)) return -1;
         for (i = 0; i < e->selector_count; ++i) {
             unsigned slot = (unsigned)e->selector_items[i];
@@ -19,7 +20,11 @@ static int select_action(sim_state *s, world *w, const cm_input *in)
         e->selector_index = index;
     }
     if (in->select_open) { s->pc_mode = 3; s->modern_aim = 0; return 0; }
-    if (!e->selector_count) { e->selector_kind = 0; return 0; }
+    if (!e->selector_count) {
+        e->selector_kind = 0;
+        s->pc_mode = e->previous_mode;
+        return 0;
+    }
     if (in->select_slot) {
         unsigned key = in->select_slot - 1;
         if (key >= EVENTS_SELECTOR_MAX || e->selector_keys[key] < 0) return 0;
@@ -29,6 +34,10 @@ static int select_action(sim_state *s, world *w, const cm_input *in)
     if (kind == 3 && !in->select_slot) { s->pc_mode = 3; return 0; }
     s->kb_scan_status[0x1c] = 2;
     if (events_process_selector(e, s, w)) return -1;
+    if (s->modern_aim) {
+        s->previous_pc_mode = s->pc_mode;
+        s->pc_mode = 3;
+    }
     return 0;
 }
 

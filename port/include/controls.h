@@ -48,6 +48,7 @@ typedef struct {
 void controls_init(cm_controls *c);
 int controls_parse(cm_controls *c, const uint8_t *data, uint32_t size);
 int controls_load(cm_controls *c, const char *path);
+/* Physical and output storage must be distinct; physical state is borrowed. */
 void controls_frame(cm_controls *c, controls_context context,
                      const cm_input *physical, cm_input *output);
 struct world;

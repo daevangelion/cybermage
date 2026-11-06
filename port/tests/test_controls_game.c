@@ -52,7 +52,7 @@ static int scripted_poll(cm_input *input, unsigned frame)
         pad_index = SDL_JoystickAttachVirtual(SDL_JOYSTICK_TYPE_GAMECONTROLLER, 6, 21, 0);
         assert(pad_index >= 0);
         pad_id = SDL_JoystickGetDeviceInstanceID(pad_index);
-        key(SDL_KEYDOWN, SDL_SCANCODE_W);
+        key(SDL_KEYDOWN, SDL_SCANCODE_T);
         memset(&event, 0, sizeof event);
         event.type = SDL_MOUSEMOTION;
         event.motion.xrel = 3;
@@ -60,6 +60,7 @@ static int scripted_poll(cm_input *input, unsigned frame)
         assert(SDL_PushEvent(&event) == 1);
     }
     if (frame == 3) {
+        assert(simulation.movement_request > 0); /* T came from --user/controls.cfg. */
         looked = game.objects[game.player_object].heading != origin_heading && game.camera.pitch != 0;
         axis(SDL_CONTROLLER_AXIS_LEFTX, 16384);
     }
@@ -80,7 +81,7 @@ static int scripted_poll(cm_input *input, unsigned frame)
     if (frame == 10) {
         moved = game.objects[game.player_object].x != origin_x ||
                 game.objects[game.player_object].y != origin_y;
-        key(SDL_KEYUP, SDL_SCANCODE_W);
+        key(SDL_KEYUP, SDL_SCANCODE_T);
         assert(!SDL_JoystickDetachVirtual(pad_index));
         pad_index = -1;
     }
@@ -97,9 +98,16 @@ void controls_game_checks(void)
 
 int main(int argc, char **argv)
 {
+    static const uint8_t config[] = "foot.forward = key:20\n";
+    char config_path[1024];
+    int n;
     const char *args[] = {"cybermage", "--headless", "--controls", "modern",
         "--data", "../orig/retail", "--user", NULL, "--frames", "12", "--bios-seed", "44"};
     assert(argc == 2);
+    assert(!platform_directory(argv[1]));
+    n = snprintf(config_path, sizeof config_path, "%s/controls.cfg", argv[1]);
+    assert(n > 0 && (size_t)n < sizeof config_path);
+    assert(!platform_file_write(config_path, config, sizeof config - 1));
     args[7] = argv[1];
     assert(!cybermage_main((int)(sizeof args / sizeof args[0]), (char **)args));
     puts("controls modern game: actual new-game movement/look/jump/fire through SDL events PASS");

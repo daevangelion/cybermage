@@ -38,7 +38,10 @@ public final class DataActivity extends Activity {
             ready &= new File(data, name).isFile();
         }
         if (ready) {
-            startActivity(new Intent(this, GameActivity.class));
+            Intent game = new Intent(this, GameActivity.class);
+            String controls = getIntent().getStringExtra("controls");
+            if (controls != null) game.putExtra("controls", controls);
+            startActivity(game);
             finish();
             return;
         }

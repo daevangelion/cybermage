@@ -46,7 +46,7 @@ static void output_key(cm_input *out, unsigned key, int held)
 void controls_frame(cm_controls *c, controls_context context,
                      const cm_input *physical, cm_input *output)
 {
-    cm_input in = *physical;
+    const cm_input *in = physical;
     uint8_t keys[CM_KEY_COUNT], mouse[8], pad[23];
     uint64_t actions = 0, edges;
     double mx = 0, my = 0, lx = 0, ly = 0, rx = 0, ry = 0, length;
@@ -55,57 +55,56 @@ void controls_frame(cm_controls *c, controls_context context,
     int touch_move;
     memset(output, 0, sizeof *output);
     output->modern = 1;
-    output->quit = in.quit;
-    output->mouse_x = in.mouse_x;
-    output->mouse_y = in.mouse_y;
+    output->quit = in->quit;
+    output->mouse_x = in->mouse_x;
+    output->mouse_y = in->mouse_y;
     if (context >= CONTROLS_CONTEXTS) context = CONTROLS_MENU;
-    if (in.focus_lost) {
+    if (in->focus_lost) {
         memset(c->key_owner, BLOCKED, sizeof c->key_owner);
         memset(c->mouse_owner, BLOCKED, sizeof c->mouse_owner);
         memset(c->pad_owner, BLOCKED, sizeof c->pad_owner);
         memset(c->touch_owner, BLOCKED, sizeof c->touch_owner);
         memset(c->stick_owner, BLOCKED, sizeof c->stick_owner);
     }
-    if (in.pad_disconnected) {
-        memset(in.pad_axes, 0, sizeof in.pad_axes);
-        in.pad_buttons = 0;
-    }
-    if (c->context != context || in.focus_lost) {
+    if (c->context != context || in->focus_lost) {
         c->yaw_fraction = c->pitch_fraction = 0;
         c->previous_actions = 0;
     }
     c->context = context;
     for (i = 0; i < CM_KEY_COUNT; ++i) {
-        if (!in.focus_lost && in.pressed[i] && in.released[i]) c->key_owner[i] = 0;
-        keys[i] = (uint8_t)owned(&c->key_owner[i], in.held[i] || in.pressed[i], context);
+        if (!in->focus_lost && in->pressed[i] && in->released[i]) c->key_owner[i] = 0;
+        keys[i] = (uint8_t)owned(&c->key_owner[i], in->held[i] || in->pressed[i], context);
     }
     for (i = 0; i < 8; ++i) {
         unsigned bit = 1u << i;
-        if (!in.focus_lost && (in.mouse_pressed & in.mouse_released & bit)) c->mouse_owner[i] = 0;
-        mouse[i] = (uint8_t)owned(&c->mouse_owner[i], ((in.mouse_buttons | in.mouse_pressed) & bit) != 0, context);
+        if (!in->focus_lost && (in->mouse_pressed & in->mouse_released & bit)) c->mouse_owner[i] = 0;
+        mouse[i] = (uint8_t)owned(&c->mouse_owner[i], ((in->mouse_buttons | in->mouse_pressed) & bit) != 0, context);
     }
     for (i = 0; i < 23; ++i) {
-        int held = i < 21 ? ((in.pad_buttons | in.pad_pressed) & (1u << i)) != 0 : in.pad_axes[i - 17] > 8192;
-        if (!in.focus_lost && i < 21 && (in.pad_pressed & in.pad_released & (1u << i))) c->pad_owner[i] = 0;
+        int held = !in->pad_disconnected && (i < 21 ?
+            ((in->pad_buttons | in->pad_pressed) & (1u << i)) != 0 : in->pad_axes[i - 17] > 8192);
+        if (!in->focus_lost && i < 21 && (in->pad_pressed & in->pad_released & (1u << i))) c->pad_owner[i] = 0;
         pad[i] = (uint8_t)owned(&c->pad_owner[i], held, context);
     }
     for (i = 0; i < CM_CONTROL_COUNT; ++i) {
         for (j = 0; j < CONTROLS_BINDINGS; ++j)
-            if (binding_down(&c->bindings[context][i][j], keys, mouse, pad, in.mouse_wheel))
+            if (binding_down(&c->bindings[context][i][j], keys, mouse, pad, in->mouse_wheel))
                 actions |= UINT64_C(1) << i;
-        if (i < 32 && owned(&c->touch_owner[i], ((in.touch_buttons | in.touch_pressed) & (1u << i)) != 0, context))
+        if (i < 32 && owned(&c->touch_owner[i], ((in->touch_buttons | in->touch_pressed) & (1u << i)) != 0, context))
             actions |= UINT64_C(1) << i;
     }
-    stick(in.pad_axes[0], in.pad_axes[1], &lx, &ly);
-    stick(in.pad_axes[2], in.pad_axes[3], &rx, &ry);
+    if (!in->pad_disconnected) {
+        stick(in->pad_axes[0], in->pad_axes[1], &lx, &ly);
+        stick(in->pad_axes[2], in->pad_axes[3], &rx, &ry);
+    }
     if (!owned(&c->stick_owner[0], lx != 0 || ly != 0, context)) lx = ly = 0;
     if (!owned(&c->stick_owner[1], rx != 0 || ry != 0, context)) rx = ry = 0;
-    touch_move = owned(&c->stick_owner[2], in.touch_move_x || in.touch_move_y, context);
+    touch_move = owned(&c->stick_owner[2], in->touch_move_x || in->touch_move_y, context);
     edges = actions & ~c->previous_actions;
-    if (in.mouse_wheel) for (i = 0; i < CM_CONTROL_COUNT; ++i)
+    if (in->mouse_wheel) for (i = 0; i < CM_CONTROL_COUNT; ++i)
         for (j = 0; j < CONTROLS_BINDINGS; ++j)
             if (c->bindings[context][i][j].source == CONTROLS_WHEEL &&
-                binding_down(&c->bindings[context][i][j], keys, mouse, pad, in.mouse_wheel))
+                binding_down(&c->bindings[context][i][j], keys, mouse, pad, in->mouse_wheel))
                 edges |= UINT64_C(1) << i;
     c->previous_actions = actions;
 #define HELD(a) ((actions & (UINT64_C(1) << CM_CONTROL_##a)) != 0)
@@ -118,18 +117,18 @@ void controls_frame(cm_controls *c, controls_context context,
     if (gameplay) {
         if (EDGE(MAP)) c->map_visible = !c->map_visible;
         mx = (double)HELD(RIGHT) - HELD(LEFT) + lx +
-            (touch_move ? in.touch_move_x / 32768.0 : 0);
+            (touch_move ? in->touch_move_x / 32768.0 : 0);
         my = (double)HELD(FORWARD) - HELD(BACK) - ly -
-            (touch_move ? in.touch_move_y / 32768.0 : 0);
-        if (in.focus_lost) mx = my = 0;
+            (touch_move ? in->touch_move_y / 32768.0 : 0);
+        if (in->focus_lost) mx = my = 0;
         length = sqrt(mx * mx + my * my);
         if (length > 0) {
             output->move_speed = (int32_t)((length < 1 ? length : 1) * (HELD(RUN) ? 768 : 640) + 0.5);
             output->move_angle = (uint16_t)(int32_t)(atan2(-mx, my) * (32768.0 / PI));
         }
-        if (!in.focus_lost) {
-            c->yaw_fraction -= (in.mouse_dx + (double)in.touch_look_dx) * c->mouse_yaw + rx * c->stick_yaw;
-            c->pitch_fraction += (in.mouse_dy + (double)in.touch_look_dy) * c->mouse_pitch + ry * c->stick_pitch;
+        if (!in->focus_lost) {
+            c->yaw_fraction -= (in->mouse_dx + (double)in->touch_look_dx) * c->mouse_yaw + rx * c->stick_yaw;
+            c->pitch_fraction += (in->mouse_dy + (double)in->touch_look_dy) * c->mouse_pitch + ry * c->stick_pitch;
         }
         /* Bound conversion even for synthetic/platform extreme deltas. */
         if (c->yaw_fraction > 32767) c->yaw_fraction = 32767;
@@ -158,8 +157,8 @@ void controls_frame(cm_controls *c, controls_context context,
     } else {
         output_key(output, 0x48, HELD(FORWARD) || ly < -0.5);
         output_key(output, 0x50, HELD(BACK) || ly > 0.5);
-        output_key(output, 0x4b, HELD(LEFT) || lx < -0.5 || in.mouse_wheel > 0);
-        output_key(output, 0x4d, HELD(RIGHT) || lx > 0.5 || in.mouse_wheel < 0);
+        output_key(output, 0x4b, HELD(LEFT) || lx < -0.5 || in->mouse_wheel > 0);
+        output_key(output, 0x4d, HELD(RIGHT) || lx > 0.5 || in->mouse_wheel < 0);
         output_key(output, 0x1c, EDGE(USE) || EDGE(JUMP));
         output_key(output, 1, EDGE(AIM) || EDGE(CROUCH));
         for (i = CM_CONTROL_SLOT1; i <= CM_CONTROL_SLOT0; ++i)
@@ -171,9 +170,9 @@ void controls_frame(cm_controls *c, controls_context context,
         if (rx || ry) {
             c->pointer_x += (int)(rx * 12);
             c->pointer_y += (int)(ry * 12);
-        } else if (in.mouse_dx || in.mouse_dy || in.mouse_pressed) {
-            c->pointer_x = in.mouse_x;
-            c->pointer_y = in.mouse_y;
+        } else if (in->mouse_dx || in->mouse_dy || in->mouse_pressed) {
+            c->pointer_x = in->mouse_x;
+            c->pointer_y = in->mouse_y;
         }
         if (c->pointer_x < 0) c->pointer_x = 0;
         if (c->pointer_x > 639) c->pointer_x = 639;
