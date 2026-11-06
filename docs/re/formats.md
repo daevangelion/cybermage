@@ -111,6 +111,11 @@ extended E001..E07F. Bad numeric fields, NULs, out-of-order input and overflowin
 per-frame queues fail explicitly. `platform_ticks(frame)` is frame in headless
 mode and elapsed SDL time×40/1000 otherwise. SDL RWops also provides save writes
 and `.state` text dumps without adding OS calls to game code.
+`platform_user_dir()` is a separately allocated SDL preference directory,
+created once during platform initialization and released on shutdown; asset
+directories are not implicitly writable save targets. `platform_directory`
+creates explicit parent directories, while `platform_file_exists` distinguishes
+a regular file, ENOENT and other I/O failures for optional user files.
 
 Title-only snapshot c8affad, independently reviewed by UI, produced **0/307200
 mismatched RGB pixels** against Bootstrap's unhooked-original-x86 capture:

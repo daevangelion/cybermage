@@ -39,8 +39,11 @@ typedef struct {
 
 int platform_file_read(cm_file *f, const char *path);
 int platform_file_write(const char *path, const uint8_t *data, uint32_t size);
+int platform_file_exists(const char *path);
 void platform_file_release(cm_file *f);
 int platform_init(int headless);
+const char *platform_user_dir(void);
+int platform_directory(const char *path);
 void platform_shutdown(void);
 int platform_keys(const char *path);
 int platform_poll(cm_input *input, unsigned frame);

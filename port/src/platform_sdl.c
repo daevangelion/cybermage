@@ -30,6 +30,7 @@ static unsigned event_count, event_next;
 static uint8_t extended_held[CM_KEY_COUNT];
 static SDL_FingerID primary_finger;
 static int primary_down;
+static char *user_dir;
 
 int cm_fail(const char *file, uint32_t offset, const char *message)
 {
@@ -87,6 +88,17 @@ int platform_file_read(cm_file *f, const char *path)
     return 0;
 }
 
+int platform_file_exists(const char *path)
+{
+    struct stat st;
+    if (!stat(path, &st)) {
+        if (S_ISREG(st.st_mode)) return 1;
+        return cm_fail(path, 0, "expected a regular file");
+    }
+    if (errno == ENOENT) return 0;
+    return cm_fail(path, 0, strerror(errno));
+}
+
 void platform_file_release(cm_file *f)
 {
     SDL_free(f->data);
@@ -114,6 +126,8 @@ int platform_init(int headless)
     is_headless = headless;
     if (SDL_Init(SDL_INIT_TIMER | (headless ? 0 : SDL_INIT_VIDEO | SDL_INIT_AUDIO)))
         return cm_fail("SDL", 0, SDL_GetError());
+    user_dir = SDL_GetPrefPath("jshield", "cybermage");
+    if (!user_dir) return cm_fail("SDL user directory", 0, SDL_GetError());
     start = SDL_GetTicks64();
     if (headless)
         return audio_init(48000);
@@ -161,7 +175,14 @@ void platform_shutdown(void)
     surface = NULL;
     converted = NULL;
     window = NULL;
+    SDL_free(user_dir);
+    user_dir = NULL;
     SDL_Quit();
+}
+
+const char *platform_user_dir(void)
+{
+    return user_dir;
 }
 
 static SDL_Rect viewport(int w, int h)
@@ -502,7 +523,7 @@ int platform_present(const uint8_t *pixels, const uint8_t *palette)
     return 0;
 }
 
-static int make_directory(const char *path)
+int platform_directory(const char *path)
 {
     char buf[PATH_MAX_BYTES];
     size_t i, n = strlen(path);
@@ -538,7 +559,7 @@ int platform_state_dump(const char *directory, unsigned frame,
     int n;
     if (length > UINT32_MAX)
         return cm_fail(directory, 0, "state dump too large");
-    if (make_directory(directory)) return -1;
+    if (platform_directory(directory)) return -1;
     n = snprintf(path, sizeof path, "%s/frame%06u.state", directory, frame);
     if (n < 0 || (size_t)n >= sizeof path)
         return cm_fail(directory, 0, "state path too long");
@@ -553,7 +574,7 @@ int platform_dump(const char *directory, unsigned frame,
     const char header[] = "P6\n640 480\n255\n";
     unsigned i;
     int n;
-    if (make_directory(directory)) return -1;
+    if (platform_directory(directory)) return -1;
     n = snprintf(path, sizeof path, "%s/frame%06u.idx", directory, frame);
     if (n < 0 || (size_t)n >= sizeof path)
         return cm_fail(directory, 0, "frame path too long");

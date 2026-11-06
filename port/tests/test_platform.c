@@ -24,6 +24,11 @@ int main(int argc, char **argv)
     size_t used = 0;
     assert(argc == 3);
     assert(platform_init(1) == 0);
+    assert(platform_user_dir() && *platform_user_dir());
+    assert(platform_directory(argv[2]) == 0);
+    assert(platform_file_exists(argv[2]) == -1);
+    assert(snprintf(state_path, sizeof state_path, "%s/never-created-absent-test.bin", argv[2]) > 0);
+    assert(platform_file_exists(state_path) == 0);
     assert(platform_ticks(99) == 99);
     assert(platform_state_dump(argv[2], 42, "state\n", 6) == 0);
     assert(snprintf(state_path, sizeof state_path, "%s/frame000042.state", argv[2]) > 0);
@@ -31,6 +36,7 @@ int main(int argc, char **argv)
     assert(file.size == 6 && !memcmp(file.data, "state\n", 6));
     platform_file_release(&file);
     script(argv[1], valid, sizeof valid - 1);
+    assert(platform_file_exists(argv[1]) == 1);
     assert(platform_file_read(&file, argv[1]) == 0);
     assert(file.size == sizeof valid - 1 && !memcmp(file.data, valid, file.size));
     platform_file_release(&file);
