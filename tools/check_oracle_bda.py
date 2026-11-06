@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Re-run four existing original scenarios after the BIOS BDA keyboard fix."""
+import argparse
 import hashlib
 import json
 from pathlib import Path
@@ -18,8 +19,14 @@ def image_hash(path):
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--label", default="bios-bda",
+                        help="separate capture/receipt label for this hardware correction")
+    args = parser.parse_args()
+    if not args.label or args.label in (".", "..") or Path(args.label).name != args.label:
+        raise ValueError("label must be a single directory name")
     receipts = {}
-    recipes = ROOT / "captures/bios-bda"
+    recipes = ROOT / "captures" / args.label
     recipes.mkdir(parents=True, exist_ok=True)
     for case in CASES:
         before = ROOT / "captures" / case
@@ -30,7 +37,7 @@ def main():
         expected = {p.name: image_hash(p) for p in images}
         trace = before / "frames.csv"
         trace_hash = hashlib.sha256(trace.read_bytes()).hexdigest() if trace.is_file() else None
-        scenario = recipes / f"bios-bda-{case}.keys"
+        scenario = recipes / f"{args.label}-{case}.keys"
         scenario.write_text(metadata["scenario"])
         command = [str(ROOT / "tools/oracle.sh"), str(scenario)]
         if metadata.get("frame_trace"):

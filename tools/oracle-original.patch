@@ -341,10 +341,10 @@ index b28668a..4e25654 100644
                  if in_game && frame == 180 { gamepad::tap(&mut emu.m.kbd_queue,0x1C,false); }
                  advance(&mut emu);
 diff --git a/crates/game/src/machine.rs b/crates/game/src/machine.rs
-index 5118211..901cd2d 100644
+index 5118211..9d52000 100644
 --- a/crates/game/src/machine.rs
 +++ b/crates/game/src/machine.rs
-@@ -24,6 +24,11 @@ pub const SEL_DATA: u16 = 0x10;
+@@ -24,6 +24,14 @@ pub const SEL_DATA: u16 = 0x10;
  pub const SEL_PSP: u16 = 0x18;
  pub const SEL_ENV: u16 = 0x20;
  const FIRST_DYN_SEL: usize = 8;
@@ -353,10 +353,13 @@ index 5118211..901cd2d 100644
 +const BIOS_KB_START: u32 = 0x480;
 +const BIOS_KB_END: u32 = 0x482;
 +const BIOS_DATA: u32 = 0x400;
++const BIOS_KB_FLAGS: u32 = 0x417;
++const BIOS_KB_FLAGS2: u32 = 0x418;
++const BIOS_KB_FLAGS3: u32 = 0x496;
  
  // ---- HLE trap ids ----------------------------------------------------------
  /// Default handler for interrupt vector n: id = n (stub ends with IRET).
-@@ -107,7 +112,7 @@ pub struct Machine {
+@@ -107,7 +115,7 @@ pub struct Machine {
      pub pit_chan0_write_lo: Option<u8>,
      pub kbd_queue: VecDeque<u8>,
      pub port60: u8,
@@ -365,7 +368,7 @@ index 5118211..901cd2d 100644
      pub mouse: Mouse,
      pub hooks: Vec<Hook>,
      pub exit_code: Option<i32>,
-@@ -151,7 +156,7 @@ impl Machine {
+@@ -151,7 +159,7 @@ impl Machine {
              pit_chan0_write_lo: None,
              kbd_queue: VecDeque::new(),
              port60: 0,
@@ -374,7 +377,7 @@ index 5118211..901cd2d 100644
              mouse: Mouse {
                  x: 320,
                  y: 240,
-@@ -254,6 +259,11 @@ impl Machine {
+@@ -254,6 +262,14 @@ impl Machine {
          cpu.wr8(0x449, 3);
          cpu.wr16(0x44A, 80);
          cpu.wr8(0x484, 24);
@@ -382,12 +385,18 @@ index 5118211..901cd2d 100644
 +        cpu.wr16(BIOS_KB_END, 0x3E);
 +        cpu.wr16(BIOS_KB_HEAD, 0x1E);
 +        cpu.wr16(BIOS_KB_TAIL, 0x1E);
++        cpu.wr8(BIOS_KB_FLAGS, 0);
++        cpu.wr8(BIOS_KB_FLAGS2, 0);
++        cpu.wr8(BIOS_KB_FLAGS3, 0x10); // Enhanced keyboard present.
 +        self.dos_key_pending = None;
          // interrupt stubs: for each vector n, `0F FF n 00 ; IRET`
          for n in 0..256u32 {
              let a = STUB_BASE + n * 8;
-@@ -356,13 +366,55 @@ impl Machine {
+@@ -354,15 +370,98 @@ impl Machine {
+             1 => {
+                 // BIOS keyboard handler: translate the latched scancode into the BIOS buffer
                  let sc = self.port60;
++                if Self::bios_key_modifier(cpu, sc) { return; }
                  if sc & 0x80 == 0 && sc != 0xE0 {
                      let ascii = crate::input::scancode_ascii(sc);
 -                    self.kbd_bios.push_back(((sc as u16) << 8) | ascii as u16);
@@ -398,6 +407,46 @@ index 5118211..901cd2d 100644
          }
      }
  
++    fn bios_key_flag(cpu: &mut Cpu, address: u32, mask: u8, down: bool) {
++        let old = cpu.rd8(address);
++        cpu.wr8(address, if down { old | mask } else { old & !mask });
++    }
++
++    fn bios_key_modifier(cpu: &mut Cpu, scan: u8) -> bool {
++        // BDA 40:17/18/96: left/right modifiers and the E0 prefix, not characters.
++        // http://www.techhelpmanual.com/58-keyboard_shift_status_flags.html
++        let flags3 = cpu.rd8(BIOS_KB_FLAGS3);
++        if scan == 0xE0 {
++            cpu.wr8(BIOS_KB_FLAGS3, flags3 | 2);
++            return true;
++        }
++        let extended = flags3 & 2 != 0;
++        cpu.wr8(BIOS_KB_FLAGS3, flags3 & !2);
++        let down = scan & 0x80 == 0;
++        match scan & 0x7F {
++            0x2A | 0x36 => {
++                if !extended { // Ignore PrintScreen's fake E0 Shift bytes.
++                    Self::bios_key_flag(cpu, BIOS_KB_FLAGS,
++                        if scan & 0x7F == 0x2A { 2 } else { 1 }, down);
++                }
++            }
++            0x1D => {
++                Self::bios_key_flag(cpu, if extended { BIOS_KB_FLAGS3 } else { BIOS_KB_FLAGS2 },
++                    if extended { 4 } else { 1 }, down);
++                let held = cpu.rd8(BIOS_KB_FLAGS2) & 1 != 0 || cpu.rd8(BIOS_KB_FLAGS3) & 4 != 0;
++                Self::bios_key_flag(cpu, BIOS_KB_FLAGS, 4, held);
++            }
++            0x38 => {
++                Self::bios_key_flag(cpu, if extended { BIOS_KB_FLAGS3 } else { BIOS_KB_FLAGS2 },
++                    if extended { 8 } else { 2 }, down);
++                let held = cpu.rd8(BIOS_KB_FLAGS2) & 2 != 0 || cpu.rd8(BIOS_KB_FLAGS3) & 8 != 0;
++                Self::bios_key_flag(cpu, BIOS_KB_FLAGS, 8, held);
++            }
++            _ => return false,
++        }
++        true
++    }
++
 +    fn bios_key_ring(cpu: &Cpu) -> Option<(u16, u16, u16, u16)> {
 +        let start = cpu.rd16(BIOS_KB_START);
 +        let end = cpu.rd16(BIOS_KB_END);
@@ -443,7 +492,7 @@ index 5118211..901cd2d 100644
      pub fn pit_hz(&self) -> f64 {
          1193182.0 / self.pit_div as f64
      }
-@@ -701,8 +753,8 @@ impl Machine {
+@@ -701,8 +800,8 @@ impl Machine {
              }
              0x06 => {
                  if r.dx() as u8 == 0xFF {
@@ -454,7 +503,7 @@ index 5118211..901cd2d 100644
                          r.zf(false);
                      } else {
                          r.set_al(0);
-@@ -714,8 +766,8 @@ impl Machine {
+@@ -714,8 +813,8 @@ impl Machine {
                  }
              }
              0x07 | 0x08 => {
@@ -465,7 +514,7 @@ index 5118211..901cd2d 100644
              }
              0x09 => {
                  let mut a = r.ds_dx(cpu);
-@@ -730,7 +782,7 @@ impl Machine {
+@@ -730,7 +829,7 @@ impl Machine {
                  }
                  self.print(&s);
              }
@@ -474,7 +523,7 @@ index 5118211..901cd2d 100644
              0x0E => r.set_al(26),
              0x19 => r.set_al(2), // C:
              0x1A => self.dta = r.ds_dx(cpu),
-@@ -742,7 +794,7 @@ impl Machine {
+@@ -742,7 +841,7 @@ impl Machine {
              0x25 => {
                  let n = r.al();
                  self.pm_vec[n as usize] = (r.ds, r.edx);
@@ -483,7 +532,7 @@ index 5118211..901cd2d 100644
                      // On real hardware the release of the Enter key used to start the
                      // game arrives after CM_ISR9 is installed; it primes the ISR's
                      // key-state latch (otherwise the first key press is swallowed).
-@@ -813,7 +865,9 @@ impl Machine {
+@@ -813,7 +912,9 @@ impl Machine {
                  };
                  match res {
                      Some(mut f) => {
@@ -494,7 +543,7 @@ index 5118211..901cd2d 100644
                          let h = self.alloc_handle(DosFile { f, name: name.clone(), patch });
                          if self.trace_ints {
                              eprintln!("[dos] open {} -> {}", name, h);
-@@ -1360,11 +1414,11 @@ impl Machine {
+@@ -1360,17 +1461,23 @@ impl Machine {
              0x10 => self.int10(cpu, r),
              0x16 => match r.ah() {
                  0x00 | 0x10 => {
@@ -510,7 +559,20 @@ index 5118211..901cd2d 100644
                          r.set_ax(k);
                          r.zf(false);
                      }
-@@ -1640,3 +1694,62 @@ impl Machine {
+                     None => r.zf(true),
+                 },
+-                0x02 | 0x12 => r.set_al(0),
++                0x02 => r.set_al(cpu.rd8(BIOS_KB_FLAGS)),
++                0x12 => {
++                    let left = cpu.rd8(BIOS_KB_FLAGS2);
++                    let right = cpu.rd8(BIOS_KB_FLAGS3);
++                    let high = (left & 0x73) | (right & 0x0C) | ((left & 4) << 5);
++                    r.set_ax(cpu.rd8(BIOS_KB_FLAGS) as u16 | ((high as u16) << 8));
++                }
+                 _ => {}
+             },
+             0x1A => {
+@@ -1640,3 +1747,103 @@ impl Machine {
          }
      }
  }
@@ -525,6 +587,47 @@ index 5118211..901cd2d 100644
 +        if vector == 0x21 { m.int21(cpu, &mut r).unwrap(); }
 +        else { m.bios_int(cpu, vector, &mut r); }
 +        r
++    }
++
++    fn scan(m: &mut Machine, cpu: &mut Cpu, bytes: &[u8]) {
++        for &byte in bytes { m.port60 = byte; m.default_irq(cpu, 1); }
++    }
++
++    #[test]
++    fn bios_keyboard_modifiers_follow_make_break() {
++        let root = std::env::temp_dir().join(format!("cm-bios-mods-{}", std::process::id()));
++        let mut m = Machine::new(Vfs::new(root.join("iso"), root.join("run")));
++        let mut cpu = Cpu::new();
++        cpu.wr16(0x480, 0x1e); cpu.wr16(0x482, 0x3e);
++        cpu.wr16(0x41a, 0x1e); cpu.wr16(0x41c, 0x1e);
++        cpu.wr8(0x417, 0xf0); cpu.wr8(0x418, 0xf4); cpu.wr8(0x496, 0x10);
++        scan(&mut m, &mut cpu, &[0x2a, 0x2a]);
++        assert_eq!(cpu.rd8(0x417), 0xf2);
++        scan(&mut m, &mut cpu, &[0x36]);
++        assert_eq!(cpu.rd8(0x417), 0xf3);
++        scan(&mut m, &mut cpu, &[0xaa]);
++        assert_eq!(cpu.rd8(0x417), 0xf1);
++        scan(&mut m, &mut cpu, &[0xb6]);
++        assert_eq!(cpu.rd8(0x417), 0xf0);
++        scan(&mut m, &mut cpu, &[0x1d, 0xe0, 0x1d, 0x9d]);
++        assert_eq!(cpu.rd8(0x417), 0xf4); // Right Ctrl still owns aggregate Ctrl.
++        assert_eq!(cpu.rd8(0x418), 0xf4);
++        assert_eq!(cpu.rd8(0x496) & 0x0c, 4);
++        scan(&mut m, &mut cpu, &[0xe0, 0x9d]);
++        assert_eq!(cpu.rd8(0x417), 0xf0);
++        scan(&mut m, &mut cpu, &[0x38, 0xe0, 0x38, 0xb8]);
++        assert_eq!(cpu.rd8(0x417), 0xf8);
++        assert_eq!(cpu.rd8(0x418), 0xf4);
++        scan(&mut m, &mut cpu, &[0xe0, 0xb8, 0x1d, 0xe0, 0x38]);
++        assert_eq!(call(&mut m, &mut cpu, 0x16, 0x0200).al(), 0xfc);
++        assert_eq!(call(&mut m, &mut cpu, 0x16, 0x1200).ax(), 0xf9fc);
++        scan(&mut m, &mut cpu, &[0x9d, 0xe0, 0xb8, 0x2a, 0xe0, 0xaa]);
++        assert_eq!(cpu.rd8(0x417), 0xf2); // PrintScreen fake Shift break is ignored.
++        scan(&mut m, &mut cpu, &[0xaa, 0xe0, 0x2a]);
++        assert_eq!(cpu.rd8(0x417), 0xf0);
++        assert_eq!(cpu.rd8(0x418), 0xf4); // Preserve unrelated lock/system bits.
++        assert_eq!(cpu.rd16(0x41a), cpu.rd16(0x41c)); // No modifier enters BIOS queue.
++        std::fs::remove_dir_all(root).unwrap();
 +    }
 +
 +    #[test]
