@@ -528,3 +528,25 @@ melee control verifies that an ineligible run does not force standing.
 The isolated4461e87 phase gate then passes `cap`, `hit`, `vehicle` and `keypad`
 with strict compilation; `gate-4461e87.json` records the red/green receipts.
 This focused result does not certify a later full fence or92-scenario replay.
+
+## JumbleBound blocked-origin axis preservation
+
+Original `CM_HI.EXE:046C87..046CBC` overwrites each proposed axis only when
+the corresponding old quarter-cell index is0 or3. Quarters1/2 retain their
+requested displacement. Native JumbleBound instead replaced both proposals
+with `snap_axis(old)`, losing the orthogonal displacement whenever that axis
+did not itself require snapping.
+
+Audio's read-only `captures/Audio-fence-state/collision.csv` isolates the
+Training fence first cause at frame28: old `(573598,1869670)` has X quarter3
+and Y quarter2. The real backstep Y delta−1197 must remain in proposal1868473
+while X snaps to573439. Losing that delta changes the subsequent contact with
+NPC11/object1386 and therefore the following recoil movement. Animation,
+recoil inputs, mask selection and object heights match before that contact;
+no movement coefficient or collision mask was changed.
+
+The helper now takes an explicit fallback proposal. Origin-only corrections
+pass the old coordinate; JumbleBound passes its already computed proposal.
+Five bounded regressions cover both axes' quarter0/3 snaps, preservation of
+the other axis and a free-origin negative control. Named e4a6fcb fails these
+assertions before the cutover (exit134).

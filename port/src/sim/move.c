@@ -18,14 +18,14 @@ static int collision_level(sim_state *s, const world *w, int32_t z)
 }
 
 /* CM_HI.EXE 046E41..046ED6; signed division must precede SAR. */
-static int32_t snap_axis(int32_t value)
+static int32_t snap_axis(int32_t value, int32_t proposed)
 {
     int32_t q = value / SIM_QUARTER_TILE;
     int32_t tile = (q >> 2) * SIM_TILE_UNIT;
     int32_t remainder = q - (q >> 2) * 4;
     if (remainder == 0) return tile + SIM_QUARTER_TILE;
     if (remainder == 3) return tile + 0xbfff;
-    return value;
+    return proposed;
 }
 
 static void body_height(sim_state *s, const world_object *o)
@@ -56,8 +56,8 @@ int sim_move_person(sim_state *s, world *w, unsigned object,
     s->collision_mode = 1;
     if (collision_level(s, w, o->floor_z)) return -1;
     if (sim_path_check(s, w, o->x, o->y)) {
-        o->x = snap_axis(o->x);
-        o->y = snap_axis(o->y);
+        o->x = snap_axis(o->x, o->x);
+        o->y = snap_axis(o->y, o->y);
     }
     if (p->unk_007C && yaw > -32 && yaw < 32) {
         unsigned riding = (unsigned)p->unk_007C;
@@ -171,8 +171,8 @@ int sim_move_person(sim_state *s, world *w, unsigned object,
             if (before_x != x || before_y != y) {
                 x = before_x;
                 y = before_y;
-                o->x = snap_axis(o->x);
-                o->y = snap_axis(o->y);
+                o->x = snap_axis(o->x, o->x);
+                o->y = snap_axis(o->y, o->y);
                 if (sim_new_pc_bound(s, w, object, &x, &y)) return -1;
             }
             o->x = x; o->y = y;
@@ -228,7 +228,7 @@ int sim_move_monster(sim_state *s, world *w, unsigned object, int32_t speed, int
     else if (!airborne) s->no_openings = 0;
     s->collision_mode = p->unk_00A4 != 0;
     if (collision_level(s, w, o->floor_z)) return -1;
-    if (sim_path_check(s, w, o->x, o->y)) { o->x = snap_axis(o->x); o->y = snap_axis(o->y); }
+    if (sim_path_check(s, w, o->x, o->y)) { o->x = snap_axis(o->x, o->x); o->y = snap_axis(o->y, o->y); }
     if (p->unk_007C) {
         unsigned ride = (unsigned)p->unk_007C;
         if (ride >= w->object_count) return cm_fail("MoveMonster", ride, "invalid riding object");
@@ -329,8 +329,10 @@ int sim_jumble_bound(sim_state *s, world *w, unsigned object,
     x = o->x + dx;
     y = o->y + dy;
     if (sim_path_check(s, w, o->x, o->y)) {
-        x = snap_axis(o->x);
-        y = snap_axis(o->y);
+        /* JumbleBound046C87..046CBC leaves the proposed delta intact
+         * on origin quarters1/2; only quarter0/3 replaces that axis. */
+        x = snap_axis(o->x, x);
+        y = snap_axis(o->y, y);
     }
     if (sim_new_pc_bound(s, w, object, &x, &y) || sim_coll_flat(w, object, x, y)) return -1;
     if (floor == o->floor_z) { o->x = x; o->y = y; }
