@@ -69,7 +69,7 @@ def draw(archive, scene, output, player=None, persons=()):
         y, x = divmod(tile, SIDE)
         px = (level % 2) * PANEL + MARGIN + x * SCALE
         py = (level // 2) * PANEL + MARGIN + y * SCALE
-        ink.text((px, py), str(index), fill="#b00000")
+        ink.text((px, py), str(index - 1), fill="#b00000")
     # LoadPERSONS 022294: 351-byte records; active type+345, XY+319/+323,
     # floor_z+347. Runtime person indices omit nonpositive placement types.
     placements = section(3)
