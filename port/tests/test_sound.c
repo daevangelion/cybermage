@@ -16,6 +16,12 @@ static void controls(void)
     unsigned pan, i;
     int volume, slot;
     w.object_count = 2; w.player_object = 0; w.objects[1].x = 65536;
+    assert(snd_check_song() == 1);
+    assert(snd_song(31,0) == 0 && snd_check_song() == 0);
+    snd_song_end(); assert(snd_check_song() == 1);
+    snd_volumes(32767,32767,0); assert(snd_check_song() == 0);
+    snd_volumes(32767,32767,127);
+    snd_enable(0,0); assert(snd_check_song() == 0); snd_enable(1,1);
     assert(snd_scene(&w) == 0);
     definition[0x7d] = 34;
     w.person_count = 1; w.persons[0].type = 0;

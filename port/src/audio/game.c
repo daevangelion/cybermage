@@ -350,6 +350,24 @@ int snd_song_default(int loop)
 {
     return snd_song(playlists[playlist][music_index], loop);
 }
+/* CM_HI.EXE CheckSONG0284C4. Death waits on this, not a sample slot. */
+int snd_check_song(void)
+{
+    int done = 0;
+    platform_audio_lock();
+    if (opened && enabled) {
+        if (audio_song_error()) done = -1;
+        else if (!midi_volume) { audio_song_stop(); music_loaded = 0; }
+        else if (!music_loaded) done = 1;
+        else if (audio_song_done()) {
+            audio_song_stop();
+            if (!song_loop) music_loaded = 0;
+            done = 1;
+        }
+    }
+    platform_audio_unlock();
+    return done;
+}
 void snd_song_end(void)
 {
     platform_audio_lock(); audio_song_stop(); music_loaded = 0; platform_audio_unlock();

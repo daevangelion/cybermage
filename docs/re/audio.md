@@ -243,6 +243,10 @@ snd_song(number,loop) implements the explicit script replacement. snd_tick
 performs normal completion/playlist advance and repeats a scripted loop.
 snd_song_default(loop) selects the current playlist entry for event75's zero
 song-number fallback without advancing that playlist.
+snd_check_song() is the internally locked CheckSONG0x284C4 wrapper used by
+PCDeath0x1554C:1 means finished/unloaded,0 means playing/no-sound/muted,
+and-1 reports a deferred decoder fault on the main thread. A completed loop
+keeps its loaded-song flag for replay; this is unrelated to the pc_sound slot.
 Initialization0x10F59 sets index0/current=-1; the port omits the invalid -1
 resource request and reaches the same first valid playlist request18 on its
 first tick. Muting MIDI stops the song without advancing while muted.
