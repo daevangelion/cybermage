@@ -27,6 +27,30 @@ render/audio users release their references. No core allocations or OS calls.
 - AI owns runtime combat/dice initialization and22 transient missile/soul slots.
   `world_finalize_scene` follows it, reserving the original final3 view slots.
   Player motion/camera gameplay updates belong to Sim; events/switches to Events.
+- `world_set_person` is the shared physical/animation implementation for
+  SetPERSON0x21B9C and initial LoadPERSONS, including state99. AI performs the
+  separate combat/difficulty/dice work. `world_prop_frame` resolves icon resources
+  from real PROP definitions, never by probing a bitmap representation.
+
+### Texture cache rules
+
+LoadPROPDATA0x25731–25877 adds16 aliased slots for resources12/89/91 (32
+directions),8 for42/43. These duplicate pointers and metadata, not pixel bytes.
+LoadANIMDATA0x240A0–24125 compacts the final eight-direction image to one when
+monster flag2 is set; flag4 keeps directions0/1/7 of the penultimate image.
+The GSX image table retains direction counts8/3/1.
+
+LoadGSX reuses texture indices for a shared ANIMOBJ, but allocates aliases when
+the ANMH pixels are reused with another ANIMOBJ. Original0x23BEA/23BFC copies
+the old depth/height offsets in this path, while recomputing half-width/base
+using the new sequence's scale. High-resolution half-dimension scale truncates
+`percent*2/3` before multiplying by512/100; local offsets do not use that reduction.
+
+LoadFXONEWS0x27BE8 takes `(image_resource, FXO_placement, object)`. It chooses
+the placement definition's image slot, not a panel override on that object.
+The native implementation changes borrowed spans for the original pixel-buffer
+owner and every alias, incrementing per-texture revision; original resource bytes
+remain immutable. Renderer refreshes changed revisions as well as appended slots.
 
 ## Spatial maps
 
@@ -53,7 +77,13 @@ independently checked. Renderer owns sorted drawing lists, not this spatial pool
   modernization of a fixed-point implementation.
 - RANDOM0x68AD0/RND0x6731C retain signed16 intermediate wraps; zero-bound RND
   does not advance. Seed0x68ABF replaces only middle word with low BIOS tick;
-  initial EXE words are3000,1,29999. Fresh scene startup supplies BIOS seed0.
+  initial EXE words are3000,1,29999. `world_rng_init` accepts the actual BIOS seed;
+  unseeded loader callers retain the EXE's initial middle1, not a guessed BIOS0.
+  The original seed observer subsequently measured BIOS word44 at RANDOM_SEED
+  entry, instruction145715835, emulated time2.4285943666692638 in the combat
+  scenario (`captures/combat-actors/seed.csv`). This is replay metadata, not a
+  compiled global seed. Optional RNG callbacks expose call sites/state changes
+  without OS calls in core; caller-owned RNG storage must be zero-initialized.
 - RaySight0x5D6D4, TileSight0x5D5A8, RayMissile0x5E5C0 use quadrant-specific
   grid crossings. Downward TileSight rechecks starting floor, not intervening
   floors. Sight allows flag40000000 without10000000; MissileSight0x5E530
@@ -87,3 +117,9 @@ passed; all retail scenes1..11 loaded. Placement object/person counts:
 calls the real x86 leaves. All6144 trig values and106 atan64k/Distance vectors
 matched. It never uses the native reference hooks. Scene1 state comparison and
 expanded ray vectors are separate checks; initial loader success is not parity.
+
+The expanded original-x86 check also matched60 RANDOM values/states (including
+negative16-bit inputs),16 FixedRotate vectors and40 sight/missile vectors spanning
+all quadrants/axes and wall-flag classes. Native tests cover downward-floor quirks,
+zero-bound RND, BIOS middle-word-only seeding, SetPERSON state99, directional
+texture aliases and FXONEWS length validation.

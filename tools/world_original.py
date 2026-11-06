@@ -63,7 +63,61 @@ def main():
         got = tuple(map(int, subprocess.check_output([str(native), "math", *map(str,vector)], text=True).split()))
         if got != (angle, distance):
             raise ValueError(f"math {vector}: native={got} original={(angle,distance)}")
-    print(f"original x86: trig 6144 values and {len(vectors)} atan64k/Distance vectors matched")
+    def wr32(addr, value):
+        original.cpu.mem_write(addr, struct.pack("<I", value & 0xFFFFFFFF))
+    for seed in [(3000,0,29999),(1,2,3),(0xFFFF,0x8000,0x7FFF)]:
+        original.cpu.mem_write(0x9747F,struct.pack("<3H",*seed))
+        native_rows = subprocess.check_output([str(native),"rng",*map(str,seed)],text=True).splitlines()
+        for row in native_rows:
+            result = original.call(0x68AD0,[])
+            wanted = (result,*struct.unpack("<3H",original.cpu.mem_read(0x9747F,6)))
+            if tuple(map(int,row.split())) != wanted:
+                raise ValueError(f"RANDOM mismatch: native={row} original={wanted}")
+    original.cpu.mem_write(0x9747F,struct.pack("<3H",1,2,3))
+    if original.call(0x6731C,[0]) != 0 or bytes(original.cpu.mem_read(0x9747F,6)) != struct.pack("<3H",1,2,3):
+        raise ValueError("original zero-bound RND advanced state")
+    wr32(0x46C,0xABCD1234)
+    original.call(0x68ABF,[])
+    if struct.unpack("<3H",original.cpu.mem_read(0x9747F,6)) != (1,0x1234,3):
+        raise ValueError("original BIOS seed overwrote outer RNG words")
+    for angle in range(0,65536,4096):
+        vector=(0x53001,0x79FFF,0x68000,0x68000,angle)
+        wr32(0xA00000,vector[0]); wr32(0xA00004,vector[1])
+        original.call(0x596E4,[THIS,0xA00000,0xA00004,*vector[2:]])
+        wanted=struct.unpack("<2i",original.cpu.mem_read(0xA00000,8))
+        got=tuple(map(int,subprocess.check_output([str(native),"rotate",*map(str,vector)],text=True).split()))
+        if got != wanted:
+            raise ValueError(f"FixedRotate {vector}: native={got} original={wanted}")
+    walls, ceilings, floors = 0x600000, 0x610000, 0x620000
+    for field, value in [(0xC2074,walls),(0xC3088,ceilings),(0xC408C,floors),
+                         (0x5E7A4,3),(0x61418+4,0x58000),(0x64080+4,0x58000)]:
+        wr32(THIS + field,value)
+    directions = [(0,0x78000,0x58000),(0x2000,0x78000,0x78000),
+                  (0x4000,0x58000,0x78000),(0x6000,0x38000,0x78000),
+                  (0x8000,0x38000,0x58000),(0xA000,0x38000,0x38000),
+                  (0xC000,0x58000,0x38000),(0xE000,0x78000,0x38000)]
+    ray_count = 0
+    for angle, tx, ty in directions:
+        for flags in [0xFFFFFFFF,0,0x40000000,0x50000000,0x40100000]:
+            for level in range(4):
+                wr32(walls + (level * 1024 + 5 * 32 + 5) * 4,
+                     0 if flags == 0xFFFFFFFF else 0x01010101)
+            wr32(THIS+0x5DFA4+4,flags)
+            wr32(THIS+0x61418+8,tx); wr32(THIS+0x64080+8,ty)
+            z, tz = 0x8000, 0x8000
+            distance = original.call(0x5F9A0,[THIS,0x58000,0x58000,tx,ty])
+            sight = original.call(0x5D6D4,[THIS,1,2,distance,z,tz,angle])
+            pointers = [0xA00000+i*4 for i in range(4)]
+            missile = original.call(0x5E5C0,[THIS,0x58000,0x58000,z,tx,ty,tz,angle,distance,*pointers])
+            signed = lambda v: v if v < 0x80000000 else v - 0x100000000
+            wanted = (signed(sight),signed(missile),
+                      *struct.unpack("<4i",original.cpu.mem_read(pointers[0],16)))
+            got = tuple(map(int, subprocess.check_output(
+                [str(native),"sight",*map(str,(angle,tx,ty,z,tz,flags))],text=True).split()))
+            if got != wanted:
+                raise ValueError(f"ray angle={angle:#x} flags={flags:#x}: native={got} original={wanted}")
+            ray_count += 1
+    print(f"original x86: trig 6144 values, {len(vectors)} atan64k/Distance, 60 RANDOM, 16 FixedRotate and {ray_count} sight/missile vectors matched")
 
 
 if __name__ == "__main__":

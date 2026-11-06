@@ -79,10 +79,12 @@ typedef struct {
 enum { WORLD_TEX_PANEL, WORLD_TEX_FXO, WORLD_TEX_PROP, WORLD_TEX_ANIM };
 typedef struct {
     unsigned kind, resource, frame;
+    unsigned pixel_owner; /* aliases share original mutable-buffer identity */
     int32_t width, height; /* original TEX_W/TEX_H half dimensions */
     int32_t half_w, base, depth, frame_height;
     uint8_t rotations;
     uint8_t packed, rotate;
+    uint32_t revision; /* source span changed; renderers refresh cached pixels */
     world_span pixels;
 } world_texture;
 typedef struct {
@@ -95,16 +97,30 @@ typedef struct {
     uint8_t enabled;
 } world_aperture;
 typedef struct { int32_t sin[CM_TRIG_SIZE], cos[CM_TRIG_SIZE], tan[CM_TRIG_SIZE]; } world_trig;
-typedef struct { uint16_t word[3]; } world_rng;
+typedef void (*world_rng_observer)(void *context, const char *file, unsigned line,
+                                   int bounded, int32_t bound, int32_t value,
+                                   const uint16_t before[3], const uint16_t after[3]);
+typedef struct {
+    uint16_t word[3];
+    world_rng_observer observe;
+    void *observe_context;
+} world_rng;
+typedef struct {
+    int32_t bias, shift, scale; /* active Xox+BDECC/BDED0/BDED4 */
+    uint32_t revision;         /* native read-only renderer notification */
+} world_shade;
 
 typedef struct world {
     unsigned scene, object_count, person_count, panel_count;
     unsigned player_object, player_person;
     int32_t unk_5E7A8;
     int32_t top_level, sky_type;
+    int32_t unk_130D20;
+    unsigned unk_144AA4, unk_144A8C, unk_144A80;
     uint16_t light_type[32];
     int16_t light_param[32];
     int32_t curve_base[16], curve_shift[16], curve_scale[16];
+    world_shade shade_override;
     int backdrop_resource;
     uint8_t sky_fill, sky_fog, fog_on;
     world_camera camera;
@@ -119,9 +135,11 @@ typedef struct world {
     world_aperture apertures[96];
     world_panel panels[CM_PANEL_MAX];
     unsigned texture_count, prop_count, fxo_count;
+    unsigned loaded_monster_count;
+    int16_t loaded_monster_types[109];
     world_texture textures[CM_PANEL_MAX];
     world_gsx gsx[55]; /* SCENE entry99: 55 records of 58 bytes. */
-    uint16_t fxo_objects[2048], prop_objects[2048];
+    uint16_t fxo_objects[2048], fxo_textures[2048], prop_objects[2048];
     int16_t fxo_types[2048], prop_types[2048];
     world_trig trig;
     world_rng rng;
@@ -139,9 +157,15 @@ void world_close(world *w);
 int world_load_map(world *w, const uint8_t *data, uint32_t size);
 int world_anim_frame(world *w, unsigned object, unsigned gsx, unsigned image);
 int world_load_gsx(world *w, unsigned id);
+int world_set_person(world *w, unsigned person, unsigned type, unsigned state,
+                      int32_t x, int32_t y, int32_t z, int32_t floor_z,
+                      uint16_t heading);
+int world_prop_frame(world *w, unsigned resource, unsigned image,
+                      const world_texture **out);
+int world_load_fxo_news(world *w, unsigned resource, unsigned placement, unsigned object);
 int world_fxo_object(const world *w, unsigned index);
 int world_finalize_scene(world *w);
-void world_make_omap(world *w);
+int world_make_omap(world *w);
 void world_omap_insert(world *w, unsigned object);
 void world_omap_delete(world *w, unsigned object);
 void world_fxo_map_insert(world *w, unsigned object);
@@ -157,8 +181,11 @@ int32_t cm_distance(int32_t x1, int32_t y1, int32_t x2, int32_t y2);
 void cm_fixed_rotate(const world_trig *t, int32_t *x, int32_t *y,
                      int32_t cx, int32_t cy, uint16_t angle);
 void world_rng_seed(world_rng *r, uint16_t bios_tick);
-int32_t world_random(world_rng *r);
-int32_t world_rnd(world_rng *r, int32_t bound);
+void world_rng_init(world_rng *r, uint16_t bios_tick);
+int32_t world_random_at(world_rng *r, const char *file, unsigned line);
+int32_t world_rnd_at(world_rng *r, int32_t bound, const char *file, unsigned line);
+#define world_random(r) world_random_at((r), __FILE__, __LINE__)
+#define world_rnd(r, bound) world_rnd_at((r), (bound), __FILE__, __LINE__)
 int world_ray_sight(world *w, unsigned source, unsigned target, int32_t distance,
                     int32_t source_z, int32_t target_z, uint16_t angle);
 int world_tile_sight(const world *w, unsigned tile, int from_level, int to_level,

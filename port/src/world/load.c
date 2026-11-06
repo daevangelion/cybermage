@@ -49,7 +49,7 @@ static int load_lights(world *w)
             if (i >= 16) return cm_fail("SCENE.RSC/LIGHTS", i, "light curve index outside table");
             w->curve_base[i] = (int32_t)(v >> 8);
             w->curve_shift[i] = (int32_t)((v % 256) / 8);
-            w->curve_scale[i] = (int32_t)(1u << (v % 8));
+            w->curve_scale[i] = (int32_t)(v % 8); /* original 0x2791F IDIV8 remainder */
         }
     }
     return 0;
@@ -68,6 +68,8 @@ static void environment(world *w)
     w->sky_fill = w->scene == 3 || w->scene == 11 ? 19 : 0;
     w->fog_on = w->scene == 3;
     w->curve_base[0] = 6; w->curve_shift[0] = 14; w->curve_scale[0] = 1;
+    w->shade_override.bias = 6; w->shade_override.shift = 14;
+    w->shade_override.scale = 1; w->shade_override.revision = 1;
     for (i = 0; i < CM_OBJECT_MAX; ++i) w->objects[i].unk_74AF0 = 0x1E00;
 }
 
@@ -84,7 +86,7 @@ int world_load_scene(world *w, const char *dir, unsigned scene)
         return cm_fail("world", scene, "close loaded world before reusing it");
     rng = w->rng;
     if (!rng.word[0] && !rng.word[1] && !rng.word[2]) {
-        rng.word[0] = 3000; rng.word[1] = 0; rng.word[2] = 29999;
+        world_rng_init(&rng, 1); /* EXE initial state; caller supplies BIOS seed. */
     }
     memset(w, 0, sizeof(*w));
     w->rng = rng; w->scene = scene; w->object_count = 1;
@@ -108,7 +110,9 @@ int world_load_scene(world *w, const char *dir, unsigned scene)
     if (world_load_map(w, w->scene_sections[0].data, w->scene_sections[0].size) ||
         load_passages(w) || load_lights(w) || world_load_panels(w) ||
         world_load_placements(w) || world_load_persons(w)) goto fail;
-    world_make_omap(w);
+    /* LoadScene 0x11F4E..0x11F7B overrides the player's animation origin. */
+    w->objects[w->player_object].z = w->unk_5E7A8 ? 0x3800 : 0x5D55;
+    if (world_make_omap(w)) goto fail;
     return 0;
 fail:
     world_close(w);
@@ -121,7 +125,8 @@ int world_finalize_scene(world *w)
 {
     if (w->object_count > 2378 - 3)
         return cm_fail("world", w->object_count, "temporary object slots exhausted");
-    w->object_count += 3;
-    world_make_omap(w);
-    return 0;
+    w->unk_144AA4 = w->object_count++;
+    w->unk_144A8C = w->object_count++;
+    w->unk_144A80 = w->object_count++;
+    return world_make_omap(w);
 }

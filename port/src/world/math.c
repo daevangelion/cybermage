@@ -63,8 +63,12 @@ void cm_fixed_rotate(const world_trig *t, int32_t *x, int32_t *y,
 /* RANDOM_SEED 0x68ABF only replaces the middle word with BIOS tick low16.
  * Fresh EXE words are {3000,1,29999} at0x9747F,0x97481,0x97483. */
 void world_rng_seed(world_rng *r, uint16_t tick) { r->word[1] = tick; }
+void world_rng_init(world_rng *r, uint16_t tick)
+{
+    r->word[0] = 3000; r->word[1] = tick; r->word[2] = 29999;
+}
 
-int32_t world_random(world_rng *r)
+static int32_t random_step(world_rng *r)
 {
     static const int divisor[3] = {177,176,178};
     static const int multiplier[3] = {171,172,170};
@@ -82,7 +86,27 @@ int32_t world_random(world_rng *r)
     return (int32_t)(value & 0x7FFFu);
 }
 
-int32_t world_rnd(world_rng *r, int32_t bound)
+static int32_t observed_random(world_rng *r, int32_t bound, const char *file,
+                               unsigned line, int bounded)
 {
-    return bound ? world_random(r) % bound : 0;
+    uint16_t before[3];
+    int32_t value;
+    unsigned i;
+    if (r->observe)
+        for (i = 0; i < 3; ++i) before[i] = r->word[i];
+    value = bounded ? (bound ? random_step(r) % bound : 0) : random_step(r);
+    if (r->observe)
+        r->observe(r->observe_context, file, line, bounded, bound,
+                   value, before, r->word);
+    return value;
+}
+
+int32_t world_random_at(world_rng *r, const char *file, unsigned line)
+{
+    return observed_random(r, 0, file, line, 0);
+}
+
+int32_t world_rnd_at(world_rng *r, int32_t bound, const char *file, unsigned line)
+{
+    return observed_random(r, bound, file, line, 1);
 }

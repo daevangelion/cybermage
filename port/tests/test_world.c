@@ -51,8 +51,98 @@ int main(int argc, char **argv)
             if (world_load_scene(&w, argv[2], scene)) return 1;
             printf("scene %u objects=%u persons=%u panels=%u\n", scene,
                    w.object_count, w.person_count, w.panel_count);
+            if (scene == 1) {
+                const world_texture *icon;
+                unsigned object = w.player_object, type = (unsigned)w.persons[0].type;
+                assert(world_set_person(&w,0,type,99,0x50000,0x60000,0,0x20000,0x1234) == 0);
+                assert(w.persons[0].state == 2 && w.persons[0].unk_001E == 10);
+                assert(w.persons[0].unk_00BC == 1 && w.objects[object].heading == 0x1234);
+                assert(w.objects[object].person == 0 && w.objects[object].active == 1);
+                assert(world_prop_frame(&w,12,31,&icon) == 0);
+                assert(icon->resource == 12 && icon->frame == 15 && icon->rotations == 32);
+                {
+                    unsigned texture = w.fxo_textures[0], revision = w.textures[texture].revision;
+                    assert(world_load_fxo_news(&w,12,0,w.fxo_objects[0]) == 0);
+                    assert(w.objects[w.fxo_objects[0]].texture == texture);
+                    assert(w.textures[texture].revision == revision + 1);
+                    assert(world_load_fxo_news(&w,3,0,w.fxo_objects[0]) == -1);
+                }
+            }
             world_close(&w);
         }
+        return 0;
+    }
+    if (argc == 5 && !strcmp(argv[1], "rng")) {
+        unsigned i;
+        world_rng r = {0};
+        r.word[0] = (uint16_t)strtoul(argv[2], NULL, 0);
+        r.word[1] = (uint16_t)strtoul(argv[3], NULL, 0);
+        r.word[2] = (uint16_t)strtoul(argv[4], NULL, 0);
+        for (i = 0; i < 20; ++i) {
+            int32_t value = world_random(&r);
+            printf("%" PRId32 " %u %u %u\n", value,
+                   (unsigned)r.word[0], (unsigned)r.word[1], (unsigned)r.word[2]);
+        }
+        return 0;
+    }
+    if (argc == 7 && !strcmp(argv[1], "rotate")) {
+        int32_t x = (int32_t)strtol(argv[2], NULL, 0);
+        int32_t y = (int32_t)strtol(argv[3], NULL, 0);
+        int32_t cx = (int32_t)strtol(argv[4], NULL, 0);
+        int32_t cy = (int32_t)strtol(argv[5], NULL, 0);
+        uint16_t angle = (uint16_t)strtoul(argv[6], NULL, 0);
+        world_trig_init(&w.trig);
+        cm_fixed_rotate(&w.trig,&x,&y,cx,cy,angle);
+        printf("%" PRId32 " %" PRId32 "\n",x,y);
+        return 0;
+    }
+    if (argc == 4 && !strcmp(argv[1], "state")) {
+        unsigned level, tile, i;
+        if (world_load_scene(&w, argv[2], (unsigned)strtoul(argv[3], NULL, 0))) return 1;
+        printf("counts %u %u\n",w.object_count,w.person_count);
+        printf("texture_count %u\n",w.texture_count);
+        for (i = 0; i < 256; ++i)
+            printf("map_id %u %" PRIu32 " %u\n",i,w.map_id_flags[i],(unsigned)w.map_id_texture[i]);
+        for (i = 0; i < 32; ++i)
+            printf("light %u %d %u\n",i,(int)w.light_param[i],(unsigned)w.light_type[i]);
+        for (i = 0; i < 16; ++i)
+            printf("curve %u %" PRId32 " %" PRId32 " %" PRId32 "\n",
+                   i,w.curve_base[i],w.curve_shift[i],w.curve_scale[i]);
+        for (i = 0; i < w.texture_count; ++i) {
+            const world_texture *t = &w.textures[i];
+            printf("texture %u %" PRId32 " %" PRId32 " %" PRId32 " %" PRId32
+                   " %" PRId32 " %" PRId32 "\n",i,t->width,t->height,
+                   t->half_w,t->base,t->depth,t->frame_height);
+        }
+        for (i = 0; i < CM_CHAIN_NODES; ++i) {
+            printf("omap %u %u %u\n",i,(unsigned)w.omap.nodes[i].next,(unsigned)w.omap.nodes[i].object);
+            printf("flatmap %u %u %u\n",i,(unsigned)w.flatmap.nodes[i].next,(unsigned)w.flatmap.nodes[i].object);
+        }
+        for (level = 0; level < 4; ++level)
+            for (tile = 0; tile < 1024; ++tile) {
+                const world_cell *c = &w.cells[level][tile];
+                printf("map %u %" PRIu32 " %u %u %u %u %u %u %u\n",
+                       level*1024+tile,c->wall_sides,(unsigned)c->floor,
+                       (unsigned)c->ceiling,(unsigned)c->unk_C5090,
+                       (unsigned)c->region,(unsigned)c->light,
+                       (unsigned)w.inertia_mask[level][tile],(unsigned)w.path_mask[level][tile]);
+            }
+        for (i = 0; i < w.object_count; ++i) {
+            const world_object *o = &w.objects[i];
+            printf("object %u %" PRIu32 " %" PRId32 " %" PRId32 " %" PRId32
+                   " %" PRId32 " %" PRId32 " %" PRId32 " %" PRId32 " %" PRId32
+                   " %u %u %d %u %u %d\n",i,o->flags,o->x,o->y,o->z,o->floor_z,
+                   o->radius,o->height,o->unk_6F220,o->unk_71E88,
+                   (unsigned)o->heading,(unsigned)o->texture,(int)o->person,
+                   (unsigned)o->active,(unsigned)o->targetable,(int)o->rotations);
+        }
+        for (i = 0; i < w.person_count; ++i) {
+            const world_person *p = &w.persons[i];
+            printf("person %u %d %d %u %d %d %u %u %d\n",i,(int)p->object,
+                   (int)p->type,p->monster_index,(int)p->state,(int)p->status,
+                   (unsigned)p->unk_00BC,(unsigned)p->unk_00BD,(int)p->unk_00BE);
+        }
+        world_close(&w);
         return 0;
     }
     if (argc == 2 && !strcmp(argv[1], "trig")) {
@@ -90,6 +180,20 @@ int main(int argc, char **argv)
     }
     assert(world_load_map(&w, NULL, 0) == -1);
     chains();
+    w.object_count = 2;
+    w.objects[1].active = 1;
+    w.objects[1].y = -1;
+    assert(world_make_omap(&w) == -1);
+    w.cells[1][7].floor = 1; /* original downward test skips intervening floors */
+    assert(world_tile_sight(&w,7,2,0,0,8,0) == 0);
+    w.cells[2][7].floor = 1;
+    assert(world_tile_sight(&w,7,2,0,0,8,0) == -1);
+    {
+        world_rng r = {.word = {1,2,3}};
+        assert(world_rnd(&r,0) == 0 && r.word[0] == 1 && r.word[1] == 2 && r.word[2] == 3);
+        world_rng_seed(&r,0x1234);
+        assert(r.word[0] == 1 && r.word[1] == 0x1234 && r.word[2] == 3);
+    }
     puts("world map rejection and spatial-chain vectors passed");
     return 0;
 }

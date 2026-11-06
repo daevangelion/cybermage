@@ -28,5 +28,6 @@ int world_load_map(world *w, const uint8_t *p, uint32_t size)
             w->path_mask[level][tile] = cm_u16(p + 46598 + cell * 2);
         }
     w->top_level = CM_MAP_LEVELS - 1;
+    w->unk_130D20 = w->top_level * 65536 + 65535;
     return 0;
 }
