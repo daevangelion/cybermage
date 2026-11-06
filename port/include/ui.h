@@ -12,6 +12,7 @@
 #define UI_CONSOLE_BITMAPS 13
 #define UI_GLOVE_COUNT 16
 #define UI_HAND_FRAMES 18
+#define UI_SHOP_ITEMS 40
 
 typedef enum {
     UI_GAME, UI_TITLE, UI_OPTIONS, UI_PAUSE, UI_SAVE, UI_LOAD, UI_HELP,
@@ -64,6 +65,14 @@ typedef struct {
     uint8_t speechLog[63];
     uint8_t recorder_map[63];
     unsigned recorder_count;
+    const uint8_t *shop_background[4];
+    ui_bitmap shop_gfx[4][20];
+    unsigned shop_gfx_count[4];
+    int32_t shop_stock[3][16];
+    int32_t shop_kind, shop_switch, shop_arg, shop_screen;
+    unsigned shop_selected, shop_first, shop_count;
+    int shop_selling;
+    int32_t shop_items[UI_SHOP_ITEMS], shop_slots[UI_SHOP_ITEMS];
 } cm_ui;
 
 typedef struct {
@@ -90,6 +99,10 @@ int ui_draw_scon_bitmap(const cm_ui *ui, uint8_t *dst, int x, int y,
 int ui_draw_prop_icon(world *w, uint8_t *dst, int x, int y,
                        unsigned resource);
 struct events_state;
+int ui_shop_step(cm_ui *ui, struct events_state *events, world *w,
+                   const cm_input *input, uint32_t ticks);
+int ui_shop_draw(cm_ui *ui, const struct events_state *events, world *w,
+                   uint8_t *dst);
 int ui_draw_selector(const cm_ui *ui, world *w,
                       const struct events_state *events, uint8_t *dst);
 int ui_render_bells_and_whistles(cm_ui *ui, uint8_t *pixels,
@@ -100,7 +113,7 @@ typedef struct {
     int half_width, half_height;
     int view_x, view_y, view_width, view_height;
     int x_off, y_off, x_pos_off, aim_x, aim_y;
-    int sword;
+    int sword, tank;
 } ui_hand;
 typedef struct { int x, y, width, height; } ui_view;
 int ui_text_message(cm_ui *ui, const world *w, uint8_t *dst,
@@ -112,6 +125,9 @@ int ui_draw_xscale_aim(uint8_t *dst, const ui_hand *hand,
 int ui_draw_player_hand(const cm_ui *ui, world *w, uint8_t *dst,
                         int mode, int weapon, unsigned frame,
                         ui_view view);
+int ui_draw_menu_cursor(const cm_ui *ui, world *w, uint8_t *dst,
+                         int aim_x, int aim_y, unsigned frame);
+unsigned ui_cursor_pose(int aim_x, int aim_y, int pressed);
 int ui_pc_death(uint8_t *dst, const uint8_t *background,
                 unsigned columns[CM_WIDTH], world_rng *rng);
 int ui_game_names_read(cm_ui *ui, const uint8_t *data, uint32_t size);

@@ -271,7 +271,7 @@ int ui_load_game(ui_save_state *save, world *w, const uint8_t *data,
     memcpy(w->light_param, save->light_param, sizeof save->light_param);
     memcpy(w->light_type, save->light_type, sizeof save->light_type);
     for (i = 0; i < 96; ++i) w->apertures[i].enabled = save->aperture_enabled[i];
-    world_make_omap(w);
+    if (world_make_omap(w)) return -1;
     save->loaded = 1;
     return io.at == size ? 0 : cm_fail("SAVE*.DAT", io.at, "save layout size disagreement");
 }

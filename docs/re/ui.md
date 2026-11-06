@@ -102,9 +102,14 @@ normalization from original SaveGame/LoadGame remains an integration concern.
 - Hand PRP packages:1442-byte header,120 interleaved u32 dimension pairs,
   120 u32 frame offsets. LoadPROPDOSMEM0x259EB/0x259FD puts disk width into
   TEX_H and disk height into TEX_W. PRP48 is the power glove. InitPC0x1077A
-  initializes+144A90/+144A94 to47/7; the current wrapper's PRP47 menu-cursor
-  binding is **not validated and draws the wrong item**. DrawXTankAim also
-  clamps its top to0, unlike regular aim's lower clamp; this remains open.
+  initializes+144A90/+144A94 to47/7. LoadScene12187 loads the resource at
+  +144A94 (PRP7) into the texture base at+144A84. MenuOptions4E830 uses
+  base pose4;4EF9E..4F008 adds the directional row/column. Initial aim(63,133)
+  selects pose2 and PRP7 frame2. LoadPROPDOSMEM259E0 writes
+  frame0 over the initially null texture: there is **no reserved null slot**
+  and no frame-index subtraction. DrawXTankAim298B6 clamps top to0.
+  The new cursor API takes live aim and pose; `ui_cursor_pose` implements the
+  directional3x3 open/pressed banks. Pause4F178 adds1 to draw aim_y.
   Mode1 draws firearms,2 draws swords,5 draws powers,
   3/4 draw selectors(0x18948 dispatch table).
 - Glv_xOff/yOff/xPosOff,xFrame,Swd_xFrame,SwordX,CenterAimX/Y,SpellGlow and
@@ -121,11 +126,16 @@ normalization from original SaveGame/LoadGame remains an integration concern.
   the translated first scanline onto the second. Selectors use five columns,
   x14+116×column,y128+88×row; selected outline113×77 inclusive.
 
-## Shops: researched, not yet implemented
+## Shops
 
-User stopped the current step before shop implementation. Main assigned the
-entire cmshops state/rules/frontend to UI; there is no implemented shop modal.
-The following findings are ready for the next implementation step:
+`ui_shop_step` consumes Events requests and pauses simulation with a modal
+return value. `ui_shop_draw` draws the merchant background and selection.
+Merchant kinds1/5/6 now grant through Events and deduct only after success;
+selling uses the original eligible inventory kinds and partial-charge pricing.
+The focused retail-asset test buys stock item5, verifies cash/inventory, refuses
+a duplicate without debit, sells it for half-price, and closes the modal.
+Arena/coder/slot requests still fail explicitly rather than becoming merchants;
+their rules and frontend remain unimplemented at this checkpoint.
 
 - HandleNextFrame0x1BF7D–0x1BFE2: ShopFlag1/5/6→LoadShopScreen(HIPAK4);
   2→arena(HIPAK5);3→coder(HIPAK6);4→slot machine(HIPAK50).
@@ -148,6 +158,11 @@ The following findings are ready for the next implementation step:
 - Events exposes shop_requested{kind,screen,arg,switch_index}; event type26
   produces it. Coder event/slot mapping, arena rules, slot odds/reels and modal
   routing still need implementation, not invented defaults.
+
+`tools/ui_state.py` inspects widget dimensions, supplied STRINGS.MSG and one
+original trace range. Fresh ui-pause original-x86 trace at144A40..144ACF shows
+power hand_type1, weapon_aim_step4, aim(-56,65) after startup. The old static
+probe's pose0 was not the original's settled pose. Tests now use pose4.
 
 ## Exercised verification and open acceptance
 

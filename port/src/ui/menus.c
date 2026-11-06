@@ -76,6 +76,15 @@ int ui_init(cm_ui *ui, rsc *hipak, const cm_file *strings)
     if (count != UI_CONSOLE_BITMAPS)
         return cm_fail(hipak->path, 20, "wrong console bitmap count");
     memcpy(ui->console, bank, sizeof ui->console);
+    for (i = 0; i < 4; ++i) {
+        static const unsigned backgrounds[4] = {4,5,6,50};
+        static const unsigned widgets[4] = {19,21,22,23};
+        if (rsc_entry(hipak, backgrounds[i], &ui->shop_background[i], &size) ||
+            ui_bitmap_bank(hipak, widgets[i], ui->shop_gfx[i],
+                           &ui->shop_gfx_count[i])) return -1;
+        if (size != 320u*240u)
+            return cm_fail(hipak->path, backgrounds[i], "invalid shop backdrop");
+    }
     /* LoadSCONGFX0x21250: HIPAK35, 33 fixed 56x38 bitmaps. */
     if (rsc_entry(hipak, 35, &p, &size)) return -1;
     if (size < 4 || cm_u16(p) > 33 || cm_u16(p + 2) != 33 ||

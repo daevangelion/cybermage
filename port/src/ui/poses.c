@@ -19,6 +19,9 @@ int ui_load_hand_tables(cm_ui *ui, const char *asset_dir)
         return cm_fail(asset_dir, 0, "hand table path too long");
     if (platform_file_read(&f, path)) return -1;
     if (cm_exe_init(&p, &f, path)) goto out;
+    if (cm_exe_table(&p, 0x96008, ui->shop_stock[0], 16) ||
+        cm_exe_table(&p, 0x96058, ui->shop_stock[1], 16) ||
+        cm_exe_table(&p, 0x960A8, ui->shop_stock[2], 3)) goto out;
     if (cm_exe_table(&p, 0x93C4C, ui->CenterAimX, UI_GLOVE_COUNT) ||
         cm_exe_table(&p, 0x93C8C, ui->CenterAimY, UI_GLOVE_COUNT) ||
         cm_exe_table(&p, 0x92690, ui->spellPower, 16) ||

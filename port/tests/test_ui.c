@@ -1,4 +1,5 @@
 #include "ui.h"
+#include "events.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -7,6 +8,7 @@
 static cm_ui ui;
 static world w;
 static ui_save_state save;
+static events_state events;
 static uint8_t encoded[UI_SAVE_MAX], screen[CM_WIDTH * CM_HEIGHT], palette[768];
 
 static void background_view(const uint8_t *background, const cm_file *rendered,
@@ -90,13 +92,49 @@ int main(int argc, char **argv)
            cm_u32(original.data + 0x4C87 + 936 * 4) + 1);
     assert(ui_save_game(&save, &w, encoded, UI_SAVE_PREFIX, &encoded_size) == -1);
     {
+        cm_input input = {0};
+        int cash, quantity, slot = -1;
+        unsigned i;
+        assert(events_init(&events,&w) == 0);
+        events.cash = 10000;
+        events.shop_requested.kind = 1;
+        assert(ui_shop_step(&ui,&events,&w,&input,0) == 1);
+        assert(ui.shop_kind == 1 && events.shop_requested.kind == 0);
+        assert(ui.shop_count == 16 && ui.shop_items[0] == 5);
+        assert(ui_shop_draw(&ui,&events,&w,screen) == 0);
+        assert(platform_dump(argv[1],5,screen,palette) == 0);
+        ui.shop_selected = 0;
+        cash = events.cash;
+        input.pressed[28] = 1;
+        assert(ui_shop_step(&ui,&events,&w,&input,1) == 1);
+        assert(events.cash == cash-events.definitions[5].unk_0018);
+        for (i=0;i<EVENTS_ITEM_MAX;++i)
+            if (events.items[i].type == 5) slot = (int)i;
+        assert(slot >= 0);
+        quantity = events.items[slot].quantity;
+        assert(quantity > 0);
+        cash = events.cash;
+        assert(ui_shop_step(&ui,&events,&w,&input,2) == 1);
+        assert(events.cash == cash); /* Duplicate equipment is refused, no debit. */
+        memset(&input,0,sizeof input); input.pressed[31] = 1;
+        assert(ui_shop_step(&ui,&events,&w,&input,3) == 1 && ui.shop_selling);
+        for (i=0;i<ui.shop_count;++i)
+            if (ui.shop_slots[i] == slot) ui.shop_selected = i;
+        memset(&input,0,sizeof input); input.pressed[28] = 1;
+        assert(ui_shop_step(&ui,&events,&w,&input,4) == 1);
+        assert(events.cash == cash+events.definitions[5].unk_0018/2);
+        assert(events.items[slot].type == 0);
+        memset(&input,0,sizeof input); input.pressed[1] = 1;
+        assert(ui_shop_step(&ui,&events,&w,&input,5) == 1 && !ui.shop_kind);
+    }
+    {
         const uint8_t *background;
         ui_view view = {120,90,400,300};
         ui_hud hud = {0};
         unsigned phase, i;
         assert(rsc_entry(&hipak, 1, &background, &size) == 0 && size == 320*240);
         background_view(background,NULL,view);
-        assert(ui_draw_player_hand(&ui, &w, screen, 5, 0, 0, view) == 0);
+        assert(ui_draw_player_hand(&ui, &w, screen, 5, 0, 4, view) == 0);
         hud.hp = cm_u16(original.data+UI_SAVE_PREFIX+0x38);
         hud.max_hp = cm_u16(original.data+UI_SAVE_PREFIX+0x3A);
         hud.energy = save.unk_130D50[864];
@@ -115,14 +153,17 @@ int main(int argc, char **argv)
             assert(platform_file_read(&rendered, argv[2]) == 0);
             assert(rendered.size == sizeof screen);
             background_view(background,&rendered,view);
-            assert(ui_draw_player_hand(&ui,&w,screen,5,0,0,view) == 0);
+            assert(ui_draw_player_hand(&ui,&w,screen,5,0,4,view) == 0);
             assert(ui_render_bells_and_whistles(&ui,screen,&hud) == 0);
             assert(platform_dump(argv[1],3,screen,palette) == 0);
             background_view(background,&rendered,view);
             ui_open(&ui,UI_PAUSE);
             assert(ui_draw(&ui,screen) == 0);
             view.x = view.y = 0; view.width = CM_WIDTH; view.height = CM_HEIGHT;
-            assert(ui_draw_player_hand(&ui,&w,screen,-1,0,0,view) == 0);
+            assert(ui_cursor_pose(63,134,0) == 2);
+            assert(ui_cursor_pose(-73,20,1) == 15);
+            assert(ui_draw_menu_cursor(&ui,&w,screen,63,134,
+                                       ui_cursor_pose(63,133,0)) == 0);
             assert(platform_dump(argv[1],4,screen,palette) == 0);
             platform_file_release(&rendered);
         }

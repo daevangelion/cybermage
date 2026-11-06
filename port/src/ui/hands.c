@@ -15,7 +15,6 @@ int ui_draw_player_hand(const cm_ui *ui, world *w, uint8_t *dst,
     if (!ui->hand_tables_loaded || frame >= UI_HAND_FRAMES)
         return cm_fail("hand graphics", frame, "missing pose data or invalid frame");
     if (mode == 5) { resource = 48; glove = 1; }
-    else if (mode == -1) { resource = 47; glove = 0; }
     else if (mode == 1 && weapon >= 0 && weapon < 10) {
         resource = weapon_prop[weapon]; glove = (unsigned)weapon + 2;
     } else if (mode == 2 && weapon >= 0 && weapon < 4) {
@@ -39,9 +38,8 @@ int ui_draw_player_hand(const cm_ui *ui, world *w, uint8_t *dst,
     hand.x_pos_off = ui->Glv_xPosOff[glove][frame];
     hand.view_x = view.x; hand.view_y = view.y;
     hand.view_width = view.width; hand.view_height = view.height;
-    /* MenuOptions0x4F222: glove pointer is posed at63,133 in the full screen. */
-    hand.aim_x = mode == -1 ? 63 : ui->CenterAimX[glove];
-    hand.aim_y = mode == -1 ? 133 : ui->CenterAimY[glove];
+    hand.aim_x = ui->CenterAimX[glove];
+    hand.aim_y = ui->CenterAimY[glove];
     if (mode == 2) {
         hand.sword = 1;
         hand.x_off = ui->SwordX[glove][frame];
@@ -53,6 +51,47 @@ int ui_draw_player_hand(const cm_ui *ui, world *w, uint8_t *dst,
             return cm_fail("hand graphics", (uint32_t)weapon, "invalid spell glow selector");
         return ui_draw_xscale_aim(dst, &hand, ui->SpellGlow+glow*3);
     }
+    return ui_draw_xscale_aim(dst, &hand, NULL);
+}
+
+unsigned ui_cursor_pose(int aim_x, int aim_y, int pressed)
+{
+    /* MenuOptions4EF9E..4F008: directional3x3 pose, then pressed bank. */
+    unsigned frame = pressed ? 13u : 4u;
+    if (aim_y < 64) frame += 3;
+    else if (aim_y > 108) frame -= 3;
+    if (aim_x < -12) --frame;
+    else if (aim_x > 49) ++frame;
+    return frame;
+}
+
+int ui_draw_menu_cursor(const cm_ui *ui, world *w, uint8_t *dst,
+                         int aim_x, int aim_y, unsigned frame)
+{
+    const uint8_t *data;
+    uint32_t size, image, start, end;
+    ui_hand hand = {0};
+    if (!ui->hand_tables_loaded || frame >= UI_HAND_FRAMES)
+        return cm_fail("menu cursor", frame, "invalid cursor pose");
+    /* LoadScene12187 loads PRP7 at144A84; LoadPROPDOSMEM259E0 writes
+     * frame0 over that initially null slot. MenuOptions4E830 starts pose4,
+     * then4EF9E..4F008 adds its directional row/column. */
+    image = (uint32_t)ui->Glv_xFrame[0][frame];
+    if (rsc_entry(&w->props, 7, &data, &size)) return -1;
+    if (size < 1442 || data[0] > 120 || image >= data[0])
+        return cm_fail(w->props.path, 7, "cursor frame exceeds package");
+    start = cm_u32(data+962+image*4);
+    end = image+1 < data[0] ? cm_u32(data+962+(image+1)*4) : size;
+    if (start < 1442 || start > end || end > size)
+        return cm_fail(w->props.path, 7, "cursor span exceeds package");
+    hand.pixels.data = data+start; hand.pixels.size = end-start;
+    hand.half_width = (int32_t)cm_u32(data+6+image*8);
+    hand.half_height = (int32_t)cm_u32(data+2+image*8);
+    hand.view_width = CM_WIDTH; hand.view_height = CM_HEIGHT;
+    hand.x_off = ui->Glv_xOff[0][frame];
+    hand.y_off = ui->Glv_yOff[0][frame];
+    hand.x_pos_off = ui->Glv_xPosOff[0][frame];
+    hand.aim_x = aim_x; hand.aim_y = aim_y; hand.tank = 1;
     return ui_draw_xscale_aim(dst, &hand, NULL);
 }
 
@@ -83,12 +122,13 @@ int ui_draw_xscale_aim(uint8_t *dst, const ui_hand *h, const uint8_t *glow)
         return cm_fail("hand graphics", 0, "truncated hand row table");
     ustep = source_width * HAND_SCALE_ONE / (unsigned)width;
     vstep = source_rows * HAND_SCALE_ONE / (unsigned)rows;
-    if (rows > h->view_height) {
+    if (!h->tank && rows > h->view_height) {
         v = vstep * (unsigned)(rows-h->view_height);
         rows = h->view_height;
     }
     top = (h->y_off * 2 + CM_HEIGHT - h->aim_y * 2) * h->view_width / CM_WIDTH;
-    if (top < h->view_height-rows) top = h->view_height-rows;
+    if (top < (h->tank ? 0 : h->view_height-rows))
+        top = h->tank ? 0 : h->view_height-rows;
     else if (top > h->view_height-4) top = h->view_height-4;
     left = (h->x_off * 2 + h->aim_x * 2 + CM_WIDTH/2 - h->x_pos_off * 2) *
         h->view_width / CM_WIDTH;
