@@ -321,9 +321,12 @@ static void modern_selector(void)
         sim_input(&s, &semantic);
         assert(!sim_modern_input(&s, &w, &semantic) && !events_process_selector(&e, &s, &w));
         assert(e.selector_kind == 3 && e.items[1].quantity == 1);
-        semantic.pressed[1] = 1;
+        e.selectors[2].index = 1;
+        semantic.pressed[0x1c] = 1;
+        semantic.mouse_dx = 1; /* Right-stick hover in a gap is not a tap. */
         sim_input(&s, &semantic);
-        assert(!sim_modern_input(&s, &w, &semantic) && !e.selector_kind);
+        assert(!sim_modern_input(&s, &w, &semantic) && !events_process_selector(&e, &s, &w));
+        assert(!e.selector_kind && (uint16_t)w.persons[0].unk_0038 == 40);
     }
 }
 

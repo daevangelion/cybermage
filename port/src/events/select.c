@@ -169,7 +169,7 @@ int events_process_selector(events_state *e, sim_state *s, world *w)
             x % 116 < 112 && y % 88 < 76 && (y / 88) * 5 + x / 116 < count) {
             col = x / 116;
             row = y / 88;
-        } else {
+        } else if (s->selector_tap) {
             confirm = 0;
             e->selector_confirm = 0;
         }

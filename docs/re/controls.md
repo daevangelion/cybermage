@@ -180,6 +180,8 @@ Modern taps hit the drawn 112×76 tile at (14+116×column,128+88×row);
 gaps and space outside live tiles cannot confirm. Classic glove thresholds remain
 unchanged. Rejected taps also discard their confirmation latch, so release cannot
 confirm the prior selection. The modern regression taps all twenty tile centres.
+Pointer motion alone is not a tap: A/Enter confirmation still accepts the
+keyboard-selected entry when the moving right-stick pointer passes over a gap.
 
 ## Focused verification
 

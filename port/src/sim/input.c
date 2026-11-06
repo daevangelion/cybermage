@@ -102,6 +102,7 @@ void sim_input(sim_state *s, const cm_input *input)
     s->joystick_present=!input->modern && s->input_device==2 && input->joystick_present;
     s->selector_pointer=input->modern && s->events && s->events->selector_kind &&
         (input->mouse_dx || input->mouse_dy || (input->mouse_pressed&1));
+    s->selector_tap = s->selector_pointer && (input->mouse_pressed & 1);
     s->selector_x = input->mouse_x;
     s->selector_y = input->mouse_y;
     if(s->mouse_present || s->selector_pointer) {
