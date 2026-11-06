@@ -124,10 +124,11 @@ all106 measured BDA bytes, including Ctrl=4 on frames71..75. This named receipt
 does not silently certify later concurrent HEAD changes.
 
 Later named4461e87 incremental route gate:
-[gate-4461e87.json](docs/re/gate-4461e87.json) records2/3 full actor/RNG matches
-and3/3 player matches: hall119110 and door5-plain81 fully match; door5
+[gate-4461e87.json](docs/re/gate-4461e87.json) records3/4 full actor/RNG matches
+and4/4 player matches: hall119110, door5-plain81 and SYP-approach96 fully match; door5
 approach198 first differs on NPC120/RNG130. Actual saved switch5 changes0→1
-in both original and native door5-plain runs. These incremental results do not
+in both original and native door5-plain runs; switch38 remains0 in both SYP
+approach exports. These incremental results do not
 replace the full92-scenario counts above; the consolidated owner cohort awaits
 the difficulty, death/reload and remaining recoil cutovers.
 
