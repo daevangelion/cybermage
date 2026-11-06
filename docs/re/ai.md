@@ -34,7 +34,7 @@ divergence (do not inject oracle coordinates or target results):
 
 ```
 tools/run_capped.sh make -C port B=build/AimFix
-tools/run_capped.sh port/build/AimFix/cybermage --headless --data orig/retail --bios-seed 44 --replay captures/Sim2-combat-collision/frames.csv --actor-clocks captures/Sim2-combat-collision/actor-clocks.csv --import-undefined captures/Sim2-combat-collision/scene-start.persons --state-dump captures/AimFix-target-combat/native --user out/AimFix-combat-user
+tools/run_capped.sh port/build/AimFix/cybermage --headless --data orig/retail --bios-seed 44 --replay captures/Sim2-combat-collision/frames.csv --import-undefined captures/Sim2-combat-collision/scene-start.persons --state-dump captures/AimFix-target-combat/native --user out/AimFix-combat-user
 tools/run_capped.sh .venv/bin/python tools/compare_targets.py captures/Sim2-combat-collision/frames.csv captures/AimFix-target-combat/native
 ```
 
@@ -101,17 +101,15 @@ Measured with separately supplied retail assets and BIOS seed44:
 | Capture | Completed frames compared | Original nonempty | Target-list mismatches |
 |---|---:|---:|---:|
 | `captures/AimFix-target-newgame` | 116 | 0 | 0 |
-| `captures/AimFix-target-combat` (combat-fight inputs) | 1298 | 13 | 50 |
+| `captures/Sim2-combat-collision` (named7b427a9 consumer) | 1298 | 13 | 0 |
 
-The combat replay contains1299 trace rows; the terminal native frame has no next
-original checkpoint and is excluded. First player-position divergence is native
-frame795 (x928767 versus933647). First target-list divergence is native892 /
-original893: original empty, native[1069]. All13 original nonempty checkpoints
-currently differ; native produces37 nonempty lists on its diverged route. This
-proves collection is live, **not** a successful combat-parity gate. The original
-camera/world path must match before these candidates can be compared as a
-visibility-only verdict; no checkpoint coordinates were injected into native
-gameplay to hide the divergence.
+The named7b427a9 combat replay matches all1299 player-position rows and all1298
+completed target-list checkpoints, including all13 original nonempty lists.
+The unmatched terminal native state has no original next-frame checkpoint and
+is excluded explicitly. This uses measured clock inputs and the approved
+PERSON+24 undefined-field input, never coordinates or target-list injection.
+Receipt: `captures/Sim2-gate-7b427a9.json`, binary SHA256
+`d68735198d408283d0c351de68bcfdd7aee7eab3a882ff5d9c99191530caedbb`.
 
 ## Actor oracle
 
@@ -119,7 +117,6 @@ gameplay to hide the divergence.
 tools/oracle.sh combat-actors --frame-trace --actor-trace --rng-trace --snapshot
 make -C port -f tests/ai.mk B=build/AI build/AI/ai_trace check
 port/build/AI/ai_trace orig/retail captures/combat-actors/frames.csv BIOS_TICK \
-  --actor-clocks captures/combat-actors/actor-clocks.csv \
   --import-undefined captures/combat-actors/scene-start.persons \
   --rng-trace captures/combat-actors/native-rng.csv
 .venv/bin/python tools/compare_actors.py ORIGINAL.csv NATIVE.csv
@@ -131,28 +128,12 @@ missile/SoulFire updates), player fire, events, UpdateObjects, Hand2Hand and the
 pixel-free end-frame target query. The one undefined-field input is explicit
 and documented below.
 
-First measured comparison: 23,560 actor checkpoints / 155 frames. First divergence
-is frame 0, PERSON 0 HP (original 40, native 22); first NPC divergence is frame 0,
-PERSON 1 HP (11 versus 13). Original RNG words are (26876,18426,3810), native
-(8925,0,871). The native loader then seeded the middle word with zero, which is
-invariant under the multiplicative RNG; initial conditions therefore already
-differ before frame 0. This is a failed parity check, not evidence of matching
-RNG calls or verified combat rules. `seed.csv` now measures the original BIOS
-source at RANDOM_SEED entry 0x68ABF before its write; do not fit a seed from the
-later actor checkpoint.
-
-The source observer measured BIOS tick 44 at instruction 145,715,835,
-interpreter time 2.4285943666692638 s (`captures/combat-actors/seed.csv`).
-Replaying with that explicit input still diverges at frame 0: player HP 40/16,
-NPC 1 HP 11/16, RNG (26876,18426,3810)/(8925,23868,871).
-Starting from the documented initial words (3000,44,29999), the recurrence reaches
-the original checkpoint after 489 advances and native after 487: two pre-frame
-RANDOM calls are missing. Their callers remain unidentified; no dummy calls or
-checkpoint state overrides were added. Both traces contain 151 active NPCs,
-37 changing position, and zero NPCs losing HP. This scenario exercises movement,
-not a demonstrated firefight.
-
-The call-site observer resolves those two missing calls: the original starts with
+`seed.csv` measures the BIOS source at RANDOM_SEED0x68ABF before its write,
+not a seed fitted from a later RNG checkpoint. The observed tick is44 at
+instruction145,715,835, interpreter time2.4285943666692638s.
+Initial words are(3000,44,29999); the scene-1 pre-frame checkpoint is after489
+real advances. The call-site observer identified the two formerly omitted
+InitPC calls: the original starts with
 `InitPC` return address 0x10698 twice, then LoadScene 0x11541. Both InitPC calls
 compute actual betting odds (`RND(4)+2`) and initialize player inventory/armor;
 they are the boot call 0x10FBA and new-game call 0x11058/0x110D7.
@@ -166,6 +147,22 @@ through an optional observer; the core neither allocates nor performs I/O.
 `tools/compare_rng.py` reports the first mismatching operation/bound/words and
 both caller identities, filtering only the original RND wrapper's nested RANDOM
 record (return 0x67329) to avoid double-counting.
+
+Full-game `--state-dump` also emits every PERSON as `actor=I actor_*` rows,
+sharing that frame's root RNG words. Compare these post-frame states to the
+original next-frame entry with:
+
+```
+.venv/bin/python tools/compare_actors.py ORIGINAL/actors.csv NATIVE_STATE_DIR --native-post-frame
+```
+
+This explicitly excludes original frame0 and the unmatched native terminal
+frame, never an observed completed checkpoint. Missing/extra frames, actors,
+fields and duplicate records fail. Ten synthetic controls include deliberate HP
+and RNG corruption; an original-undefined diagnostic never masks either.
+The annotated original stack-distance deviation is in architecture_port.md.
+Both native actor/RNG traces report the affected PERSON and cached value;
+comparison failures remain failures and diagnostic context is not assumed causal.
 
 The approved `--import-undefined` verification input is limited to PERSON +0x24;
 normal play still starts it at zero (architecture_port.md). With real InitPC,
@@ -192,8 +189,12 @@ IRQ0 can advance between HandleNextFrame and UpdateObjects, and even between
 the latter's fast read at 0x348D0 and normal read at 0x348F7. `--actor-trace`
 therefore also records `actor-clocks.csv` with `frame,fast_ticks,normal_ticks`.
 These are external clock inputs, not deadlines, gate outcomes or actor state.
-The native harness takes this file only through explicit `--actor-clocks`;
-it rejects malformed, reordered, missing or extra completed-frame samples.
+The shared replay parser reads this sidecar next to `frames.csv`; both the
+main consumer and actor harness use its measured normal/fast fields, not
+separate clock parsers or a nonexistent main-game clock option. Malformed,
+reordered, missing or extra completed-frame samples fail. The actor harness
+logs the metadata path, or warns that absent metadata means only a frame-entry
+approximation, not actor-clock parity evidence.
 The unstepped terminal checkpoint may have no completed clock pair.
 The AI API accepts separate normal/fast ticks in original fast-then-normal
 evaluation order. Focused tests cover an IRQ between reads and strict `>`
@@ -205,6 +206,12 @@ actor checkpoints across 155 frames (positions, animation/state, HP and RNG).
 logical RNG calls in completed frames 0..153, including bound and all three
 pre-call words. This uses the explicitly logged undefined-field input above;
 151 NPCs are active and 37 move, but none loses HP. It is not a firefight verdict.
+
+The complete `captures/AI-combat-rng` script subsequently matches all197,448
+actor checkpoints across1299 pre-frame states and all29,998 logical RNG calls
+through completed frame1297. Original states are identical to the earlier
+Sim2 combat capture. The named7b427a9 full-game consumer independently matches
+197,296 actor/RNG checkpoints across1298 completed frames, with no divergence.
 
 `combat-fight.txt` opens the scene-1 door, jumps through the corridor, reaches
 hostile actors and turns while firing. The initial spell is semi-automatic:
@@ -225,6 +232,38 @@ Its vertical spill is used only inside this original block, so the native stores
 only the current-frame camera increment. RenderBells separately consumes the
 one-frame+1444EC effect and decrements PCFlash once per draw, including headless
 replay; neither drawing transition is conditioned on bp_limit_flag.
+
+### Earned-save firefight
+
+`scene11-training-landing-save.keys` creates the checkpoint through the original
+Save menus; `scene11-training-stair-fight.keys` loads it and fires real
+semi-automatic pulses. No save bytes or actor state are synthesized.
+The observed original trace has418 frames/150 actors: PC HP96→42,
+PERSON42 is killed and PERSON77 falls to2HP. First PC damage is checkpoint31;
+both NPCs first lose HP at301.
+
+```
+tools/run_capped.sh tools/oracle.sh tools/scenarios/scene11-training-landing-save.keys \
+  --export-saves captures/scene11-training-landing-save/saves
+tools/run_capped.sh tools/oracle.sh tools/scenarios/scene11-training-stair-fight.keys \
+  --import-saves captures/scene11-training-landing-save/saves \
+  --frame-trace --actor-trace --rng-trace --snapshot
+mkdir -p out/AI-earned-fight-user
+cp -n captures/scene11-training-landing-save/saves/SAVE000.DAT \
+  captures/scene11-training-landing-save/saves/SAVE010.DAT \
+  captures/scene11-training-landing-save/saves/GAMENAME.USR out/AI-earned-fight-user/
+tools/run_capped.sh port/build/AI/cybermage --headless --data orig/retail --bios-seed 44 \
+  --user out/AI-earned-fight-user --replay-load-slot 0 \
+  --replay captures/scene11-training-stair-fight/frames.csv \
+  --state-dump captures/AI-earned-fight/native
+tools/run_capped.sh .venv/bin/python tools/compare_actors.py \
+  captures/scene11-training-stair-fight/actors.csv \
+  captures/AI-earned-fight/native --native-post-frame
+```
+
+Do not add `--import-undefined`: the real save already owns its PERSON+24 values.
+The measured SAVE000.DAT SHA256 is
+`35fe37fd46ca59810669dd4e6ba91ad78be37f20e549566ac8e52d06ec26fa15`.
 
 ## Player projectiles and radial effects
 
@@ -390,8 +429,9 @@ Original-x86 differential fixtures additionally match17,280 hand frames,
 2,400 energy-recovery frames and7,040 hand-bob frames. Commands, source addresses,
 checked inputs and limitations are in `pc_fire.md`.
 
-Visual counters advance after hand drawing; original energy regeneration
-0x19340..0x193B2 must run before HUD composition. Keyboard hand and walking-bob
+Visual counters may advance after the read-only HUD; original low-HP respiration
+0x1928B..0x19340 and energy regeneration0x19340..0x193B2 run after StatusMonitor.
+Keyboard hand and walking-bob
 producers are live; underwater comes from Events action72 and aircar spread from
 the original A/D/S rules. This proves default Starbolt/release-latch/energy recovery,
 projectile flight/impact and direct hand-state mechanics, not all weapons or a

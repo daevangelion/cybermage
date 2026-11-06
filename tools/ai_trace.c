@@ -3,7 +3,6 @@
 #include "replay.h"
 #include "target.h"
 
-#include <errno.h>
 #include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -111,29 +110,6 @@ static int import_undefined(const char *path)
     return 0;
 }
 
-static int actor_clock(FILE *file, const char *path, uint32_t frame,
-                        uint32_t *normal, uint32_t *fast)
-{
-    char line[64], *cursor = line, *end;
-    unsigned long value[3];
-    unsigned i;
-    if (!fgets(line, sizeof line, file))
-        return ferror(file) ? cm_fail(path, frame, "reading actor clocks") : 0;
-    for (i = 0; i < 3; ++i) {
-        if (*cursor < '0' || *cursor > '9')
-            return cm_fail(path, frame, "invalid actor clock integer");
-        errno = 0;
-        value[i] = strtoul(cursor, &end, 10);
-        if (errno || value[i] > UINT32_MAX ||
-            (i < 2 ? *end != ',' : (*end != '\n' || end[1])))
-            return cm_fail(path, frame, "invalid actor clock row");
-        cursor = end + 1;
-    }
-    if (value[0] != frame) return cm_fail(path, frame, "actor clock frame mismatch");
-    *fast = (uint32_t)value[1]; *normal = (uint32_t)value[2];
-    return 1;
-}
-
 int main(int argc, char **argv)
 {
     cm_replay replay = {0};
@@ -143,8 +119,6 @@ int main(int argc, char **argv)
     unsigned long seed;
     char *end;
     const char *rng_path = NULL, *undefined_path = NULL, *steering_path = NULL, *collision_path = NULL;
-    const char *clock_path = NULL;
-    FILE *clocks = NULL;
     static rng_trace rng = {NULL, 0, -1};
     static collision_trace collision = {NULL, CM_OBJECT_MAX, 0};
     int next, initialized = 0;
@@ -159,8 +133,6 @@ int main(int argc, char **argv)
             steering_path = argv[++arg];
         else if (!strcmp(argv[arg], "--collision-trace") && arg + 1 < argc && !collision_path)
             collision_path = argv[++arg];
-        else if (!strcmp(argv[arg], "--actor-clocks") && arg + 1 < argc && !clock_path)
-            clock_path = argv[++arg];
         else if (!strcmp(argv[arg], "--collision-object") && arg + 1 < argc) {
             unsigned long object = strtoul(argv[++arg], &end, 10);
             if (!*argv[arg] || *end || object >= CM_OBJECT_MAX) return 2;
@@ -170,15 +142,6 @@ int main(int argc, char **argv)
     }
     seed = strtoul(argv[3], &end, 10);
     if (*end || seed > UINT16_MAX) return 2;
-    if (clock_path) {
-        char header[64];
-        clocks = fopen(clock_path, "r");
-        if (!clocks) return cm_fail(clock_path, 0, "opening actor clocks") != 0;
-        if (!fgets(header, sizeof header, clocks) ||
-            strcmp(header, "frame,fast_ticks,normal_ticks\n"))
-            return cm_fail(clock_path, 0, "invalid actor clock header") != 0;
-        fprintf(stderr, "External IRQ0 actor clock inputs: %s\n", clock_path);
-    }
     world_rng_init(&w.rng, (uint16_t)seed);
     if (rng_path) {
         rng.out = fopen(rng_path, "w");
@@ -198,9 +161,12 @@ int main(int argc, char **argv)
         fputs("sequence,frame,object,proposed_x,proposed_y,source_x,source_y,source_floor,source_z,source_height,source_radius,node,candidate,targetable,flags,x,y,floor,z,height,radius,active\n", collision.out);
     }
     if (replay_open(&replay, argv[2])) return 1;
+    if (replay.actor_clocks.data)
+        fprintf(stderr, "External IRQ0 actor clock inputs: %s\n", replay.actor_clock_path);
+    else
+        fputs("No actor-clock metadata: frame-entry approximation, not actor-clock parity evidence\n", stderr);
     puts("frame,ticks,rng0,rng1,rng2,person,object,x,y,z,heading,state,status,hp,target,animation,cursor,active,original_undefined_person,original_undefined_distance");
     while ((next = replay_next(&replay, &f)) > 0) {
-        uint32_t normal_ticks = (uint32_t)f.values[CM_TRACE_TICKS], fast_ticks = normal_ticks;
         if (!initialized) {
             char path[CM_WORLD_PATH_MAX];
             cm_file rules_file = {0};
@@ -215,6 +181,7 @@ int main(int argc, char **argv)
                 ai_init_pc(&e, &s, &w.rng, &exe, (unsigned)f.values[CM_TRACE_SCENE],
                             (uint32_t)f.values[CM_TRACE_PREVIOUS])) return 1;
             platform_file_release(&rules_file);
+            s.ai = &a; s.events = &e;
             if (world_load_scene(&w, argv[1], (unsigned)f.values[CM_TRACE_SCENE]) ||
                 ai_init(&a, &w) || ai_load_tables(&a, argv[1]) ||
                 world_finalize_scene(&w) || sim_start_scene(&s, &w) ||
@@ -222,7 +189,7 @@ int main(int argc, char **argv)
             ai_restore_pc_info(&e, &w);
             ai_start_clock(&a, (uint32_t)f.values[CM_TRACE_PREVIOUS]);
             if (undefined_path && import_undefined(undefined_path)) return 1;
-            s.ai = &a; s.events = &e; a.events = &e;
+            a.events = &e;
             e.actors = &a;
             if (collision.out) { s.collision_observe = collision_observe; s.collision_context = &collision; }
             initialized = 1;
@@ -240,24 +207,17 @@ int main(int argc, char **argv)
         }
         rng.frame = f.values[CM_TRACE_FRAME];
         observed_frame = rng.frame;
-        if (clocks) {
-            int result = actor_clock(clocks, clock_path, (uint32_t)observed_frame,
-                                       &normal_ticks, &fast_ticks);
-            if (result < 0) return 1;
-            if (!result) {
-                fprintf(stderr, "No completed UpdateObjects clock pair for terminal frame %" PRId64 "\n",
-                        observed_frame);
-                if (replay_next(&replay, &f) != 0)
-                    return cm_fail(clock_path, (uint32_t)observed_frame, "actor clocks end before final frame") != 0;
-                break;
-            }
+        if (replay.actor_clocks.data && !f.has_actor_clocks) {
+            fprintf(stderr, "No completed UpdateObjects clock pair for terminal frame %" PRId64 "\n",
+                    observed_frame);
+            break;
         }
         replay_input(&s, &f);
         a.undefined_distance_person = 0;
         if (sim_frame(&s, &w, &input, (uint32_t)f.values[CM_TRACE_TICKS]) ||
             ai_pc_input(&a, &s, &w) || events_step(&e, &s, &a, &w) ||
-            ai_update_objects(&a, &s, &w, normal_ticks, fast_ticks) ||
-            ai_pc_hand2hand(&a, &s, &w)) return 1;
+            ai_update_objects(&a, &s, &w, f.normal_actor_ticks, f.fast_actor_ticks) ||
+            ai_pc_hand2hand(&a, &s, &w) || events_countdown(&e, &s, &a, &w)) return 1;
         if (a.undefined_distance_person)
             fprintf(stderr, "ORIGINAL UNDEFINED: frame=%" PRId64 " PERSON=%u "
                     "UpdateObjects(348C4) cached-distance fallback=%" PRId32 "\n",
@@ -269,14 +229,9 @@ int main(int argc, char **argv)
             w.camera.angle = pc->heading;
         }
         if (target_query(&a.targets, &w, &w.camera, &view)) return 1;
-        ai_pc_draw_advance(&a, &s);
+        if (ai_pc_draw_advance(&a, &s, &w)) return 1;
     }
     replay_close(&replay); world_close(&w);
-    if (clocks) {
-        if (fgetc(clocks) != EOF || ferror(clocks))
-            return cm_fail(clock_path, 0, "unconsumed actor clocks") != 0;
-        if (fclose(clocks)) return 1;
-    }
     if (rng.out && fclose(rng.out)) return 1;
     if (steering_file && fclose(steering_file)) return 1;
     if (collision.out && fclose(collision.out)) return 1;
