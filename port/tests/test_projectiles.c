@@ -29,10 +29,15 @@ static void setup(void)
     }
     w.persons[0].object = 1; w.persons[1].object = 2;
     w.persons[0].unk_0038 = w.persons[1].unk_0038 = (1000 << 16) | 1000;
-    w.fxo_count = 33;
+    w.fxo_count = w.prop_count = 33;
     for (i = 0; i < 33; ++i) {
         w.fxo_objects[i] = (uint16_t)(10+i); w.objects[10+i].texture = (uint16_t)(100+i*32);
         w.objects[10+i].radius = 0x800; w.objects[10+i].height = 0x1000;
+        w.objects[10+i].flags = UINT32_C(0x08000000);
+        w.prop_objects[i] = (uint16_t)(50+i);
+        w.objects[50+i].flags = UINT32_C(0x20080800);
+        w.objects[50+i].radius = 0x1400; w.objects[50+i].height = 0x2500;
+        w.objects[50+i].texture = (uint16_t)(500+i*4); w.objects[50+i].rotations = 3;
     }
     for (i = 0; i < AI_MISSILE_MAX; ++i) a.missiles[i].object = (int32_t)(2400+i);
     a.pc_aim.pistol_angle = 32; a.pc_aim.pistol_xoffset = 320;
@@ -71,6 +76,12 @@ static void launches(void)
     assert(a.missiles[0].ticks == 2 && a.missiles[0].vertical == 0);
     assert(w.objects[2400].x == w.objects[1].x + 0x2800);
     assert(w.objects[2400].y == w.objects[1].y && !w.objects[2400].active);
+    /* SetMissile02DAD7 uses the PROP descriptor table, not placed FXO:
+     * copying a door's FX bit creates a phantom oriented missile blocker. */
+    assert(w.objects[2400].flags == UINT32_C(0x21080000));
+    assert(w.objects[2400].radius == 0x1400 && w.objects[2400].height == 0x2500);
+    assert(w.objects[2400].texture == 500 + a.missile_types[2].fxo * 4);
+    assert(w.objects[2400].rotations == 3);
     assert(ai_pc_launch_missile(&a,&s,&w,4,2,0,(int16_t)0x8000) == 1);
     assert(a.missiles[1].target == 2 && a.missiles[1].vertical == 4);
     assert(w.objects[2401].heading == 0 && w.objects[2401].x == w.objects[2].x + 0x1000);

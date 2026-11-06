@@ -26,13 +26,16 @@ static void position(const world *w, world_object *o, const world_object *from,
     o->x = add(from->x, cosine(w, angle, radius));
     o->y = add(from->y, sine(w, angle, radius));
 }
-int ai_set_missile(world *w, unsigned object, unsigned fxo)
+/* SetMissile02DAD7 reads Xox+131BCC and its PROP object word at descriptor+4.
+ * Placed FXO templates belong to a different table. */
+int ai_set_missile(world *w, unsigned object, unsigned prop)
 {
-    int source = world_fxo_object(w, fxo);
     world_object *o;
     const world_object *t;
-    if (source < 0) return -1;
-    o = &w->objects[object]; t = &w->objects[source];
+    if (object >= w->object_count || prop >= w->prop_count ||
+        w->prop_objects[prop] >= w->object_count)
+        return cm_fail("SetMissile", prop, "invalid object or template PROP");
+    o = &w->objects[object]; t = &w->objects[w->prop_objects[prop]];
     o->flags = (t->flags | UINT32_C(0x01000000)) & ~UINT32_C(0x00000800);
     o->radius = t->radius; o->height = t->height;
     o->texture = t->texture; o->rotations = t->rotations;

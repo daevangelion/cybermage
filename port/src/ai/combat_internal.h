@@ -23,6 +23,6 @@ static inline int32_t ai_fixed32(int32_t a, int32_t b)
 {
     return ai_signed32((uint32_t)((uint64_t)((int64_t)a * b) >> 16));
 }
-int ai_set_missile(world *w, unsigned object, unsigned fxo);
+int ai_set_missile(world *w, unsigned object, unsigned prop);
 
 #endif

@@ -423,6 +423,17 @@ Input/hand/loop processing belongs before acceleration and movement.
 The body adjustment is followed by hit shake and aim at01CF71..01D1C0.
 JumbleBound01D07D therefore uses the old heading, before MovePerson calls
 at01D437/01D62E/01D67B/01D707/01D743/01D792/01D825 apply this frame's yaw.
+Projectile art also participates in collision. SetMissile02DAD7 reads the
+PROP pointer table atXox+131BCC, then the descriptor object word at+4
+(`mov [descriptor+2]; sar16`). It does not use placed FXO indices.
+The old native lookup copied scene doors into projectiles, including their
+oriented-collision flag. In the genuine `route-corridor-heal` capture,
+pre-frame22 should reach1554522,1954739. A watchpoint on named2c3e97f showed
+the correct hit vector entering NewPCBound, but missile1092 inherited door3's
+FX flag/radius/texture and corrected it to1554258,1963978. Fixing the template
+source removes the phantom blocker rather than special-casing movement.
+`test_projectiles` keeps distinct PROP and poisoned FXO banks to reject this
+lookup regression while checking the original flag clear/copy operations.
 Sim calls the explicit early `ai_pc_prepare_input` and pre-motion
 `ai_pc_prepare_motion` phases; the late PC update must not repeat either.
 
