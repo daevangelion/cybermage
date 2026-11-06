@@ -13,6 +13,8 @@ static char paths[4][SND_PATH_MAX];
 static uint8_t available[SND_SAMPLE_COUNT];
 static uint8_t initial_samples[SND_SAMPLE_COUNT], log_messages[63][2];
 static snd_slot slots[AUDIO_SAMPLE_SLOTS];
+static int requested_gain[AUDIO_SAMPLE_SLOTS];
+static uint8_t speech_gain[AUDIO_SAMPLE_SLOTS];
 static snd_dialogue dialogue;
 static int opened, enabled = 1, speech_enabled = 1;
 static int digi_volume = 32767, speech_volume = 32767;
@@ -220,22 +222,36 @@ void snd_enable(int on, int spoken)
     platform_audio_unlock();
 }
 int snd_enabled(void) { return enabled; }
+static int sample_gain(unsigned slot, unsigned pan, int requested, int spoken)
+{
+    int volume = scale_volume(requested, spoken ? speech_volume : digi_volume);
+    if (audio_sample_panvol(slot,pan,volume)) return -1;
+    requested_gain[slot] = requested; speech_gain[slot] = spoken != 0;
+    slots[slot].pan = pan; slots[slot].volume = volume;
+    return 0;
+}
 void snd_volumes(int digi, int speech, unsigned midi)
 {
+    unsigned i;
     platform_audio_lock(); digi_volume = clamp_volume(digi); speech_volume = clamp_volume(speech);
-    midi_volume = midi & 127; audio_midi_volume(midi_volume); platform_audio_unlock();
+    midi_volume = midi & 127; audio_midi_volume(midi_volume);
+    for (i = 0; i < AUDIO_SAMPLE_SLOTS; ++i)
+        if (!audio_sample_done(i) && sample_gain(i,slots[i].pan,requested_gain[i],speech_gain[i])) break;
+    platform_audio_unlock();
 }
 
-static int start_sample(unsigned id, const uint8_t *data, uint32_t len, int volume,
-                         unsigned pan, int loops)
+static int start_sample(unsigned id, const uint8_t *data, uint32_t len, int requested,
+                         unsigned pan, int loops, int spoken)
 {
     unsigned i;
-    if (!enabled) return -1;
+    int volume = scale_volume(requested, spoken ? speech_volume : digi_volume);
+    if (!enabled || requested <= 0 || (!spoken && volume <= 0)) return -1;
     for (i = 0; i < AUDIO_SAMPLE_SLOTS; ++i) if (audio_sample_done(i)) break;
     if (i == AUDIO_SAMPLE_SLOTS) return -1;
     if (audio_play_sample(i, data, len, 1, 8, volume, loops, pan)) return -1;
     slots[i].sample = (int)id; slots[i].volume = volume; slots[i].pan = pan;
     slots[i].loops = loops; slots[i].active = 1;
+    requested_gain[i] = requested; speech_gain[i] = spoken != 0;
     return (int)i;
 }
 
@@ -248,8 +264,7 @@ static int play(unsigned sample, int volume, unsigned pan, int loops)
     if (pan > 65535) return cm_fail("PlayDIGI", sample, "pan outside 16-bit range");
     if (rsc_entry(&raw, sample, &p, &len)) return -1;
     platform_audio_lock();
-    volume = scale_volume(volume, digi_volume);
-    result = volume > 0 ? start_sample(sample, p, len, volume, pan, loops) : -1;
+    result = start_sample(sample,p,len,volume,pan,loops,0);
     platform_audio_unlock();
     return result;
 }
@@ -282,18 +297,16 @@ int snd_set_panvol(int slot, unsigned pan, int volume, int spoken)
 {
     int result;
     if (slot < 0 || slot >= AUDIO_SAMPLE_SLOTS) return 0;
-    platform_audio_lock(); volume = scale_volume(volume, spoken ? speech_volume : digi_volume);
-    result = audio_sample_panvol((unsigned)slot, pan, volume);
-    if (!result) { slots[slot].pan = pan; slots[slot].volume = volume; }
+    platform_audio_lock();
+    result = sample_gain((unsigned)slot,pan,volume,spoken);
     platform_audio_unlock(); return result;
 }
 int snd_set_volume(int slot, int volume)
 {
     int result;
     if (slot < 0 || slot >= AUDIO_SAMPLE_SLOTS) return 0;
-    platform_audio_lock(); volume = scale_volume(volume, digi_volume);
-    result = audio_sample_panvol((unsigned)slot, slots[slot].pan, volume);
-    if (!result) slots[slot].volume = volume;
+    platform_audio_lock();
+    result = sample_gain((unsigned)slot,slots[slot].pan,volume,0);
     platform_audio_unlock(); return result;
 }
 void snd_snapshot(snd_slot out[AUDIO_SAMPLE_SLOTS])
@@ -436,7 +449,7 @@ static int speech_segment(const world *w, unsigned scene, unsigned message, unsi
     } else if (link < 0) next_video = -link;
     if (dialogue.object > 0 && snd_speech_panvol(w, (unsigned)dialogue.object,
                                                dialogue.scene, dialogue.message, &pan, &volume)) return -1;
-    slot = start_sample(SND_SPEECH_ID, pcm, len, scale_volume(clamp_volume(volume), speech_volume), pan, 0);
+    slot = start_sample(SND_SPEECH_ID,pcm,len,clamp_volume(volume),pan,0,1);
     if (slot < 0) return 1; /* Full SOS slot table retries this segment. */
     speech_slot = slot;
     first = cm_u32(speech_file.data + 4 + scene * 4);
@@ -516,11 +529,7 @@ int snd_tick(world *w)
         if (waiting && dialogue.object > 0) {
             unsigned pan; int volume;
             result = snd_speech_panvol(w, (unsigned)dialogue.object, dialogue.scene, dialogue.message, &pan, &volume);
-            if (!result) {
-                volume = scale_volume(volume, speech_volume);
-                result = audio_sample_panvol((unsigned)speech_slot, pan, volume);
-                slots[speech_slot].pan = pan; slots[speech_slot].volume = volume;
-            }
+            if (!result) result = sample_gain((unsigned)speech_slot,pan,volume,1);
         } else if (!waiting) {
             speech_slot = -1;
             if (linked_count) {

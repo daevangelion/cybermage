@@ -59,6 +59,38 @@ static void controls(void)
     snd_message_stop();
 }
 
+static void gain_changes(void)
+{
+    snd_slot state[16];
+    int effect_slot;
+    snd_kill(&w);
+    snd_volumes(32767,32767,127);
+    effect_slot = snd_loop(20,0x9fff,57344);
+    assert(effect_slot == 0);
+    snd_snapshot(state); assert(state[0].volume == 32767);
+    snd_volumes(16384,32767,127);
+    snd_snapshot(state); assert(state[0].volume == 20480 && state[0].pan == 57344);
+    snd_volumes(16384,32767,127);
+    snd_snapshot(state); assert(state[0].volume == 20480);
+    assert(snd_message(&w,1,1,0) == 0 && snd_tick(&w) == 0);
+    snd_snapshot(state); assert(state[1].sample == 999 && state[1].volume == 32767);
+    snd_volumes(0,8192,127);
+    snd_snapshot(state);
+    assert(state[0].active && state[0].volume == 0);
+    assert(state[1].active && state[1].volume == 8192);
+    snd_volumes(32767,16384,127);
+    snd_snapshot(state);
+    assert(state[0].volume == 32767 && state[1].volume == 16384);
+    assert(snd_set_panvol(0,8192,24576,0) == 0);
+    snd_volumes(16384,32767,127);
+    snd_snapshot(state); assert(state[0].volume == 12288 && state[0].pan == 8192);
+    assert(state[1].volume == 32767);
+    assert(snd_set_volume(0,8192) == 0);
+    snd_volumes(32767,32767,127);
+    snd_snapshot(state); assert(state[0].volume == 8192);
+    snd_message_stop(); snd_kill(&w);
+}
+
 static void movies(const char *data)
 {
     unsigned kind, tick;
@@ -128,7 +160,7 @@ int main(int argc, char **argv)
     assert(argc >= 2);
     assert(platform_init(1) == 0);
     assert(snd_open(argv[1]) == 0);
-    controls(); movies(argv[1]);
+    controls(); gain_changes(); movies(argv[1]);
     if (argc >= 3) original_snapshot(argv[2]);
     snd_close(); platform_shutdown();
     fprintf(stderr, "game audio: slot/ID/master volume, dialogue, all3 movie playback/skip checks passed\n");

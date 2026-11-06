@@ -215,6 +215,14 @@ death conditionals; it does not change resource, volume or playback state.
   so CheckSound0x28680 and AbortSound0x286AC compare **slot and sample ID**.
 - Speech uses ID999, clamps requested volume before SPK_MASTER_VOL scaling,
   and can play at zero master volume so dialogue still progresses.
+- Settings changes reapply gains to already active effects/loops/speech under
+  the device lock. Each slot retains its unscaled request and master class;
+  changing a master never rescales an already scaled/clipped gain or restarts
+  playback. Over-range effect requests retain their raw value (e.g.0x9FFF),
+  speech retains its original pre-master clamp, and mute/unmute preserves voices.
+  This explicit immediate settings application replaces waiting for a later
+  positional update. Regression tests cover independent masters, repeated
+  settings, clipping, mute restoration and subsequent pan/volume setters.
 - ClipPanVol0x280C0/PanVolDIGI0x27F2C use world player/object XY, original
   distance and angle helpers. With range R>0, reject distance>=R; volume is
   `((R-distance)>>4)*max/(R>>4)` (zero shifted denominator yields INT32_MAX,
