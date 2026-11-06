@@ -188,3 +188,21 @@ rectangle geometry for either presenter; headless/classic/menu paths produce non
 These are action/transport tests, not a
 physical-controller usability or classic replay parity claim. The integrated
 build, original movement replay and Android emulator capture are separate gates.
+
+### Recorded Android acceptance
+
+`captures/Integrator-android/run.json` pins the modern-control emulator smoke
+to source `c699ea4d97f735458793ae7794506c658b70ab4a` and the 3,696,689-byte APK
+SHA-256 `64053b74fcd0f288eb00489423c7863c2696ee2da1afff333776c4463ca53b0f`.
+It contains arm64-v8a/x86_64 native libraries and no bundled retail entries.
+On `box-api36` (Android API 36, emulator 36.3.10.0), at 2400×1080:
+
+- `title.png` records the title menu used for the logged tap-to-start.
+- `scene-start.png` shows the left virtual stick and fire/jump/use/cycle/menu/map
+  buttons in the side margins, outside the 4:3 game area.
+- `scene-walk.png` shows actual forward world movement after the recorded
+  virtual-stick swipe `(240,910) → (240,800)`, held 2200 ms.
+
+These screenshots were inspected; the receipt records no process crash or
+engine error. This is the pinned feature acceptance APK, not a claim that every
+later engine/parity change has been rebuilt or exercised on Android.
