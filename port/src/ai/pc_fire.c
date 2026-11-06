@@ -103,6 +103,47 @@ static int after(uint32_t tick, uint32_t deadline)
     return ai_signed32(tick) > ai_signed32(deadline);
 }
 
+static void hand_axis(int32_t *axis, int direction)
+{
+    if (direction > 0 && *axis < 64) *axis += 64;
+    else if (direction < 0 && *axis > -64) *axis -= 64;
+}
+
+/* HandleKeyboardEvents 0x12E83/0x1365B..0x13C02/0x13E1F. The hand
+ * keyboard gate uses the previous frame's fire value, before ProcessInput. */
+static void keyboard_hand(ai_pc_state *p, const sim_state *s, int mode)
+{
+    const uint8_t *k = s->kb_scan_status;
+    int side;
+    if (mode != 2 || p->fire != 1) return;
+    side = s->kb_side_toggle < SIM_SCAN_COUNT &&
+           (k[s->kb_side_toggle] & s->kb_side_toggle_bit);
+    if ((k[0x48]&5) || (k[0x4c]&1)) hand_axis(&p->key_hand_y, -1);
+    else if (k[0x50]&5) hand_axis(&p->key_hand_y, 1);
+    if (k[0x4d]&5) {
+        if (side) hand_axis(&p->key_hand_y, 1);
+        hand_axis(&p->key_hand_x, 1);
+    } else if (k[0x4b]&5) {
+        if (side) hand_axis(&p->key_hand_y, 1);
+        hand_axis(&p->key_hand_x, -1);
+    }
+    if (k[0x47]&1) {
+        hand_axis(&p->key_hand_y, -1); hand_axis(&p->key_hand_x, -1);
+    }
+    if (k[0x49]&1) {
+        hand_axis(&p->key_hand_y, -1); hand_axis(&p->key_hand_x, 1);
+    }
+    if ((k[0x4f]&1) || (s->kb_side_left < SIM_SCAN_COUNT &&
+        (k[s->kb_side_left]&s->kb_side_left_bit))) {
+        hand_axis(&p->key_hand_y, 1); hand_axis(&p->key_hand_x, -1);
+    }
+    if ((k[0x51]&1) || (s->kb_side_right < SIM_SCAN_COUNT &&
+        (k[s->kb_side_right]&s->kb_side_right_bit))) {
+        hand_axis(&p->key_hand_y, 1); hand_axis(&p->key_hand_x, 1);
+    }
+    p->hand_x = p->key_hand_x; p->hand_y = p->key_hand_y;
+}
+
 static int equip(ai_state *a, const sim_state *s, const world *w, int mode)
 {
     ai_pc_state *p = &a->pc;
@@ -571,6 +612,7 @@ int ai_pc_input(ai_state *a, sim_state *s, world *w)
             if (p->air_car_spread < -0x800) p->air_car_spread = -0x800;
         }
     }
+    keyboard_hand(p, s, mode);
     fire_input(a, s, &w->persons[w->player_person], mode);
     if (prepare_aim(a, s, mode)) return -1;
     if ((mode == 1 && ranged_fire(a, s, w)) ||
@@ -591,12 +633,21 @@ int ai_pc_input(ai_state *a, sim_state *s, world *w)
     return 0;
 }
 
-/* RenderBells 0x18BA4/0x18D73 and DrawACarMonitor 0x157AC mutate these
- * counters after drawing. Keep composition read-only and advance once after it. */
+/* RenderBells 0x18BA4/0x18D73 and DrawACarMonitor 0x157AC advance after
+ * hand drawing. Energy recovery 0x19340..0x193B2 precedes the HUD drawing. */
 void ai_pc_draw_advance(ai_state *a, const sim_state *s)
 {
     ai_pc_state *p = &a->pc;
+    events_state *e = a->events;
     int mode = combat_mode(s);
+    int maximum = signed16((uint32_t)e->max_energy);
+    int interval = 65-maximum/10;
+    if (interval < 6) interval = 6;
+    if (after(s->timer_ticks, p->sp_regen_timer)) {
+        if (signed16((uint32_t)e->energy) < maximum)
+            e->energy = signed16((uint32_t)e->energy+1);
+        p->sp_regen_timer = s->timer_ticks+(uint32_t)interval;
+    }
     if (mode != 1 && mode != 5 && !(mode == 7 && s->vehicle_type)) return;
     if (!p->muzzle_mode || (mode == 7 && p->muzzle_mode < 0)) return;
     p->muzzle_count = ai_add32(p->muzzle_count, 1);

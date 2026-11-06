@@ -110,6 +110,7 @@ typedef struct {
     int32_t auto_s_flag, auto_swinging, auto_s_reset, reset_pos, auto_s_mode;
     int32_t auto_update_flag;
     uint32_t auto_s_time, spell_timer, tank_timer;
+    uint32_t sp_regen_timer; /* global spRegenTimer206834, survives scene loads */
     int32_t last_mode, last_weapon;
     unsigned kb_fire, kb_fire_bit;
     int32_t air_car_spread; /* ACarSpreadAngle, original signed16 */

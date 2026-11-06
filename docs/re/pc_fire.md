@@ -27,8 +27,12 @@ Retail CM_HI.EXE v1.01F LE link addresses. Gameplay only; UI consumes state.
   previous combat mode while the existing input machinery uses mode3.
 - RenderBells0x18BA4/0x18D73 advances positive/negative muzzle sequences after
   drawing; DrawACarMonitor0x157AC does the same for aircar positive sequences.
-  `ai_pc_draw_advance` owns that post-presentation step; UI composition is read-only.
+  `ai_pc_draw_advance` runs after hand drawing but before HUD composition.
   Glow frame advances modulo4 at0x1BA49 when bp_limit_flag is nonzero.
+- RenderBells0x19340..0x193B2 recovers one energy when ticks is strictly greater
+  than global spRegenTimer206834. The interval is max(6,65-signed16(max_energy)/10);
+  the deadline advances even at full energy. It survives scene/NewGame/save loads.
+  This state-only step must precede HUD reads so the increment is visible immediately.
 - Aircar spread0x13208..0x13276: A held adds128, capped1024; D held subtracts128,
   floored−2048; S clears the spread and consumes its scan byte.
 - Underwater backfire reads144A24; Events action72 produces it at0x3E9D7/0x3E9FA
