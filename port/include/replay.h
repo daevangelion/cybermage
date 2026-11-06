@@ -7,9 +7,11 @@
 
 typedef struct { unsigned relative; uint32_t address, length; } cm_trace_range;
 typedef struct {
-    cm_file file;
+    cm_file file, actor_clocks;
     const char *path;
+    char actor_clock_path[1024];
     uint32_t next, frame;
+    uint32_t actor_clock_next;
     unsigned range_count;
     uint16_t bios_seed;
     int has_bios_seed;
@@ -19,6 +21,10 @@ typedef struct {
     int64_t values[CM_TRACE_COLUMNS];
     uint8_t keys[SIM_SCAN_COUNT], input_keys[SIM_SCAN_COUNT];
     const char *range_hex[CM_TRACE_RANGES_MAX];
+    /* Only has_actor_clocks makes these measured inputs. Otherwise both are
+     * the legacy frame-entry approximation, not actor-clock parity evidence. */
+    uint32_t normal_actor_ticks, fast_actor_ticks;
+    int has_actor_clocks;
 } cm_replay_frame;
 
 enum {

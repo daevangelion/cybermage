@@ -199,6 +199,16 @@ target, animation/cursor, object active flag, and the three original RNG words.
 `CM_HI.EXE:068ABF`, before it copies BIOS word `0x46C`; this is a source
 measurement, not a seed inferred from a later checkpoint.
 
+Actor traces additionally write `actor-clocks.csv` with
+`frame,fast_ticks,normal_ticks`, the actual `_CMTimerTicks` reads at
+`0348D0` and `0348F7`. Native replay consumes that named companion as external
+clock input, never replacement actor state or deadlines. Missing middle rows,
+duplicate/out-of-order frames, overflowing values and extra samples fail closed;
+only the terminal pre-frame checkpoint may lack an unfinished UpdateObjects
+sample. Older captures without the companion retain the frame-entry clock
+approximation, not measured actor-clock evidence. CMTRACE1 has no producer-version
+marker, so a deleted companion cannot be distinguished from an older capture.
+
 `--rng-trace` logs original RND/RANDOM caller addresses, frame, bound and RNG
 words; `--steering-trace` logs NewMONBound decision inputs at `0x46507`.
 `--collision-object N` logs CollObject entry (`0x435EC`) proposals, source

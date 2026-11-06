@@ -8,27 +8,41 @@
 #define TRACE_MEMORY_MAX 65536u
 #define TRACE_LINE_MAX (TRACE_MEMORY_MAX * 2 + 2048u)
 
-static int line(cm_replay *r, char **fields, unsigned max)
+static int read_line(cm_file *file, uint32_t *next, const char *path,
+                     char **fields, unsigned max)
 {
-    uint32_t start = r->next, at = start;
+    uint32_t start = *next, at = start;
     unsigned n = 1;
-    if (at == r->file.size) return 0;
-    fields[0] = (char *)r->file.data + at;
-    while (at < r->file.size && r->file.data[at] != '\n') {
-        uint8_t c = r->file.data[at];
-        if (!c || c == '\r' || at - start >= TRACE_LINE_MAX)
-            return cm_fail(r->path, at, "invalid trace line");
+    if (at == file->size) return 0;
+    fields[0] = (char *)file->data + at;
+    while (at < file->size && file->data[at] != '\n') {
+        uint8_t c = file->data[at];
+        if (!c || c == '\r' || at - start >= TRACE_LINE_MAX) {
+            *next = at;
+            return cm_fail(path, at, "invalid trace line");
+        }
         if (c == ',') {
-            if (n == max) return cm_fail(r->path, at, "too many trace columns");
-            r->file.data[at] = 0;
-            fields[n++] = (char *)r->file.data + at + 1;
+            if (n == max) {
+                *next = at;
+                return cm_fail(path, at, "too many trace columns");
+            }
+            file->data[at] = 0;
+            fields[n++] = (char *)file->data + at + 1;
         }
         ++at;
     }
-    if (at == r->file.size) return cm_fail(r->path, at, "unterminated trace row");
-    r->file.data[at] = 0;
-    r->next = at + 1;
+    if (at == file->size) {
+        *next = at;
+        return cm_fail(path, at, "unterminated trace row");
+    }
+    file->data[at] = 0;
+    *next = at + 1;
     return (int)n;
+}
+
+static int line(cm_replay *r, char **fields, unsigned max)
+{
+    return read_line(&r->file, &r->next, r->path, fields, max);
 }
 
 static int integer(const char *text, unsigned base, int64_t min, int64_t max, int64_t *out)
@@ -110,6 +124,29 @@ static int seed_metadata(cm_replay *r)
     return 0;
 }
 
+static int actor_clock_metadata(cm_replay *r)
+{
+    const char *slash = strrchr(r->path, '/');
+    size_t prefix = slash ? (size_t)(slash - r->path) + 1 : 0;
+    static const char filename[] = "actor-clocks.csv";
+    char *path = r->actor_clock_path, *fields[3];
+    int exists, n;
+    if (prefix + sizeof filename > sizeof r->actor_clock_path)
+        return cm_fail(r->path, 0, "actor clock metadata path too long");
+    memcpy(path, r->path, prefix);
+    memcpy(path + prefix, filename, sizeof filename);
+    exists = platform_file_exists(path);
+    if (exists <= 0) return exists;
+    if (platform_file_read(&r->actor_clocks, path)) return -1;
+    n = read_line(&r->actor_clocks, &r->actor_clock_next, path, fields, 3);
+    if (n < 0) return -1;
+    if (n != 3 ||
+        strcmp(fields[0], "frame") || strcmp(fields[1], "fast_ticks") ||
+        strcmp(fields[2], "normal_ticks"))
+        return cm_fail(path, 0, "invalid actor clock header");
+    return 0;
+}
+
 int replay_open(cm_replay *r, const char *path)
 {
     char *fields[TRACE_FIELDS_MAX];
@@ -138,16 +175,22 @@ int replay_open(cm_replay *r, const char *path)
         strcmp(fields[0], "frame") || strcmp(fields[CM_TRACE_COLUMNS], "keys") ||
         strcmp(fields[CM_TRACE_COLUMNS + 1], "input_keys") ||
         strcmp(fields[CM_TRACE_COLUMNS + 2], "ranges...")) goto bad;
-    if (seed_metadata(r)) goto bad;
+    if (seed_metadata(r) || actor_clock_metadata(r)) {
+        platform_file_release(&r->file);
+        platform_file_release(&r->actor_clocks);
+        return -1;
+    }
     return 0;
 bad:
     platform_file_release(&r->file);
+    platform_file_release(&r->actor_clocks);
     return cm_fail(path, r->next, "invalid CMTRACE1 header");
 }
 
 void replay_close(cm_replay *r)
 {
     platform_file_release(&r->file);
+    platform_file_release(&r->actor_clocks);
 }
 
 int replay_next(cm_replay *r, cm_replay_frame *frame)
@@ -155,7 +198,12 @@ int replay_next(cm_replay *r, cm_replay_frame *frame)
     char *fields[TRACE_FIELDS_MAX];
     unsigned i;
     int n = line(r, fields, TRACE_FIELDS_MAX);
-    if (n <= 0) return n;
+    if (n <= 0) {
+        if (n < 0) goto bad;
+        if (r->actor_clock_next != r->actor_clocks.size)
+            return cm_fail(r->actor_clock_path, r->actor_clock_next, "extra actor clock rows");
+        return 0;
+    }
     if ((unsigned)n != CM_TRACE_COLUMNS + 2 + r->range_count) goto bad;
     for (i = 0; i < CM_TRACE_COLUMNS; ++i) {
         if (integer(fields[i], 10, INT32_MIN, UINT32_MAX, &frame->values[i])) goto bad;
@@ -172,6 +220,28 @@ int replay_next(cm_replay *r, cm_replay_frame *frame)
     for (i = 0; i < r->range_count; ++i) {
         frame->range_hex[i] = fields[CM_TRACE_COLUMNS + 2 + i];
         if (hex(frame->range_hex[i], NULL, r->ranges[i].length)) goto bad;
+    }
+    frame->has_actor_clocks = 0;
+    frame->normal_actor_ticks = frame->fast_actor_ticks =
+        (uint32_t)frame->values[CM_TRACE_TICKS];
+    if (r->actor_clocks.data) {
+        char *clocks[3];
+        int64_t clock_frame, fast, normal;
+        uint32_t start = r->actor_clock_next;
+        n = read_line(&r->actor_clocks, &r->actor_clock_next, r->actor_clock_path, clocks, 3);
+        if (n < 0) return -1;
+        if (!n && r->next == r->file.size) {
+            /* The final pre-frame checkpoint may stop before UpdateObjects. */
+        } else {
+            if (n != 3 || integer(clocks[0], 10, 0, UINT32_MAX, &clock_frame) ||
+                integer(clocks[1], 10, 0, UINT32_MAX, &fast) ||
+                integer(clocks[2], 10, 0, UINT32_MAX, &normal) ||
+                clock_frame != frame->values[CM_TRACE_FRAME])
+                return cm_fail(r->actor_clock_path, start, "invalid or missing actor clock row");
+            frame->fast_actor_ticks = (uint32_t)fast;
+            frame->normal_actor_ticks = (uint32_t)normal;
+            frame->has_actor_clocks = 1;
+        }
     }
     ++r->frame;
     return 1;
