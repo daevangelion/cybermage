@@ -11,6 +11,8 @@ Retail CM_HI.EXE v1.01F LE link addresses. Gameplay only; UI consumes state.
 - ResetAim0x12D60: mode1 uses CenterAim[hand_type144A40], mode5 index1, all others0.
 - EquipWeapon0x1040C: hand_type=weapon+2 unless mode5(index1); PCHandBound16x8
   and WeaponTrajectory16x2x8 are supplied executable tables, not compiled assets.
+  `ai_pc_equip` also runs at scene initialization/save restore, matching
+  LoadScene0x12148/0x12155 before the first game frame.
 - AutoSwordSwing0x1A07C uses autoSPos11x4 signed bytes, autoSInitMode9x3,
   autoSInitPos11 and timer-gated3-tick steps. No pixels are involved.
 - Hand2Hand0x1A298 uses SwingFrame9x21 i16, swingMode9x9 i32, MatIdx9x9 i32,
@@ -21,7 +23,22 @@ Retail CM_HI.EXE v1.01F LE link addresses. Gameplay only; UI consumes state.
 - PCLaunchMissile0x2F1C4 is Audio's implementation: args type, screen aim_x,
   screen aim_y, short special aim. It returns launched1/full0/error−1.
   Inventory, energy costs, gun cooldown, glove and muzzle state belong here.
+- Released melee uses frame8 at0x1ECB8, not frame0. Modern aiming keeps the
+  previous combat mode while the existing input machinery uses mode3.
+- RenderBells0x18BA4/0x18D73 advances positive/negative muzzle sequences after
+  drawing; DrawACarMonitor0x157AC does the same for aircar positive sequences.
+  `ai_pc_draw_advance` owns that post-presentation step; UI composition is read-only.
+  Glow frame advances modulo4 at0x1BA49 when bp_limit_flag is nonzero.
+- Aircar spread0x13208..0x13276: A held adds128, capped1024; D held subtracts128,
+  floored−2048; S clears the spread and consumes its scan byte.
+- Underwater backfire reads144A24; Events action72 produces it at0x3E9D7/0x3E9FA
+  from event parameters. It is a nonzero test, not a validated boolean.
 
 Table bytes are read from the user's CM_HI.EXE via shared exe.h; no original
 numeric-table blobs are bundled. Oracle verification uses frame-entry traces,
-so rowN+1 checks the result of rowN. Rendering cannot update combat state.
+so rowN+1 checks the result of rowN.
+
+Checkpoint: strict host linking and focused equipment/modern ResetAim/draw-counter/
+aircar-spread checks pass. The original hand differential and scene1 firing replay
+are still being completed; this is not a combat-parity claim. Manual hand/tank input
+and walking-bob producers are still under investigation.

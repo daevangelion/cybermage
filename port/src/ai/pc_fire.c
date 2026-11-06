@@ -10,6 +10,11 @@ static int signed16(unsigned value)
     return value < 32768 ? (int)value : (int)value-65536;
 }
 
+static int combat_mode(const sim_state *s)
+{
+    return s->modern_aim ? s->previous_pc_mode : s->pc_mode;
+}
+
 static int short_table(const cm_exe *exe, uint32_t address, int16_t *dst, unsigned count)
 {
     uint8_t bytes[42];
@@ -75,7 +80,8 @@ int ai_pc_load_tables(ai_state *a, const cm_exe *exe)
 /* Xox::ResetAim, CM_HI.EXE 0x12D60. */
 int ai_reset_aim(ai_state *a, const sim_state *s)
 {
-    unsigned type = s->pc_mode == 1 ? a->pc_aim.hand_type : s->pc_mode == 5 ? 1u : 0u;
+    int mode = combat_mode(s);
+    unsigned type = mode == 1 ? a->pc_aim.hand_type : mode == 5 ? 1u : 0u;
     if (type >= 16) return cm_fail("ResetAim", type, "invalid player hand type");
     a->pc_aim.aim_x = a->pc_rules.center_aim_x[type];
     a->pc_aim.aim_y = a->pc_rules.center_aim_y[type];
@@ -97,7 +103,7 @@ static int after(uint32_t tick, uint32_t deadline)
     return ai_signed32(tick) > ai_signed32(deadline);
 }
 
-static int equip(ai_state *a, sim_state *s, const world *w, int mode)
+static int equip(ai_state *a, const sim_state *s, const world *w, int mode)
 {
     ai_pc_state *p = &a->pc;
     ai_pc_aim *q = &a->pc_aim;
@@ -138,7 +144,16 @@ static int equip(ai_state *a, sim_state *s, const world *w, int mode)
     return ai_reset_aim(a, s);
 }
 
-static void prepare_aim(ai_state *a, const sim_state *s, int mode)
+/* LoadScene 0x12148/0x12155 also equips before the first game frame. */
+int ai_pc_equip(ai_state *a, const sim_state *s, const world *w)
+{
+    if (!a->events || !a->tables_loaded)
+        return cm_fail("EquipWeapon", 0, "player combat is not initialized");
+    a->pc.last_mode = 0;
+    return equip(a, s, w, combat_mode(s));
+}
+
+static int prepare_aim(ai_state *a, const sim_state *s, int mode)
 {
     ai_pc_aim *q = &a->pc_aim;
     const ai_pc_state *p = &a->pc;
@@ -148,7 +163,7 @@ static void prepare_aim(ai_state *a, const sim_state *s, int mode)
     if (mode == 1 || mode == 5) {
         if (q->auto_enable) {
             if (after(s->timer_ticks, q->reset_auto_aim_time) && !p->latch && !p->cooldown)
-                (void)ai_reset_aim(a, s);
+                if (ai_reset_aim(a, s)) return -1;
         } else {
             if (q->aim_y < q->w_max_botaimy) q->aim_y = q->w_max_botaimy;
             else if (q->aim_y > q->w_max_topaimy) q->aim_y = q->w_max_topaimy;
@@ -163,6 +178,7 @@ static void prepare_aim(ai_state *a, const sim_state *s, int mode)
                after(s->timer_ticks, q->reset_auto_aim_time) && !p->latch && !p->cooldown) {
         q->tank_aim_y = 19;
     }
+    return 0;
 }
 
 /* ProcessInputEvents 0x147DD..0x14A3B: held input deliberately bypasses
@@ -532,14 +548,31 @@ static int hand_stance(ai_state *a, sim_state *s, world *w)
 
 int ai_pc_input(ai_state *a, sim_state *s, world *w)
 {
-    int mode = s->modern_aim ? s->previous_pc_mode : s->pc_mode;
+    int mode = combat_mode(s);
     ai_pc_state *p = &a->pc;
     if (!a->events || !a->tables_loaded || w->player_person >= w->person_count ||
         w->player_object >= w->object_count)
         return cm_fail("PCFire", 0, "player combat is not initialized");
     if (equip(a, s, w, mode)) return -1;
+    /* HandleNextFrame 0x1BA49: the four glow frames use the 2-tick gate. */
+    if (s->bp_limit_flag) p->glow_frame = (p->glow_frame+1)%4;
+    if (mode == 7 && s->vehicle_type) {
+        /* HandleKeyboardEvents 0x13208..0x13276. S is consumed; A/D held. */
+        if (s->kb_scan_status[0x1f]) {
+            s->kb_scan_status[0x1f] = 0;
+            p->air_car_spread = 0;
+        }
+        if (s->kb_scan_status[0x1e]&1) {
+            p->air_car_spread += 128;
+            if (p->air_car_spread > 0x400) p->air_car_spread = 0x400;
+        }
+        if (s->kb_scan_status[0x20]&1) {
+            p->air_car_spread -= 128;
+            if (p->air_car_spread < -0x800) p->air_car_spread = -0x800;
+        }
+    }
     fire_input(a, s, &w->persons[w->player_person], mode);
-    prepare_aim(a, s, mode);
+    if (prepare_aim(a, s, mode)) return -1;
     if ((mode == 1 && ranged_fire(a, s, w)) ||
         (mode == 5 && spell_fire(a, s, w)) ||
         (mode == 7 && tank_fire(a, s, w)) ||
@@ -558,6 +591,18 @@ int ai_pc_input(ai_state *a, sim_state *s, world *w)
     return 0;
 }
 
+/* RenderBells 0x18BA4/0x18D73 and DrawACarMonitor 0x157AC mutate these
+ * counters after drawing. Keep composition read-only and advance once after it. */
+void ai_pc_draw_advance(ai_state *a, const sim_state *s)
+{
+    ai_pc_state *p = &a->pc;
+    int mode = combat_mode(s);
+    if (mode != 1 && mode != 5 && !(mode == 7 && s->vehicle_type)) return;
+    if (!p->muzzle_mode || (mode == 7 && p->muzzle_mode < 0)) return;
+    p->muzzle_count = ai_add32(p->muzzle_count, 1);
+    p->muzzle_mode += p->muzzle_mode > 0 ? -1 : 1;
+}
+
 static int hand_frame(ai_state *a, world_person *person)
 {
     int position = low_word(person->unk_0040);
@@ -573,9 +618,9 @@ int ai_pc_hand2hand(ai_state *a, sim_state *s, world *w)
 {
     world_person *p;
     int current, previous, state, old_state;
-    int mode = s->modern_aim ? s->previous_pc_mode : s->pc_mode;
+    int mode = combat_mode(s);
     if (mode != 2) return 0;
-    if (!a->pc.fire) { a->pc.sword_frame = 0; return 0; }
+    if (!a->pc.fire) { a->pc.sword_frame = 8; return 0; }
     if (w->player_person >= w->person_count || !a->events)
         return cm_fail("Hand2Hand", w->player_person, "invalid player");
     a->pc_aim.render_x = a->pc_aim.render_y = 0;
