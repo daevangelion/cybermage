@@ -199,8 +199,11 @@ consumer matches player HP/RNG through original pre-frame922, including the
 first hit (HP39). First movement divergence is923, Y1063616/1064298;
 RNG also first differs there. Target comparison now reports19 mismatches over
 1298 completed frames,13 original nonempty, first926/927([] versus[1069]).
-The next investigation is the melee hit-flash producer gating the newly ported
-three-RND player-hit response; this is not yet a verified target MATCH.
+The missing producer is original035EF3..035F0B: a nonzero melee hit on the
+player raises Xox+1444E8 to at least3 before035F26 DamagePerson. The native
+melee path omitted that write, gating off the next frame's three-RND hit
+response and sideways push. AI/Audio own that correction; this measured
+checkpoint is not yet a verified target MATCH.
 
 ## Integrated verification (Integrator)
 
