@@ -38,6 +38,7 @@ X(void,Uniform1i,(GLint,GLint)) \
 X(void,Uniform1f,(GLint,GLfloat)) \
 X(void,Uniform2i,(GLint,GLint,GLint)) \
 X(void,Uniform2f,(GLint,GLfloat,GLfloat)) \
+X(void,Uniform2iv,(GLint,GLsizei,const GLint *)) \
 X(void,Uniform3f,(GLint,GLfloat,GLfloat,GLfloat)) \
 X(void,Uniform4f,(GLint,GLfloat,GLfloat,GLfloat,GLfloat)) \
 X(void,Uniform4iv,(GLint,GLsizei,const GLint *)) \
@@ -64,11 +65,13 @@ X(void,RenderbufferStorage,(GLenum,GLenum,GLsizei,GLsizei)) \
 X(void,FramebufferRenderbuffer,(GLenum,GLenum,GLenum,GLuint)) \
 X(void,DeleteRenderbuffers,(GLsizei,const GLuint *)) \
 X(void,Viewport,(GLint,GLint,GLsizei,GLsizei)) \
+X(void,Scissor,(GLint,GLint,GLsizei,GLsizei)) \
 X(void,Enable,(GLenum)) \
 X(void,Disable,(GLenum)) \
 X(void,ClearBufferuiv,(GLenum,GLint,const GLuint *)) \
 X(void,ClearBufferfv,(GLenum,GLint,const GLfloat *)) \
 X(void,DrawArrays,(GLenum,GLint,GLsizei)) \
+X(void,DrawElements,(GLenum,GLsizei,GLenum,const void *)) \
 X(void,ReadPixels,(GLint,GLint,GLsizei,GLsizei,GLenum,GLenum,void *)) \
 X(void,ReadBuffer,(GLenum)) \
 X(void,ColorMask,(GLboolean,GLboolean,GLboolean,GLboolean)) \

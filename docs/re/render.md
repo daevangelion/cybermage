@@ -91,3 +91,28 @@ bounds reads or infinite packed-run walks.
 Other scenes, moving props, exact painter tie cases and extreme pitch have not
 been oracle-compared. The near-zero claim is limited to the two named views;
 synthetic primitive tests are not retail-parity evidence for those other cases.
+
+## Enhanced GL backend
+
+`render_gl.h` / `src/render_gl` are an opt-in presentation backend. SDL owns
+context creation/procedure lookup/swap; ES300 and desktop330 use the same GLSL
+bodies with a version prefix. World and shared decoded asset spans are read
+only. This backend never supplies sight or target-query results.
+
+Tile faces are batched by texture/encoding; changed map geometry rebuilds that
+mesh. Dynamic geometry uses per-object visual keys and buffer-subrange updates.
+Billboards expand along horizontal camera-right and world-up in the vertex
+shader, so pitch does not tilt actors. Projection uses true pitch and fixed
+vertical FOV (original4:3 focal/height ratio), expanding horizontally at wider
+aspects. `render_gl_draw_view` supports scissored secondary views.
+
+R8UI images and separate packed-run coverage retain opaque paletteindex0.
+The indexed R8UI framebuffer is shaded through the original64/10/21 colormap
+rows, then palette-resolved. Invisibility reads a copied indexed background;
+aura selects the original checkerboard maps. UI capture records replace,
+colormap composition and source-coordinate copy operations, preserving
+opaque0/255 and sampled/shaded world pixels without GPU readback.
+
+`tests/render_gl.mk` provides pure mesh/coverage/decoder tests and a real
+offscreen scene executable. Its comparison uses the same loaded world and
+camera for GL and SW, not imported oracle geometry or fitted pixels.

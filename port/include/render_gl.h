@@ -10,9 +10,13 @@ int render_gl_load(const world *w,const render_state *assets,
                     const uint8_t palette[768]);
 int render_gl_resize(unsigned width,unsigned height);
 int render_gl_draw(const world *w,const world_camera *camera);
+int render_gl_draw_view(const world *w,const world_camera *camera,int x,int y,
+                         unsigned width,unsigned height);
+/* Composite to the GL backbuffer; caller swaps through platform_gl_swap. */
 int render_gl_present(const cm_overlay *overlay);
 /* Indexed framebuffer, bottom row first (native GL orientation). */
 int render_gl_readback(uint8_t *pixels,size_t bytes,unsigned stride);
+int render_gl_read_rgba(uint8_t *pixels,size_t bytes);
 void render_gl_dimensions(unsigned *width,unsigned *height);
 const char *render_gl_driver(void);
 void render_gl_close(void);

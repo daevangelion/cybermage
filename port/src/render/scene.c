@@ -17,13 +17,13 @@ static int project_quad(const world *w,const render_state *s,render_quad *q,
     return 1;
 }
 
-static int prop_frame(const world *w,const render_state *s,const world_object *o)
+int render_prop_texture(const world_camera *camera,const world_object *o)
 {
     int texture=o->texture,rotations=o->rotations;
     uint16_t relative;
     unsigned e;
     if (rotations<=1 && rotations!=-3 && rotations!=-9) return texture;
-    relative=(uint16_t)(cm_atan64k(o->x,o->y,s->camera.u,s->camera.v)-o->heading);
+    relative=(uint16_t)(cm_atan64k(o->x,o->y,camera->u,camera->v)-o->heading);
     if (rotations>1) {
         relative=(uint16_t)(relative+32768/rotations);
         texture+=relative/(65536/rotations);
@@ -34,7 +34,6 @@ static int prop_frame(const world *w,const render_state *s,const world_object *o
         e=(uint16_t)(relative+2048)>>12;
         if (e) texture+=(e>4 && e<14) ? 5:(e>13 ? e-8:e);
     }
-    (void)w;
     return texture;
 }
 
@@ -42,7 +41,7 @@ static int prop(const world *w,render_state *s,unsigned object,unsigned light,
                 render_visibility_list *out)
 {
     const world_object *o=r_object(w,s,object);
-    int texture=prop_frame(w,s,o),i;
+    int texture=render_prop_texture(&s->camera,o),i;
     unsigned ang=(uint16_t)(s->camera.angle+16384)>>5;
     int32_t wc,ws,dc,ds,px[4],py[4],base,bottom,top;
     const render_texture *t;

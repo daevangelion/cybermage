@@ -27,7 +27,7 @@ void glr_flat_quad(glr_vertex out[4],const world_object *o,int top,unsigned ligh
         unsigned k=top ? 3-i:i;
         float x=units(o->x)+((k==0 || k==3) ? -units(o->radius):units(o->radius));
         float y=units(o->y)+(k<2 ? -units(o->height):units(o->height));
-        vertex(out+i,x,y,units(o->z),y,x,light,mode|GLR_FLAT);
+        vertex(out+i,x,y,units(o->z),y,x,light,mode|GLR_FLAT|((mode&GLR_MASK) ? (unsigned)(o->heading>>14)<<8:0));
     }
 }
 
@@ -83,6 +83,7 @@ int glr_build_tiles(const world *w,glr_vertex *vertices,unsigned capacity,
                 unsigned texture,mode=0;
                 uint32_t flags;
                 if (!id) continue;
+                if (c->light>=32) return cm_fail("GL mesh",tile,"light index outside table");
                 flags=w->map_id_flags[id];texture=w->map_id_texture[id];
                 if (texture>=w->texture_count || texture>=CM_RENDER_TEXTURES) {
                     if (flags&GLR_ORIG_TRANSPARENT) continue;
@@ -92,6 +93,7 @@ int glr_build_tiles(const world *w,glr_vertex *vertices,unsigned capacity,
                     mode|=(flags&GLR_ORIG_PACK) && !plane ? GLR_PACK:GLR_MASK;
                     if (plane==2) mode&=~(unsigned)GLR_MASK;
                 }
+                texture=texture*2+((mode&GLR_PACK) ? 1u:0u);
                 if (!pass) {++batches[texture].count;++total;}
                 else {
                     world_object o;

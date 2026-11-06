@@ -81,6 +81,7 @@ typedef struct {
 /* State/assets are retained, no allocation or world mutation during a frame. */
 int render_load(const world *w, rsc *hipak);
 int render_sync_textures(const world *w);
+int render_prop_texture(const world_camera *camera,const world_object *object);
 void render_unload(void);
 int render_set_view(int x, int y, int width, int height);
 render_state *render_get_state(void);

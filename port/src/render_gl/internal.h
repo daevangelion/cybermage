@@ -3,7 +3,7 @@
 #include "render_gl.h"
 #include "gl_api.h"
 
-#define GLR_TEXTURE_MAX (CM_RENDER_TEXTURES+1)
+#define GLR_TEXTURE_MAX (CM_RENDER_TEXTURES*2+1)
 #define GLR_TILE_QUADS (CM_MAP_LEVELS*CM_MAP_CELLS*6)
 #define GLR_IMAGE_SIDE 2048u
 #define GLR_IMAGE_BYTES (GLR_IMAGE_SIDE*GLR_IMAGE_SIDE)
@@ -33,6 +33,7 @@ int glr_build_tiles(const world *w,glr_vertex *vertices,unsigned capacity,
                     glr_batch batches[GLR_TEXTURE_MAX],unsigned *quads);
 GLuint glr_program(cm_gl_api *gl,int gles,const char *vertex,const char *fragment);
 const char *glr_world_vertex(void);
+const char *glr_common_fragment(void);
 const char *glr_world_fragment(void);
 const char *glr_screen_vertex(void);
 const char *glr_sky_fragment(void);
