@@ -180,8 +180,13 @@ pre-frame-input runs, not the corrected phase's runtime evidence.
 The genuine `vehicle-river` route uses original Backslash64.3 to finish
 Earthmother's message, opens door143 and advances out of the cave. It matched
 1650 checkpoints /56,832,600 bytes (1649 result edges), still with zero vehicle
-rows. Keyboard01309A's full skip stops all speech segments; completion links
-are consumed after MoveWorld, matching the original console phase.
+rows. Keyboard01309A's full skip stops all speech segments. Completion links
+must be consumed **after actors**, by `events_text_finish` at the original
+RenderBellsAndWhistles019423/01942A phase, not immediately after MoveWorld.
+The earlier event-only gate did not observe NPCs between those phases. A fresh
+water-route textTrigger trace proves that immediate post-World completion
+released NPC130's state3 one frame early; see `audio.md` and
+`check-actor-dialogue` for the measured boundary and regression.
 Its endpoint is scene1 x24.9897,y13.75,floor2,headingC000. The route has not
 reached the first tank: the remaining walkthrough path is river/lifts, Mung and
 his access card, the bridge gap and the tank compound. No later scene is claimed.
