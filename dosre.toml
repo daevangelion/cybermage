@@ -1,0 +1,10 @@
+primary = "CM_HI.EXE"
+labels = "labels.csv"
+
+[modules."CM_HI.EXE"]
+path = "orig/retail/CM_HI.EXE"
+kind = "le"
+
+[modules."DEMO_HI.EXE"]
+path = "orig/demo/CMDEMO/CM_HI.EXE"
+kind = "le"
