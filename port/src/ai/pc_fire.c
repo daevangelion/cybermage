@@ -638,7 +638,7 @@ int ai_pc_input(ai_state *a, sim_state *s, world *w)
     }
     keyboard_hand(p, s, mode);
     fire_input(a, s, &w->persons[w->player_person], mode);
-    if (prepare_aim(a, s, mode)) return -1;
+    if (ai_pc_hit_response(a, s, w) || prepare_aim(a, s, mode)) return -1;
     if ((mode == 1 && ranged_fire(a, s, w)) ||
         (mode == 5 && spell_fire(a, s, w)) ||
         (mode == 7 && tank_fire(a, s, w)) ||

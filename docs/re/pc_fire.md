@@ -20,6 +20,8 @@ Retail CM_HI.EXE v1.01F LE link addresses. Gameplay only; UI consumes state.
 - Hand bob0x1C73F..0x1C873 runs after flight, before jump processing. Its14-step
   waveform scales with signed forward momentum and decays toward zero while idle.
   An active sword swing clears the phase and visual offsets at0x1E7FF..0x1E81B.
+- Hit response0x1CF71..0x1D09E runs before aim preparation: `pc_hit.c` owns its
+  three real random draws, fixed-point lateral push and current-frame camera-Z kick.
 - Hand2Hand0x1A298 uses SwingFrame9x21 i16, swingMode9x9 i32, MatIdx9x9 i32,
   PosMat6x8x8 bytes and SwingDamage21 i32. PERSON3C/3E are current/previous
   swing;40/42 current/previous hand grid;44/46 impact/stun counters;48/4A matrix
