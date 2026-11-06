@@ -596,3 +596,11 @@ are retained in [gate-c2a3a0c.json](gate-c2a3a0c.json). Fresh per-scenario user
 directories copy the actual original configuration: Normal mousea40f,
 campaign Easy4277, or newly original-written Easy mouseab22. Earlier reused-user
 Normal/Easy forecast comparisons were invalid, not gameplay divergences.
+
+The subsequent named8df96e0 gate reruns all140 scenarios after the headless
+planning-clock change, then matches the new87-record catwalk sweep:
+141/141 player and actor/RNG matches. All five phase groups, six controls
+targets and complete `make check` again exit0. The rehearsal cadence changes
+frame-indexed key planning only; actual-clock replay ignores it. See
+[gate-8df96e0.json](gate-8df96e0.json); this is not a claim that cadence3
+forecasts reproduce original survival or wall-time input sampling.
