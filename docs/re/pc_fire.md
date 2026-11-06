@@ -115,13 +115,13 @@ and actual return values without replacing instructions or registers. These dire
 loop fixtures take a prepared running gate; Sim's canonical sampling/cap fixture is
 separate.
 
-The genuine scene1 fire replay at2d61010 has193 completed frames,22 PC fields/frame
-and772 missile checkpoints(17 active) in the former four-slot dump: no field
-divergence. It exercises Starbolt9/impact10,
+The genuine scene1 fire replay at8d59b10 has193 completed frames,22 PC fields/frame
+and2,316 missile checkpoints across all12 slots(17 active): no field divergence.
+The strict-build executable also reports player-state MATCH. It exercises Starbolt9/impact10,
 40→35 energy expenditure, timed recovery and the held-fire release latch. The
 terminal native frame has no next original entry and is excluded. Input replay
 provides clock/keys and measured BIOS seed, never recorded coordinates or hand state.
-The dump/comparators now require all12 missile slots; old four-slot state directories
+The dump/comparators require all12 missile slots; old four-slot state directories
 fail closed and are not retroactively twelve-slot evidence. Nine synthetic
 projectile-trace controls pass, including an active slot11 mutation and a missing
 slot11 record. The added pool-size control failed4!=12 before the cutover.
