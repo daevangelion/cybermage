@@ -3,10 +3,17 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from recapture_gate import CORE, frame_rows, fresh_directory, manifest_routes, paired
+from recapture_gate import CORE, frame_rows, fresh_directory, manifest_routes, paired, selected_indices
 
 
 class PairingTests(unittest.TestCase):
+    def test_explicit_retry_subset_does_not_change_manifest_scope(self):
+        self.assertEqual(selected_indices(list(CORE), []), list(range(12)))
+        self.assertEqual(selected_indices(list(CORE), ['movement']), [2])
+        for names in (['unknown'], ['movement', 'movement']):
+            with self.assertRaises(ValueError):
+                selected_indices(list(CORE), names)
+
     def test_manifest_rejects_duplicate_escape_and_missing_baseline(self):
         baseline = {'routes': [{'route': name} for name in CORE + ('extra',)]}
         valid = {'routes': [{'route': name} for name in CORE + ('extra',)]}

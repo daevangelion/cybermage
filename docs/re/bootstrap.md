@@ -408,6 +408,10 @@ available. Differences are recorded, not suppressed or presented as identity.
 `recapture-results.json` records each worker's exit and log. Only the separate
 named native replay gate can establish parity; a successful recapture is not
 a native MATCH. Delete raw images only after that native scenario passes.
+Use repeated `--only ROUTE` arguments for a narrow retry in a **new** cohort
+directory. The complete manifest is still validated; the selected subset is
+recorded explicitly and is not a claim that every manifest route was recaptured.
+Existing capture directories and receipts are never overwritten.
 
 ### Draw clocks and menu actions
 

@@ -40,6 +40,12 @@ def fresh_directory(path):
     path.mkdir(parents=True, exist_ok=False)
 
 
+def selected_indices(names, only):
+    if only and (len(only) != len(set(only)) or not set(only).issubset(names)):
+        raise ValueError('Selected routes must be unique manifest members')
+    return [i for i, name in enumerate(names) if not only or name in only]
+
+
 def sha(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -133,7 +139,7 @@ def worker(args):
     command = ['oracle.py', str(scenario), '--frame-trace', '--actor-trace',
         '--rng-trace', '--item-trace', '--selector-trace', '--snapshot',
         '--export-saves', str(args.cohort / 'original' / recipe['route'] / 'saves')]
-    if metadata.get('event_trace'):
+    if metadata.get('event_trace') or (old / 'events-input.csv').is_file():
         command.append('--event-trace')
     for span in recipe.get('trace_ranges', metadata.get('trace_ranges', [])):
         command += ['--trace-range', span]
@@ -153,6 +159,12 @@ def worker(args):
     sys.argv = command
     oracle.main()
     new = args.cohort / 'original' / recipe['route']
+    observed = json.loads((new / 'run.json').read_text())
+    if (observed['binary_sha256'] != plan['oracle_sha256'] or
+            observed['patch_sha256'] != plan['patch_sha256'] or
+            (observed.get('imported_saves') or {}) != (metadata.get('imported_saves') or {}) or
+            (observed.get('imported_config') or {}) != (metadata.get('imported_config') or {})):
+        raise ValueError('Completed capture differs from frozen producer or imported inputs')
     result = {'route': recipe['route'], 'old_capture': str(old), 'new_capture': str(new),
         'command': command, 'status': 'CAPTURED', 'comparison': paired(old, new)}
     (new / 'pairing.json').write_text(json.dumps(result, indent=2) + '\n')
@@ -170,6 +182,7 @@ def main():
     parser.add_argument('--oracle-receipt', type=Path)
     parser.add_argument('--worker', type=int)
     parser.add_argument('--plan-sha256')
+    parser.add_argument('--only', action='append', default=[])
     args = parser.parse_args()
     for name in ('root', 'source', 'cohort'):
         setattr(args, name, getattr(args, name).resolve())
@@ -178,7 +191,8 @@ def main():
         return
     manifest = json.loads(args.manifest.read_text())
     baseline = json.loads(Path(manifest['baseline_receipt']).read_text())
-    manifest_routes(manifest, baseline)
+    names = manifest_routes(manifest, baseline)
+    selected = selected_indices(names, args.only)
     fresh_directory(args.cohort)
     scenario_dir = args.cohort / 'scenarios'
     scenario_dir.mkdir()
@@ -203,9 +217,11 @@ def main():
     shutil.copy2(built, binary)
     plan = {'oracle_sha256': sha(binary), 'patch_sha256': sha(args.source / 'tools/oracle-original.patch'),
         'source': str(args.source), 'routes': [],
+        'selected_routes': [names[i] for i in selected],
         'frozen_files': {str(path): sha(path) for path in (
             args.source / 'tools/oracle.py', args.source / 'tools/oracle-original.patch',
-            args.source / 'tools/run_capped.sh', Path(__file__).resolve(), args.manifest.resolve())}}
+            args.source / 'tools/run_capped.sh', Path(__file__).resolve(), args.manifest.resolve(),
+            Path(manifest['baseline_receipt']).resolve())}}
     for recipe in manifest['routes']:
         name = recipe['route']
         old = args.root / 'captures' / name
@@ -242,7 +258,7 @@ def main():
 
     # Manifest order puts the twelve standing core scenarios first. A batch
     # barrier ensures route captures cannot occupy slots ahead of the core.
-    batches = [range(min(12, len(plan['routes']))), range(12, len(plan['routes']))]
+    batches = [[i for i in selected if i < 12], [i for i in selected if i >= 12]]
     with ThreadPoolExecutor(max_workers=3) as pool:
         for batch in batches:
             futures = [pool.submit(capture, index) for index in batch]
@@ -251,6 +267,7 @@ def main():
                 results.append(result)
                 (args.cohort / 'recapture-results.json').write_text(json.dumps(results, indent=2) + '\n')
                 print(result['route'], 'exit=' + str(result['exit']), flush=True)
+    print('Selected captures:', len(selected), 'of', len(names), 'manifest scenarios', flush=True)
     raise SystemExit(1 if any(r['exit'] for r in results) else 0)
 
 
