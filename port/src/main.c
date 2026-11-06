@@ -1028,8 +1028,7 @@ int main(int argc, char **argv)
         }
         ui.ticks = ticks;
         events.ticks = ticks;
-        if (playing && !death_phase &&
-            (game.persons[game.player_person].status == 2 || events.pc_dead_man)) {
+        if (playing && !death_phase && events.pc_dead_man) {
             sim_clock(&simulation, ticks);
             if (simulation.replay_delta >= 0) simulation.frame_ticks = simulation.replay_delta;
             if (death_start(&draw)) goto out;

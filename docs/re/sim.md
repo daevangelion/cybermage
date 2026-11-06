@@ -1,5 +1,9 @@
 # Simulation (CM_HI.EXE retail)
 
+HandleNextFrame01BC3F..01BC4E starts death only on PCDeadMan. A destroyed
+vehicle PERSON is not the foot player's death flag; Events must still run its
+vehicle-exit branch when the foot player survived the spill damage.
+
 | Function | Link address | Contract |
 |---|---:|---|
 | HandleKeyboardEvents | 012DD4 | scan states to movement/yaw/pitch and contextual jump |

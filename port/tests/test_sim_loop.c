@@ -1,13 +1,26 @@
 #define main cybermage_main
 #define snd_close sim_loop_checks
+#define platform_poll loop_poll
 #include "../src/main.c"
 #undef main
 #undef snd_close
+#undef platform_poll
 #include <assert.h>
 
 void snd_close(void);
+int platform_poll(cm_input *input, uint32_t frame);
 static const char *test_user;
-static int training, generic_hand;
+static int training, generic_hand, vehicle_death;
+
+int loop_poll(cm_input *input, uint32_t frame)
+{
+    if (vehicle_death && frame == 3) {
+        game.player_person = 1;
+        game.persons[1].status = 2;
+        events.pc_dead_man = 0;
+    }
+    return platform_poll(input, frame);
+}
 
 static void dirty_selectors(void)
 {
@@ -42,6 +55,12 @@ void sim_loop_checks(void)
 {
     frame_draw draw = {0};
     world_object position = game.objects[game.player_object];
+    if (vehicle_death) {
+        assert(!death_phase && !events.pc_dead_man);
+        game.player_person = 0;
+        snd_close();
+        return;
+    }
     if(generic_hand) {
         assert(game.scene==1 && simulation.pc_mode==3 && !events.selector_kind);
         assert(!events_selector_needs_input(&events));
@@ -305,6 +324,9 @@ int main(int argc, char **args)
     argv[5] = test_user;
     assert(!cybermage_main((int)(sizeof argv / sizeof argv[0]), (char **)argv));
     assert(actors.pc.sword_hum_slot == -1 && actors.pc.sword_hum_sound == 61);
+    vehicle_death = 1;
+    assert(!cybermage_main((int)(sizeof argv / sizeof argv[0]), (char **)argv));
+    vehicle_death = 0;
     assert(!make_path(keys, sizeof keys, test_user, "training.keys"));
     assert(!platform_file_write(keys, training_keys, sizeof training_keys - 1));
     argv[7] = keys;
