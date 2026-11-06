@@ -307,6 +307,7 @@ def main():
                 "frame_trace": "frames.csv" if args.frame_trace else None,
                 "draw_clock_trace": "draw-clocks.csv" if args.frame_trace else None,
                 "ui_action_trace": "ui-actions.csv" if args.frame_trace else None,
+                "death_input_trace": "death-inputs.csv" if args.frame_trace else None,
                 "mouse_trace": "mouse-input.csv" if args.frame_trace else None,
                 "trace_ranges": args.trace_range,
                 "actor_trace": "actors.csv" if args.actor_trace else None,

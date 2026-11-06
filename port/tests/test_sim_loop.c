@@ -170,7 +170,8 @@ void sim_loop_checks(void)
     actors.pc.loop_sound = 0;
     actors.pc.sword_hum_slot = 0;
     actors.pc.sword_hum_sound = 61;
-    assert(!death_start(10));
+    draw.frame = 10;
+    assert(!death_start(&draw));
     assert(simulation.swim_loop == -1 && actors.pc_sound == -1);
     assert(actors.pc.loop_sound == -1);
     assert(actors.pc.sword_hum_slot == -1 && actors.pc.sword_hum_sound == 61);
@@ -179,10 +180,14 @@ void sim_loop_checks(void)
         ui_view view;
         assert(!ui_game_view(&ui, simulation.pc_mode, simulation.vehicle_type, &view));
         assert(!render_set_view(view.x, view.y, view.width, view.height));
-        assert(!death_step(&in, 69, 0, view) && death_phase == 1);
-        assert(!death_step(&in, 70, 0, view) && death_phase >= 2);
+        draw.frame = 69;
+        assert(!death_step(&draw, 0) && death_phase == 1);
+        draw.frame = 70;
+        assert(!death_step(&draw, 0) && death_phase >= 2);
         in.pressed[1] = 1;
-        assert(!death_step(&in, 71, 0, view));
+        sim_scan(&simulation, 1);
+        draw.frame = 71;
+        assert(!death_step(&draw, 0));
         assert(death_phase == 3 && ui.screen == UI_DEATH);
         ui.restart_game = 10;
         ui.slot = 0;

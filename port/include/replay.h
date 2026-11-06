@@ -6,7 +6,7 @@
 #define CM_TRACE_COLUMNS 23
 
 typedef struct { unsigned relative; uint32_t address, length; } cm_trace_range;
-enum { CM_DRAW_NORMAL, CM_DRAW_SAVE, CM_DRAW_LOAD };
+enum { CM_DRAW_NORMAL, CM_DRAW_SAVE, CM_DRAW_LOAD, CM_DRAW_DEATH };
 typedef struct {
     uint32_t frame, draw, phase, site, ticks;
 } cm_replay_draw;
@@ -24,15 +24,17 @@ typedef struct {
     cm_replay_mouse_value value;
 } cm_replay_mouse;
 typedef struct {
-    cm_file file, actor_clocks, draw_clocks, ui_actions, mouse_inputs;
+    cm_file file, actor_clocks, draw_clocks, ui_actions, mouse_inputs, death_inputs;
     const char *path;
     char actor_clock_path[1024];
     char draw_clock_path[1024], ui_action_path[1024];
     char mouse_input_path[1024];
+    char death_input_path[1024];
     uint32_t next, frame;
     uint32_t actor_clock_next;
     uint32_t draw_clock_next, ui_action_next;
     uint32_t mouse_input_next;
+    uint32_t death_input_next;
     uint64_t mouse_sequence;
     cm_replay_draw draw_pending;
     cm_replay_ui ui_pending;
@@ -80,6 +82,8 @@ int replay_ui_next(cm_replay *r, uint32_t frame, cm_replay_ui *action);
  * required comes from actual CMDATA input-device selection, never audits. */
 int replay_mouse_input(cm_replay *r, uint32_t frame, int required, cm_input *input);
 int replay_mouse_poll(cm_replay *r, uint32_t frame, cm_input *input);
+/* PCDeath's actual timer loads and raw Escape byte, not its RNG/branch outputs. */
+int replay_death_read(cm_replay *r, uint32_t frame, uint32_t site, uint32_t *value);
 void replay_input(sim_state *s, const cm_replay_frame *f);
 const char *replay_compare(const world *w, const cm_replay_frame *f,
                             int64_t *expected, int64_t *actual);

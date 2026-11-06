@@ -184,7 +184,7 @@ static int draw_peek(cm_replay *r)
     if (n != 5) goto bad;
     for (i = 0; i < 5; ++i)
         if (integer(fields[i], i == 3 ? 16 : 10, 0, UINT32_MAX, &word[i])) goto bad;
-    if (word[2] > CM_DRAW_LOAD ||
+    if (word[2] > CM_DRAW_DEATH ||
         (word[3] != 0x16391 && word[3] != 0x19377 && word[3] != 0x193a4)) goto bad;
     r->draw_pending.frame = (uint32_t)word[0];
     r->draw_pending.draw = (uint32_t)word[1];
@@ -226,7 +226,7 @@ bad:
 
 int replay_draw_begin(cm_replay *r, uint32_t frame, unsigned phase)
 {
-    if (r->draw_active || phase > CM_DRAW_LOAD)
+    if (r->draw_active || phase > CM_DRAW_DEATH)
         return cm_fail(r->draw_clock_path, r->draw_clock_next, "overlapping draw phase");
     /* No next original checkpoint exists for the last native frame. Do not
      * invent its conditional timer inputs or claim its draw as verified. */
@@ -406,6 +406,39 @@ int replay_mouse_poll(cm_replay *r, uint32_t frame, cm_input *input)
     return 0;
 }
 
+static int death_next(cm_replay *r, uint32_t *frame, uint32_t *site, uint32_t *value)
+{
+    char *fields[3];
+    int64_t word[3];
+    unsigned i;
+    int n = read_line(&r->death_inputs, &r->death_input_next, r->death_input_path, fields, 3);
+    if (n <= 0) return n;
+    if (n != 3) goto bad;
+    for (i = 0; i < 3; ++i)
+        if (integer(fields[i], i == 1 ? 16 : 10, 0, UINT32_MAX, &word[i])) goto bad;
+    if (word[1] != 0x153fd && word[1] != 0x15403 &&
+        word[1] != 0x1543f && word[1] != 0x1555a) goto bad;
+    if (word[1] == 0x1555a && word[2] > UINT8_MAX) goto bad;
+    *frame = (uint32_t)word[0]; *site = (uint32_t)word[1]; *value = (uint32_t)word[2];
+    return 1;
+bad:
+    return cm_fail(r->death_input_path, r->death_input_next, "invalid death timer/key input");
+}
+
+int replay_death_read(cm_replay *r, uint32_t frame, uint32_t site, uint32_t *value)
+{
+    static char message[160];
+    uint32_t observed_frame, observed_site;
+    int n = death_next(r, &observed_frame, &observed_site, value);
+    if (n < 0) return -1;
+    if (!n || observed_frame != frame || observed_site != site) {
+        snprintf(message, sizeof message, "frame=%u: missing or wrong death input at %x",
+                 (unsigned)frame, (unsigned)site);
+        return cm_fail(r->death_input_path, frame, message);
+    }
+    return 0;
+}
+
 int replay_open(cm_replay *r, const char *path)
 {
     static const char *const draw_header[5] = {"frame","draw","phase","pc","ticks"};
@@ -413,6 +446,7 @@ int replay_open(cm_replay *r, const char *path)
     static const char *const mouse_header[14] = {"sequence","frame","ticks","caller",
         "x","y","buttons","mickey_x","mickey_y","press_left","press_right",
         "in_device","mouse_present","joystick_present"};
+    static const char *const death_header[3] = {"frame","pc","value"};
     char *fields[TRACE_FIELDS_MAX];
     int64_t n, address, length;
     uint32_t total = 0;
@@ -445,7 +479,9 @@ int replay_open(cm_replay *r, const char *path)
         trace_metadata(r, &r->ui_actions, r->ui_action_path, sizeof r->ui_action_path,
                        &r->ui_action_next, "ui-actions.csv", ui_header, 5) ||
         trace_metadata(r, &r->mouse_inputs, r->mouse_input_path, sizeof r->mouse_input_path,
-                       &r->mouse_input_next, "mouse-input.csv", mouse_header, 14)) {
+                       &r->mouse_input_next, "mouse-input.csv", mouse_header, 14) ||
+        trace_metadata(r, &r->death_inputs, r->death_input_path, sizeof r->death_input_path,
+                       &r->death_input_next, "death-inputs.csv", death_header, 3)) {
         replay_close(r);
         return -1;
     }
@@ -462,6 +498,7 @@ void replay_close(cm_replay *r)
     platform_file_release(&r->draw_clocks);
     platform_file_release(&r->ui_actions);
     platform_file_release(&r->mouse_inputs);
+    platform_file_release(&r->death_inputs);
 }
 
 int replay_next(cm_replay *r, cm_replay_frame *frame)
@@ -470,6 +507,7 @@ int replay_next(cm_replay *r, cm_replay_frame *frame)
     unsigned i;
     int n = line(r, fields, TRACE_FIELDS_MAX);
     if (n <= 0) {
+        uint32_t frame, site, value;
         if (n < 0) goto bad;
         if (r->actor_clock_next != r->actor_clocks.size)
             return cm_fail(r->actor_clock_path, r->actor_clock_next, "extra actor clock rows");
@@ -490,6 +528,10 @@ int replay_next(cm_replay *r, cm_replay_frame *frame)
                 return mouse_failure(r, r->frame, "extra or missed mouse inputs");
             r->has_mouse_pending = 0;
         }
+        if (n < 0) return -1;
+        while ((n = death_next(r, &frame, &site, &value)) > 0)
+            if (!r->frame || frame != r->frame - 1)
+                return cm_fail(r->death_input_path, frame, "extra or missed death inputs");
         if (n < 0) return -1;
         return 0;
     }

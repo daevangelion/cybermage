@@ -28,7 +28,8 @@ static uint8_t save_data[UI_SAVE_MAX];
 static uint8_t auto_data[UI_SAVE_MAX];
 static uint8_t death_background[CM_WIDTH * CM_HEIGHT];
 static unsigned death_columns[CM_WIDTH];
-static uint32_t death_deadline;
+static uint32_t death_deadline, death_wait_time;
+static int32_t death_frame_ticks;
 static int death_phase;
 static int gl_enabled, gl_recording, gl_overlay_valid, gl_death_prepared;
 static unsigned gl_width, gl_height;
@@ -231,7 +232,7 @@ static int game_draw(frame_draw *draw, unsigned phase)
     if (ui_draw_pc_tint(&ui, pixels, &actors, view, 1) ||
         ui_hud_from_world(&hud, &game, &events, ui.hp_count, visual_mode) ||
         ui_render_bells_and_whistles(&ui, pixels, &hud, &clock) ||
-        (!death_phase && ai_pc_draw_advance(&actors, &simulation, &game, &clock)))
+        ai_pc_draw_advance(&actors, &simulation, &game, &clock))
         return -1;
     {
         const snd_dialogue *dialogue = snd_text();
@@ -533,16 +534,28 @@ static int movie_start(const char *data, unsigned kind, uint32_t ticks)
     return 0;
 }
 
-static int death_start(uint32_t ticks)
+static int death_input(frame_draw *draw, uint32_t site, uint32_t *value)
+{
+    if (draw->trace) return replay_death_read(draw->trace, draw->frame, site, value);
+    *value = site == 0x1555a ? simulation.kb_scan_status[1] : platform_ticks(draw->frame);
+    return 0;
+}
+
+static int death_start(frame_draw *draw)
 {
     unsigned x;
+    uint32_t ticks;
     if (snd_kill_loops(&game, 1)) return -1;
     simulation.swim_loop = -1;
     actors.pc_sound = -1;
     actors.pc.loop_sound = -1;
     actors.pc.sword_hum_slot = -1;
     for (x = 0; x < CM_WIDTH; ++x) death_columns[x] = 7;
+    if (death_input(draw, 0x153fd, &ticks)) return -1;
     death_deadline = ticks + 60;
+    if (death_input(draw, 0x15403, &death_wait_time)) return -1;
+    death_frame_ticks = simulation.frame_ticks;
+    events.pc_dead_man = 1;
     death_phase = 1;
     return 0;
 }
@@ -570,24 +583,32 @@ static ui_action menu_input(const cm_input *input, uint32_t ticks)
     return action;
 }
 
-static int death_step(const cm_input *input, uint32_t ticks, int no_sound, ui_view view)
+static int death_backdrop(void)
+{
+    if (gl_enabled && (gl_overlay_end() || render_gl_clear(0) || gl_overlay_begin()))
+        return -1;
+    memcpy(pixels, death_background, sizeof pixels);
+    gfx_cover(pixels, sizeof pixels);
+    return 0;
+}
+
+static int death_step(frame_draw *draw, int no_sound)
 {
     int song, finished;
+    uint32_t escape;
     if (death_phase == 1) {
         const uint8_t *image;
         uint32_t size;
         unsigned x, y;
-        if (gl_enabled) {
-            ui_view hole;
-            if (gl_world_view(view, &hole)) return -1;
-            if (!gl_death_prepared) {
-                for (y = (unsigned)hole.y; y < (unsigned)(hole.y + hole.height); ++y)
-                    memset(gl_overlay.coverage + y * CM_WIDTH + hole.x, 0, (size_t)hole.width);
-                gl_overlay.world_map = 0;
-                gl_death_prepared = 1;
-            }
-        } else if (render_draw(&game, &game.camera, pixels)) return -1;
-        if ((int32_t)(ticks - death_deadline) < 0) return 0;
+        /* PCDeath015410..015445 redraws the complete primary view/HUD, not
+         * just the world. Its two initial time reads can straddle an IRQ. */
+        if ((death_wait_time ^ UINT32_C(0x80000000)) <
+            (death_deadline ^ UINT32_C(0x80000000))) {
+            if (game_draw(draw, CM_DRAW_DEATH) ||
+                death_input(draw, 0x1543f, &death_wait_time)) return -1;
+            if ((death_wait_time ^ UINT32_C(0x80000000)) <
+                (death_deadline ^ UINT32_C(0x80000000))) return 0;
+        }
         if (simulation.pc_mode == 7 &&
             events_set_tank_mode(&events, &simulation, &game, 0)) return -1;
         if (rsc_entry(&hipak, 1, &image, &size)) return -1;
@@ -603,7 +624,16 @@ static int death_step(const cm_input *input, uint32_t ticks, int no_sound, ui_vi
     if (finished < 0) return -1;
     song = snd_check_song();
     if (song < 0) return -1;
-    if (song || input->pressed[1] || (no_sound && finished)) {
+    if (death_input(draw, 0x1555a, &escape)) return -1;
+    if (escape) {
+        simulation.kb_scan_status[1] = 0;
+        snd_song_end();
+    }
+    if (song || escape || (no_sound && finished)) {
+        /* The original virtual callback01559E is vPlaneErase015050, not
+         * Image1::Render. Death menus get the backscreen, without HUD/RNG. */
+        if (death_backdrop()) return -1;
+        memset(simulation.kb_scan_status, 0, sizeof simulation.kb_scan_status);
         death_phase = 3;
         ui_open(&ui, UI_DEATH);
     }
@@ -987,7 +1017,7 @@ int main(int argc, char **argv)
         if (playing && !death_phase &&
             (game.persons[game.player_person].status == 2 || events.pc_dead_man)) {
             events.pc_dead_man = 0;
-            if (death_start(ticks)) goto out;
+            if (death_start(&draw)) goto out;
         }
         if (!trace && playing && ui.screen == UI_GAME && !death_phase) {
             shop_modal = ui_shop_step(&ui, &events, &game, &input, ticks);
@@ -1039,7 +1069,7 @@ int main(int argc, char **argv)
                 ai_start_clock(&actors, ticks);
                 if (ui_game_view(&ui, simulation.pc_mode, simulation.vehicle_type, &view) ||
                     render_set_view(view.x, view.y, view.width, view.height)) goto out;
-                if (death_step(&input, ticks, trace != NULL, view)) goto out;
+                if (death_step(&draw, trace != NULL)) goto out;
                 goto audio_output;
             }
             if (ui.screen == UI_GAME && !shop_modal) {

@@ -368,6 +368,31 @@ static int tank(void)
     return count == EOF ? 0 : 2;
 }
 
+static int melt(char **argv)
+{
+    static uint8_t image[CM_WIDTH * CM_HEIGHT], background[CM_WIDTH * CM_HEIGHT];
+    unsigned columns[CM_WIDTH];
+    unsigned i, pass, pattern = (unsigned)strtoul(argv[3], NULL, 0);
+    if (pattern > 2) return 2;
+    for (i = 0; i < 3; ++i) w.rng.word[i] = (uint16_t)strtoul(argv[i], NULL, 0);
+    for (i = 0; i < sizeof image; ++i) {
+        image[i] = (uint8_t)(i * 13 + (i / CM_WIDTH) * 7);
+        background[i] = (uint8_t)(i * 29 + i / CM_WIDTH);
+    }
+    for (i = 0; i < CM_WIDTH; ++i)
+        columns[i] = pattern == 0 ? 7u : pattern == 1 ? 7u + (i % 61) * 8 : CM_HEIGHT + 7u;
+    for (pass = 0; pass < 4; ++pass) {
+        int result = ui_pc_death(image, background, columns, &w.rng);
+        if (result < 0) return 1;
+        printf("%d %u %u %u", result, (unsigned)w.rng.word[0],
+               (unsigned)w.rng.word[1], (unsigned)w.rng.word[2]);
+        for (i = 0; i < CM_WIDTH; ++i) printf(" %u", columns[i]);
+        putchar('\n');
+        if (fwrite(image, 1, sizeof image, stdout) != sizeof image) return 1;
+    }
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     if (argc != 2 && (argc != 3 || strcmp(argv[2], "tank")) &&
@@ -375,10 +400,12 @@ int main(int argc, char **argv)
         (argc != 6 || strcmp(argv[2], "regen")) &&
         (argc != 8 || strcmp(argv[2], "bob")) &&
         (argc != 10 || strcmp(argv[2], "breath")) &&
-        (argc != 13 || strcmp(argv[2], "hum"))) return 2;
+        (argc != 13 || strcmp(argv[2], "hum")) &&
+        (argc != 7 || strcmp(argv[2], "melt"))) return 2;
     if (setup(argv[1])) return 1;
     if (argc == 2) return checks();
     if (argc == 3) return tank();
+    if (argc == 7) return melt(argv+3);
     if (argc == 9) return hand(argv+3);
     if (argc == 10) return breath(argv+3);
     if (argc == 13) return hum(argv+3);

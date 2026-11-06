@@ -287,13 +287,59 @@ def compare_tank(native):
     return len(cases)
 
 
+def compare_melt(native):
+    original = Original()
+    cpu = original.cpu
+    size = 640 * 480
+    background = bytes((i * 29 + i // 640) & 255 for i in range(size))
+    count = 0
+    for seed in ((1, 2, 3), (3000, 44, 29999), (65535, 32768, 32767)):
+        for pattern in range(3):
+            image = bytes((i * 13 + (i // 640) * 7) & 255 for i in range(size))
+            columns = [7 if pattern == 0 else 7 + (i % 61) * 8 if pattern == 1 else 487
+                       for i in range(640)]
+            cpu.mem_write(THIS, image)
+            cpu.mem_write(THIS + 0xE5920, background)
+            cpu.mem_write(STACK, struct.pack('<640H', *columns))
+            cpu.mem_write(0x9747F, struct.pack('<3H', *seed))
+            cpu.mem_write(0x1E38C8, struct.pack('<I', 1))  # Real original -x option.
+            data = subprocess.check_output([str(native), str(ROOT / 'orig/retail/CM_HI.EXE'),
+                                            'melt', *map(str, seed), str(pattern)])
+            cursor = 0
+            for pass_number in range(4):
+                end = data.index(b'\n', cursor)
+                actual = tuple(map(int, data[cursor:end].split()))
+                pixels = data[end+1:end+1+size]
+                cursor = end + 1 + size
+                cpu.mem_write(STACK + 0x500, struct.pack('<III', THIS+0xE5920, 0, THIS+0x4AD80))
+                cpu.reg_write(UC_X86_REG_EBP, THIS)
+                cpu.reg_write(UC_X86_REG_ESP, STACK)
+                cpu.emu_start(0x1547C, 0x15534, count=10_000_000)
+                if cpu.reg_read(UC_X86_REG_EIP) != 0x15534:
+                    raise ValueError('original melt did not reach its pass boundary')
+                expected = (struct.unpack('<I', cpu.mem_read(STACK+0x504, 4))[0],
+                            *struct.unpack('<3H', cpu.mem_read(0x9747F, 6)),
+                            *struct.unpack('<640H', cpu.mem_read(STACK, 1280)))
+                if actual != expected or pixels != bytes(cpu.mem_read(THIS, size)):
+                    raise ValueError(f'death melt seed={seed} pattern={pattern} pass={pass_number}: '
+                                     'pixel/column/RNG/completion mismatch')
+                count += 1
+            if cursor != len(data):
+                raise ValueError('extra native melt fixture output')
+    return count
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('native', type=Path)
     parser.add_argument('--tank-only', action='store_true')
+    parser.add_argument('--melt-only', action='store_true')
     args = parser.parse_args()
     if args.tank_only:
         print(f'PC tank aim: {compare_tank(args.native.resolve())} unmodified original x86 cases matched')
+        return
+    if args.melt_only:
+        print(f'PC death melt: {compare_melt(args.native.resolve())} unmodified original x86 passes matched byte-exactly')
         return
     count = 0
     for seed in ((1, 2, 3), (3000, 44, 29999), (65535, 32768, 32767)):
@@ -341,6 +387,7 @@ def main():
     print(f'PC loops: {count} unmodified original x86 input frames matched '
           '(held-primary versus swing pulse, running, melee, tank/aircar, stop breath and exact RND calls)')
     print(f'PC tank aim: {compare_tank(args.native.resolve())} unmodified original x86 cases matched')
+    print(f'PC death melt: {compare_melt(args.native.resolve())} unmodified original x86 passes matched byte-exactly')
 
 
 if __name__ == '__main__':

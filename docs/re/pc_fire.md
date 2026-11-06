@@ -186,6 +186,18 @@ and changes no game algorithm. The adapter-free discrepancy remains a recorded
 original undefined-memory difference, not a hidden fallback. Both saved-start
 controls above match strictly without this adapter.
 
+### Death renderer checkpoint
+
+The unmodified PCDeath1547C..15534 melt block matches36 native passes
+byte-for-byte for all307,200 pixels,640 column states, RNG words and completion
+flags (three seeds and three initial column patterns). Each pass makes480 real
+RND(640) calls;154FE loads0x280, not64. The live wait now uses the complete HUD
+draw pipeline and the death backdrop callback is vPlaneErase15050. The new
+optional `death-inputs.csv` records timer loads153FD/15403/1543F and raw Escape
+1555A; UI inputs include actual death Load/Restart callers15605/1561A.
+This building API/observer checkpoint is not yet same-HandleNextFrame death/
+reload parity; that controller integration is isolated in the PortDeath worktree.
+
 The original-only `vehicle-powerblade` scenario loads the genuinely earned
 `captures/earned-water` slot0, follows the river, stands/vaults onto the dry
 outcropping, picks up item4, then uses F1/F1 and Space. The 34-second capture has448
