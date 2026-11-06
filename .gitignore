@@ -1,0 +1,10 @@
+orig/
+ref/
+build/
+port/build/
+port/android/build/
+captures/
+.venv
+__pycache__/
+*.pyc
+unpacked/
