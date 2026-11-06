@@ -10,6 +10,9 @@ old file; temporary files are removed on write, close and rename failures.
 SDL application background/foreground events pause the platform epoch at the
 event-watch boundary, including time blocked inside Android's poll. Simulation
 deadlines and frame pacing exclude suspension, not merely movement deltas.
+Original replay fails closed before starting a movie, whose modal frames have no
+CMTRACE clock/input contract. Every executed actor frame requires measured
+actor-clocks.csv entries; only the unexecuted terminal checkpoint may omit them.
 
 `vis` owns the pixel-free original ray traversal and ordered scene lists.
 Dependency direction is `render_sw → vis ← target → world`; neither `vis` nor

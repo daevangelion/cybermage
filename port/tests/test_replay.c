@@ -56,6 +56,7 @@ static void fixture(void)
     unsigned frame, column;
     size_t at;
     draw_input = ui_input = mouse_input = death_input = NULL;
+    clock_input = "frame,fast_ticks,normal_ticks\n0,0,0\n1,0,0\n";
     memset(trace, 0, sizeof trace);
     at = (size_t)snprintf(trace, sizeof trace,
         "CMTRACE1,0\nframe,ticks,previous,delta,limit_time,limit_flag,object,person,"
@@ -80,7 +81,7 @@ static void draw_controls(void)
     cm_replay_frame frame;
     cm_replay_ui action;
     uint32_t ticks;
-    fixture(); clock_input = NULL;
+    fixture();
     draw_input = "frame,draw,phase,pc,ticks\n"
         "0,0,1,16391,10\n0,0,1,19377,11\n0,0,1,193a4,12\n"
         "0,1,0,19377,13\n1,0,0,19377,14\n";
@@ -163,7 +164,7 @@ static void mouse_controls(void)
     cm_replay r;
     cm_replay_frame frame;
     cm_input input = {0};
-    fixture(); clock_input = NULL;
+    fixture();
     mouse_input = "sequence,frame,ticks,caller,x,y,buttons,mickey_x,mickey_y,press_left,press_right,in_device,mouse_present,joystick_present\n"
         "0,-1,10,54196,320,100,1,0,0,1,0,0,0,1\n"
         "1,0,11,4e1ef,180,50,0,-2,-3,0,0,2,0,65535\n"
@@ -214,7 +215,7 @@ static void death_controls(void)
     cm_replay r;
     cm_replay_frame frame;
     uint32_t value;
-    fixture(); clock_input = NULL;
+    fixture();
     death_input = "frame,pc,value\n0,153fd,10\n0,15403,11\n0,1543f,72\n0,1555a,3\n";
     assert(!replay_open(&r, "frames.csv") && replay_next(&r, &frame) == 1);
     assert(!replay_death_read(&r, 0, 0x153fd, &value) && value == 10);
@@ -285,10 +286,8 @@ int main(void)
     fixture();
     clock_input = NULL;
     assert(!replay_open(&r, "frames.csv"));
-    assert(replay_next(&r, &f) == 1 && !f.has_actor_clocks);
-    assert(replay_next(&r, &f) == 1);
-    assert(replay_next(&r, &f) == 1);
-    assert(!replay_next(&r, &f));
+    assert(replay_next(&r, &f) == -1);
+    assert(!strcmp(cm_last_error()->file, "actor-clocks.csv"));
     replay_close(&r);
     fixture();
     clock_input = "frame,normal_ticks,fast_ticks\n";

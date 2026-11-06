@@ -560,8 +560,9 @@ int replay_next(cm_replay *r, cm_replay_frame *frame)
         if (hex(frame->range_hex[i], NULL, r->ranges[i].length)) goto bad;
     }
     frame->has_actor_clocks = 0;
-    frame->normal_actor_ticks = frame->fast_actor_ticks =
-        (uint32_t)frame->values[CM_TRACE_TICKS];
+    frame->normal_actor_ticks = frame->fast_actor_ticks = 0;
+    if (!r->actor_clocks.data && r->next != r->file.size)
+        return cm_fail(r->actor_clock_path, r->frame, "missing measured actor clock file");
     if (r->actor_clocks.data) {
         char *clocks[3];
         int64_t clock_frame, fast, normal;

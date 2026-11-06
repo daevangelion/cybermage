@@ -568,6 +568,8 @@ static int next_scene(const char *data, const char *user, frame_draw *draw)
 
 static int movie_start(const char *data, unsigned kind, uint32_t ticks)
 {
+    if (replay.file.data)
+        return cm_fail(replay.path, replay.frame, "movies are not supported during original replay");
     if (snd_movie_begin(data, kind, 0, ticks)) return -1;
     actors.pc.sword_hum_slot = -1;
     return 0;

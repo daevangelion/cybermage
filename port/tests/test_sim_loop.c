@@ -347,6 +347,11 @@ void sim_loop_checks(void)
             assert(snd_movie_active());
             snd_movie_end();
         }
+        replay.path = "unit replay";
+        replay.file.data = (uint8_t *)"trace";
+        assert(movie_start("../orig/retail", SND_MOVIE_ENDING, 0) == -1);
+        assert(!snd_movie_active());
+        replay.file.data = NULL;
     }
     actors.pc.sword_hum_slot = 0;
     actors.pc.sword_hum_sound = 61;
