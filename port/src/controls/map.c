@@ -37,8 +37,10 @@ int controls_draw_map(const cm_controls *c, const world *w,
         for (side = 0; side < 4; ++side) {
             if (!(cell->wall_sides & (255u << (side * 8)))) continue;
             for (i = 0; i < MAP_SCALE; ++i)
-                point(pixels, bx + (side == 0 ? 0 : side == 2 ? MAP_SCALE - 1 : (int)i),
-                       by + (side == 1 ? 0 : side == 3 ? MAP_SCALE - 1 : (int)i), 125);
+                /* RaySight 05D6D4 crosses at +0xffff within the old tile:
+                 * side 0 east, 1 south, 2 west, 3 north. */
+                point(pixels, bx + (side == 2 ? 0 : side == 0 ? MAP_SCALE - 1 : (int)i),
+                       by + (side == 3 ? 0 : side == 1 ? MAP_SCALE - 1 : (int)i), 125);
         }
     }
     px = MAP_X + (int)((int64_t)o->x * MAP_SCALE / 65536);

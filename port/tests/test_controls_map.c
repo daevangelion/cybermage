@@ -25,7 +25,9 @@ int main(void)
     w.cells[0][3 * 32 + 2].wall_sides = 0x00000101;
     w.trig.cos[0] = 65536;
     assert(!controls_draw_map(&c, &w, pixels));
-    assert(pixels[(12 + 18) * CM_WIDTH + 432 + 12] == 125);
+    assert(pixels[(12 + 18) * CM_WIDTH + 432 + 12] == 0);
+    assert(pixels[(12 + 18 + 1) * CM_WIDTH + 432 + 12 + 5] == 125);
+    assert(pixels[(12 + 18 + 5) * CM_WIDTH + 432 + 12 + 1] == 125);
     assert(pixels[(12 + 18 + 3) * CM_WIDTH + 432 + 12 + 3] == 255);
     assert(pixels[0] == 7);
     controls_frame(&c, CONTROLS_FOOT, &physical, &out);

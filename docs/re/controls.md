@@ -97,7 +97,9 @@ Back=4, Start=6, L3=7, R3=8, LB=9, RB=10, D-pad up/down/left/right=11/12/13/14.
 Automap is a modern live-topology overlay, not a reproduction of DOS AutoMap
 artwork or its exploration-reveal rules. It draws the current height level's
 wall cells and the actual player position/heading in a 192×192 upper-right
-panel. P uses the existing pause menu rather than a separate pause screen.
+panel. Wall bytes map east/south/west/north, matching the original ray
+crossings within the old tile at its +0xffff boundary. P uses the existing
+pause menu rather than a separate pause screen.
 
 ## Android touch
 
