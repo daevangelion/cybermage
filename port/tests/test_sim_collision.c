@@ -10,6 +10,36 @@ static events_state e;
 static sim_state s;
 static ai_state a;
 
+static void jumble_axis_proposals(void)
+{
+    static const struct {
+        int32_t x, y, dx, dy, want_x, want_y;
+        uint16_t mask;
+    } cases[] = {
+        {0x1c100,0x18000,0,-1024,0x1bfff,0x17c00,0x0800},
+        {0x18000,0x1c100,-1024,0,0x17c00,0x1bfff,0x4000},
+        {0x10100,0x18000,0,-1024,0x14000,0x17c00,0x0100},
+        {0x18000,0x10100,-1024,0,0x17c00,0x14000,0x0004},
+        {0x1c100,0x18000,512,-1024,0x1c300,0x17c00,0}
+    };
+    unsigned i;
+    for (i = 0; i < sizeof cases / sizeof cases[0]; ++i) {
+        world_object *o;
+        memset(&w, 0, sizeof w); memset(&s, 0, sizeof s);
+        w.object_count = 2; w.person_count = 1; w.player_object = 1;
+        w.persons[0].object = 1;
+        o = &w.objects[1];
+        o->person = 0; o->x = cases[i].x; o->y = cases[i].y;
+        o->active = o->targetable = 1;
+        w.path_mask[0][33] = cases[i].mask;
+        assert(!world_make_omap(&w));
+        /* JumbleBound046C87..046CBC writes a proposal axis only for
+         * origin quarter0/3. Middle quarters retain that axis's delta. */
+        assert(!sim_jumble_bound(&s, &w, 1, cases[i].dx, cases[i].dy, 1));
+        assert(o->x == cases[i].want_x && o->y == cases[i].want_y);
+    }
+}
+
 static void crouch_contact(void)
 {
     world_rng expected;
@@ -106,5 +136,6 @@ int main(void)
     assert(!sim_coll_object(&s, &w, 970, &x, &y));
     assert(x == 944128 - 7680 - SIM_OBJECT_MARGIN - 1);
     crouch_contact();
+    jumble_axis_proposals();
     return 0;
 }
