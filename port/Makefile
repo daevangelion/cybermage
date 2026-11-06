@@ -35,6 +35,7 @@ check: $(B)/test_core $(B)/test_platform $(B)/test_touch $(B)/test_sim $(B)/test
 	$(abspath ../.venv/bin/python) ../tools/sim_swim_original.py $(B)/test_sim_swim_original 7
 	$(abspath ../.venv/bin/python) tests/test_swim_trace.py
 	$(MAKE) -f tests/controls.mk B=$(B) controls-check
+	$(MAKE) -f tests/sim_phases.mk B=$(B) sim-phases-check
 	$(abspath ../.venv/bin/python) ../tools/sim_fire_original.py $(B)/test_sim_fire
 	$(B)/test_sim_fire_ubsan 0 0 0
 	$(abspath ../.venv/bin/python) ../tools/test_rsc.py
