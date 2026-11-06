@@ -10,7 +10,7 @@
 void snd_close(void);
 int platform_poll(cm_input *input, uint32_t frame);
 static const char *test_user;
-static int training, generic_hand, vehicle_death;
+static int training, generic_hand, vehicle_death, cadence;
 
 int loop_poll(cm_input *input, uint32_t frame)
 {
@@ -55,6 +55,12 @@ void sim_loop_checks(void)
 {
     frame_draw draw = {0};
     world_object position = game.objects[game.player_object];
+    if (cadence) {
+        assert(platform_ticks(3) == (uint32_t)(3 * cadence));
+        assert(simulation.timer_ticks == (uint32_t)(3 * cadence));
+        snd_close();
+        return;
+    }
     if (vehicle_death) {
         assert(!death_phase && !events.pc_dead_man);
         game.player_person = 0;
@@ -373,6 +379,14 @@ int main(int argc, char **args)
     argv[5] = test_user;
     assert(!cybermage_main((int)(sizeof argv / sizeof argv[0]), (char **)argv));
     assert(actors.pc.sword_hum_slot == -1 && actors.pc.sword_hum_sound == 61);
+    {
+        const char *paced[14];
+        memcpy(paced, argv, sizeof argv);
+        paced[12] = "--ticks-per-frame"; paced[13] = "4";
+        cadence = 4;
+        assert(!cybermage_main(14, (char **)paced));
+        cadence = 0;
+    }
     vehicle_death = 1;
     assert(!cybermage_main((int)(sizeof argv / sizeof argv[0]), (char **)argv));
     vehicle_death = 0;
@@ -402,6 +416,14 @@ int main(int argc, char **args)
         assert(cybermage_main(3, (char **)bad_renderer) == 2);
         assert(!gl_enabled && !gl_recording && !gl_overlay_valid);
         assert(!gl_width && !gl_height);
+    }
+    {
+        static const char *values[] = {"0", "9", "-1", "invalid"};
+        unsigned i;
+        for (i = 0; i < sizeof values / sizeof values[0]; ++i) {
+            const char *bad[] = {"cybermage", "--ticks-per-frame", values[i]};
+            assert(cybermage_main(3, (char **)bad) == 2);
+        }
     }
     return 0;
 }

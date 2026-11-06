@@ -82,6 +82,12 @@ Verification controls (`--headless`, `--keys`, `--frames`, `--dump`,
 They never install expected player/actor outputs. The unavoidable original
 undefined-memory choices below apply to both presentations; no normal-play switch
 claims to emulate allocator or uninitialized-stack history.
+`--ticks-per-frame N` (default1, range1..8) advances the headless planning clock
+by N 40Hz ticks per rendered frame. Key scripts remain frame-indexed; movement
+still uses the original two-tick delta cap while absolute AI/event clocks see
+the selected cadence. Use3 or4 for port-first route planning under original-like
+render load. Windowed runs ignore the option, and `--replay` always ignores it
+and keeps the measured frame/actor/draw clocks.
 
 ## Deliberate original undefined-memory deviation
 

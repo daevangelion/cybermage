@@ -82,6 +82,7 @@ int platform_state_dump(const char *directory, unsigned frame,
                         const char *text, size_t length);
 void platform_wait(unsigned frame);
 uint32_t platform_ticks(unsigned frame);
+int platform_tick_step(unsigned ticks); /* Headless cadence; init resets to1. */
 void platform_audio_lock(void);
 void platform_audio_unlock(void);
 int platform_report(const char *message);

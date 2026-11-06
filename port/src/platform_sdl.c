@@ -34,6 +34,7 @@ static uint64_t suspended_at;
 static int suspended;
 static SDL_SpinLock clock_lock;
 static int is_headless;
+static unsigned headless_tick_step = 1;
 static key_event events[KEY_EVENTS_MAX];
 static unsigned event_count, event_next;
 static uint8_t extended_held[CM_KEY_COUNT];
@@ -200,6 +201,7 @@ int platform_init(int headless)
     flags = SDL_WINDOW_FULLSCREEN_DESKTOP | SDL_WINDOW_ALLOW_HIGHDPI;
 #endif
     is_headless = headless;
+    headless_tick_step = 1;
     if (SDL_Init(SDL_INIT_TIMER | (headless ? 0 : SDL_INIT_VIDEO | SDL_INIT_AUDIO)))
         return cm_fail("SDL", 0, SDL_GetError());
     user_dir = SDL_GetPrefPath("jshield", "cybermage");
@@ -1036,11 +1038,19 @@ int platform_dump(const char *directory, unsigned frame,
 uint32_t platform_ticks(unsigned frame)
 {
     uint64_t elapsed;
-    if (is_headless) return frame;
+    if (is_headless) return (uint32_t)frame * headless_tick_step;
     SDL_AtomicLock(&clock_lock);
     elapsed = (suspended ? suspended_at : SDL_GetTicks64()) - start;
     SDL_AtomicUnlock(&clock_lock);
     return (uint32_t)(elapsed * CM_TICK_HZ / 1000);
+}
+
+int platform_tick_step(unsigned ticks)
+{
+    if (ticks < 1 || ticks > 8)
+        return cm_fail("headless clock", ticks, "ticks per frame must be 1..8");
+    headless_tick_step = ticks;
+    return 0;
 }
 
 void platform_wait(unsigned frame)

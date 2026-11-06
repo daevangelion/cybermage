@@ -31,6 +31,13 @@ int main(int argc, char **argv)
     assert(snprintf(state_path, sizeof state_path, "%s/never-created-absent-test.bin", argv[2]) > 0);
     assert(platform_file_exists(state_path) == 0);
     assert(platform_ticks(99) == 99);
+    for (i = 1; i <= 8; ++i) {
+        assert(!platform_tick_step(i));
+        assert(platform_ticks(99) == 99 * i);
+    }
+    assert(platform_tick_step(0) == -1 && platform_tick_step(9) == -1);
+    assert(platform_ticks(99) == 99 * 8);
+    assert(!platform_tick_step(1));
     assert(platform_state_dump(argv[2], 42, "state\n", 6) == 0);
     assert(snprintf(state_path, sizeof state_path, "%s/frame000042.state", argv[2]) > 0);
     assert(platform_file_read(&file, state_path) == 0);

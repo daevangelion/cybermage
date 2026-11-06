@@ -833,6 +833,7 @@ int main(int argc, char **argv)
     cm_input physical = {.mouse_x = 446, .mouse_y = 134};
     cm_replay_frame recorded;
     unsigned frames = 0, frame = 0, bios_seed = 0, replay_slot = 0;
+    unsigned ticks_per_frame = 1;
     uint32_t audio_ticks = 0;
     int headless = 0, status = 1, playing = 0, divergence = 0, seed_explicit = 0, i;
     int modern = 0;
@@ -845,6 +846,7 @@ int main(int argc, char **argv)
         else if ((!strcmp(argv[i], "--data") || !strcmp(argv[i], "--dump") ||
                   !strcmp(argv[i], "--keys") || !strcmp(argv[i], "--frames") ||
                   !strcmp(argv[i], "--state-dump") ||
+                  !strcmp(argv[i], "--ticks-per-frame") ||
                   !strcmp(argv[i], "--user") || !strcmp(argv[i], "--bios-seed") ||
                   !strcmp(argv[i], "--controls") ||
                   !strcmp(argv[i], "--renderer") || !strcmp(argv[i], "--width") ||
@@ -859,6 +861,12 @@ int main(int argc, char **argv)
             else if (!strcmp(arg, "--user")) user = argv[i];
             else if (!strcmp(arg, "--controls")) control_mode = argv[i];
             else if (!strcmp(arg, "--renderer")) renderer = argv[i];
+            else if (!strcmp(arg, "--ticks-per-frame")) {
+                if (number(argv[i], &ticks_per_frame) || !ticks_per_frame || ticks_per_frame > 8) {
+                    cm_fail("arguments", 0, "--ticks-per-frame must be 1..8");
+                    return 2;
+                }
+            }
             else if (!strcmp(arg, "--width") || !strcmp(arg, "--height")) {
                 unsigned *dimension = !strcmp(arg, "--width") ? &gl_width : &gl_height;
                 if (number(argv[i], dimension) || !*dimension || *dimension > CM_GL_SIZE_MAX) {
@@ -887,7 +895,7 @@ int main(int argc, char **argv)
                 return 2;
             }
         } else {
-            platform_report("usage: cybermage [--data DIR] [--user DIR] [--bios-seed N] [--controls classic|modern] [--renderer sw|gl] [--width N --height N] [--headless] [--frames N] [--dump DIR] [--state-dump DIR] [--keys FILE | --replay TRACE [--replay-load-slot N | --import-undefined PERSONS]]");
+            platform_report("usage: cybermage [--data DIR] [--user DIR] [--bios-seed N] [--controls classic|modern] [--renderer sw|gl] [--width N --height N] [--headless] [--ticks-per-frame N] [--frames N] [--dump DIR] [--state-dump DIR] [--keys FILE | --replay TRACE [--replay-load-slot N | --import-undefined PERSONS]]");
             return 2;
         }
     }
@@ -922,6 +930,7 @@ int main(int argc, char **argv)
     }
     if (headless && !frames && !trace) frames = 1;
     if (platform_init(headless)) goto out;
+    if (headless && !trace && platform_tick_step(ticks_per_frame)) goto out;
     if (!user) user = platform_user_dir();
     if (platform_directory(user)) goto out;
     controls_init(&controls);

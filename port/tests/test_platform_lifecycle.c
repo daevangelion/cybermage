@@ -25,6 +25,7 @@ int main(int argc, char **argv)
     assert(!platform_init(1));
     assert(!platform_controls(1, 0));
     is_headless = 0;
+    assert(!platform_tick_step(8)); /* Windowed time ignores planning cadence. */
     memset(&event, 0, sizeof event);
     event.type = SDL_APP_WILLENTERBACKGROUND;
     assert(SDL_PushEvent(&event) == 1);
