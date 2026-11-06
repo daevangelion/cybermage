@@ -290,7 +290,10 @@ ui_action ui_input(cm_ui *ui, const cm_input *in, uint32_t ticks)
         case 0: ui->return_screen = UI_PAUSE; ui_open(ui, UI_SAVE); break;
         case 1: ui_open(ui, UI_GAME); return UI_RESUME;
         case 2: ui->return_screen = ui->screen; ui_open(ui, UI_LOAD); break;
-        case 3: return UI_LOAD_GAME;
+        case 3:
+            if (ui->restart_game < 0 || ui->restart_game > UI_SAVE_SLOTS) return UI_NONE;
+            ui->slot = (unsigned)ui->restart_game;
+            return UI_LOAD_GAME;
         case 4: return UI_QUIT;
         case 5: ui->return_screen = ui->screen; ui_open(ui, UI_OPTIONS); break;
         }

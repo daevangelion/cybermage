@@ -11,6 +11,8 @@ static world w;
 static events_state e;
 static sim_state s;
 static ai_state a;
+static ui_save_state saved;
+static cm_ui names;
 
 enum { EVENT_INPUT_WORDS=15 };
 typedef struct { int64_t word[EVENT_INPUT_WORDS]; } event_input;
@@ -61,11 +63,58 @@ static int required_ranges(const cm_replay *replay)
 static int load_scene(const char *data, unsigned scene)
 {
     world_close(&w);
-    if(world_load_scene(&w,data,scene) || ai_init(&a,&w) ||
+    if(world_load_scene(&w,data,scene) || ai_init(&a,&w) || ai_load_tables(&a,data) ||
        world_finalize_scene(&w) || sim_start_scene(&s,&w) ||
        events_init(&e,&w) || events_load_tables(&e,data)) return -1;
     a.events=&e;
     return 0;
+}
+
+static int user_file(cm_file *file, const char *user, const char *name)
+{
+    char path[1024];
+    int n=snprintf(path,sizeof path,"%s/%s",user,name);
+    if(n<0 || (size_t)n>=sizeof path) return cm_fail(user,0,"save input path too long");
+    return platform_file_read(file,path);
+}
+
+/* Initialize from original-written SAVE bytes, never a compared event span. */
+static int load_saved_scene(const char *data,const char *user,unsigned slot,
+                             uint16_t seed,uint32_t ticks)
+{
+    cm_file file={0},executable={0},metadata={0};
+    cm_exe exe;
+    char name[24];
+    uint32_t fire[4];
+    unsigned scene;
+    int result=-1,n;
+    n=snprintf(name,sizeof name,"SAVE%03u.DAT",slot);
+    if(n<0 || (size_t)n>=sizeof name) return cm_fail("SAVE*.DAT",slot,"invalid save name");
+    if(user_file(&file,user,name) || ui_save_scene(file.data,file.size,&scene) ||
+       user_file(&metadata,user,"GAMENAME.USR") ||
+       ui_game_names_read(&names,metadata.data,metadata.size) ||
+       user_file(&executable,data,"CM_HI.EXE") ||
+       cm_exe_init(&exe,&executable,"CM_HI.EXE")) goto out;
+    world_rng_init(&w.rng,seed);
+    sim_init(&s,ticks);
+    s.ai=&a;s.events=&e;
+    if(ai_init_pc(&e,&s,&w.rng,&exe,1,0) || load_scene(data,scene) ||
+       ui_save_overlay(&saved,&w,file.data,file.size) ||
+       sim_save_import(&s,saved.unk_6D4)) goto out;
+    fire[0]=saved.FireCheck;fire[1]=saved.FireTilePanel;
+    fire[2]=saved.FireTileArt;fire[3]=saved.FireDamage;
+    e.ticks=ticks;ai_start_clock(&a,ticks);
+    if(sim_save_fire_import(&s,fire) || ai_save_import(&a,&w,&saved) ||
+       events_save_import(&e,&saved)) goto out;
+    memcpy(e.auto_ptr,names.auto_ptr,sizeof e.auto_ptr);
+    memcpy(e.auto_slot,names.auto_slot,sizeof e.auto_slot);
+    ai_save_pc_info(&e,&w);
+    result=0;
+out:
+    platform_file_release(&metadata);
+    platform_file_release(&executable);
+    platform_file_release(&file);
+    return result;
 }
 
 static unsigned byte_at(const char *hex, unsigned i)
@@ -84,8 +133,20 @@ int main(int argc, char **argv)
     char header[256];
     unsigned rows=0,checks=0,vehicle_rows=0,moves=0;
     int missing_world=0;
-    int status,input_status;
-    if(argc!=4) return 2;
+    int status,input_status,load_slot=-1,arg;
+    const char *user=NULL;
+    if(argc<4) return 2;
+    for(arg=4;arg<argc;++arg) {
+        if(!strcmp(argv[arg],"--user") && arg+1<argc && !user) user=argv[++arg];
+        else if(!strcmp(argv[arg],"--replay-load-slot") && arg+1<argc && load_slot<0) {
+            unsigned long value;char *end;const char *text=argv[++arg];
+            if(!*text || *text=='-') return 2;
+            errno=0;value=strtoul(text,&end,10);
+            if(errno || *end || value>UI_SAVE_SLOTS) return 2;
+            load_slot=(int)value;
+        } else return 2;
+    }
+    if((load_slot>=0)!=(user!=NULL)) return 2;
     input_file=fopen(argv[3],"r");
     if(!input_file) return cm_fail(argv[3],0,"cannot open MoveWorld input observations");
     if(!fgets(header,sizeof(header),input_file) ||
@@ -94,10 +155,18 @@ int main(int argc, char **argv)
     input_status=next_event_input(input_file,&input);
     if(input_status<0) return 1;
     sim_init(&s,0);
+    s.ai=&a;s.events=&e;
     if(snd_open(argv[1]) || replay_open(&replay,argv[2])) return 1;
     status=replay_next(&replay,&f);
-    if(status<=0 || load_scene(argv[1],(unsigned)f.values[CM_TRACE_SCENE]) ||
-       required_ranges(&replay)) return 1;
+    if(status<=0) return 1;
+    if(load_slot>=0) {
+        if(load_saved_scene(argv[1],user,(unsigned)load_slot,
+                            replay.has_bios_seed?replay.bios_seed:0,
+                            (uint32_t)f.values[CM_TRACE_PREVIOUS])) return 1;
+        if(w.scene!=(unsigned)f.values[CM_TRACE_SCENE])
+            return cm_fail(argv[2],0,"loaded save scene differs from first trace record");
+    } else if(load_scene(argv[1],(unsigned)f.values[CM_TRACE_SCENE])) return 1;
+    if(required_ranges(&replay)) return 1;
     snd_enable(0,0); /* Same original -x no-sound setting as the oracle. */
     a.events=&e;
     while(status>0) {

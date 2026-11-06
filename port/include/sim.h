@@ -9,6 +9,7 @@
 #define SIM_APERTURE_MAX 96
 #define SIM_PATH_RETRIES_MAX 11
 #define SIM_JUMP_STEPS 16
+#define SIM_NO_SURFACE (-99) /* CM_HI.EXE initial globals09260C..092618. */
 
 struct ai_state;
 struct events_state;

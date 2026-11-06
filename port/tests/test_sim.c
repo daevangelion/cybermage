@@ -150,6 +150,12 @@ int main(void)
         fire[0] = 2;
         assert(sim_save_fire_import(&s, fire) == -1);
         assert(cm_last_error()->offset == 0x34f09);
+        fire[0] = 0;
+        fire[1] = fire[2] = (uint32_t)SIM_NO_SURFACE;
+        assert(!sim_save_fire_import(&s, fire));
+        assert(s.fire_tile_panel == SIM_NO_SURFACE && s.fire_tile_art == SIM_NO_SURFACE);
+        fire[1] = (uint32_t)(SIM_NO_SURFACE + 1);
+        assert(sim_save_fire_import(&s, fire) == -1 && cm_last_error()->offset == 0x34f0d);
     }
     {
         unsigned i;

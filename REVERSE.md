@@ -115,6 +115,38 @@ known gaps are deliberate; implementation is not full-game parity.
 - [ ] Ph6: full game session played without major logic gaps
 - [ ] Ph7: 3+ integrated scenarios match both frames and checkpoint state; strict build/check and movement MATCH pass, but do not alone close this combined gate.
 
+### Replaying earned saves
+
+`--replay-load-slot N --user DIR --replay TRACE` initializes through the real
+SAVE codec before comparing/stepping record0, rather than calling NewGame.
+The oracle trace must start from its own Load of the identical original-written
+SAVE bytes. Copy original export directories into a writable test user directory;
+never overwrite the earned originals. Slots are0..10 and both `--user` and
+`--replay` are required. `events_trace DATA TRACE EVENTS-INPUT` accepts the same
+`--replay-load-slot N --user DIR` initializer; its event/vehicle outputs are still
+compared before applying the separately measured MoveWorld phase inputs.
+
+Verified: original Training SAVE000 (`f9cd8fb7…`)→original Load trace
+`captures/scene11-training-load/frames.csv`:94 frames player-state MATCH.
+Earned water SAVE000 (`9564cbee…`)→`captures/vehicle-water-resume/frames.csv`:
+94 frames MATCH; the saved-start event reducer matches94 frames/3,237,736
+computed event bytes. Copies and full hashes are in
+`captures/Integrator-load-{training,water}/run.json`; earned originals were
+not modified. These are saved-route checks, not a full playthrough.
+
+```
+port/build/Integrator/cybermage --headless --data orig/retail --user COPIED_SAVES --replay ORIGINAL_LOAD/frames.csv --replay-load-slot 0
+port/build/Integrator-events/events_trace orig/retail ORIGINAL_LOAD/frames.csv ORIGINAL_LOAD/events-input.csv --replay-load-slot 0 --user COPIED_SAVES
+```
+
+`--import-undefined PERSONS` is a separate, logged, replay-only verification
+adapter for the explicitly approved original-uninitialized PERSON+24 field.
+It validates the whole snapshot's actor identities before writing that field
+alone; no coordinates, HP, RNG or deadlines are imported. It cannot be combined
+with saved-start replay (the real SAVE already owns those PERSON bytes).
+Original actor phase clocks may come from the strict `actor-clocks.csv`
+companion; missing interior samples are errors, not invented clock values.
+
 ## Reference Resources
 
 - Original retail v1.01F executable and assets (local, ignored).

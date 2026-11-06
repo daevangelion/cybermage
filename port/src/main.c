@@ -8,6 +8,7 @@
 #include "replay.h"
 #include "rsc.h"
 #include "sim.h"
+#include "target.h"
 #include "tgv.h"
 #include "ui.h"
 
@@ -17,7 +18,7 @@
 #include <string.h>
 
 #define PATH_BYTES 1024
-#define STATE_TEXT_BYTES 2048
+#define STATE_TEXT_BYTES (2048 + CM_OBJECT_MAX * 5)
 
 static uint8_t pixels[CM_WIDTH * CM_HEIGHT], palette[768];
 static uint8_t base_palette[768];
@@ -92,25 +93,31 @@ static void camera_follow(void)
      * quantization. Eye offset is view +4B170, not extra object translation. */
     game.camera.u = o->x;
     game.camera.v = o->y;
-    game.camera.z = o->floor_z + simulation.body_height - 0x1000 + simulation.unk_144b38;
+    game.camera.z = world_add32(world_add32(world_sub32(
+        world_add32(o->floor_z, simulation.body_height), 0x1000),
+        simulation.unk_144b38), actors.pc.hit_camera_z);
     game.camera.angle = o->heading;
 }
 
 static int load_scene(const char *data, unsigned scene)
 {
+    uint32_t regen_timer = actors.pc.sp_regen_timer;
+    int result;
     world_close(&game);
     render_unload();
-    memset(&actors, 0, sizeof actors);
     simulation.ai = &actors;
     simulation.events = &events;
-    if (world_load_scene(&game, data, scene) || ai_init(&actors, &game) ||
-        ai_set_difficulty(&actors, &game, (unsigned)ui.options[8])) return -1;
+    if (world_load_scene(&game, data, scene)) return -1;
+    result = ai_init(&actors, &game);
+    actors.pc.sp_regen_timer = regen_timer;
+    if (result || ai_set_difficulty(&actors, &game, (unsigned)ui.options[8])) return -1;
     ai_restore_pc_info(&events, &game);
     if (ai_load_tables(&actors, data) ||
         world_finalize_scene(&game) || sim_start_scene(&simulation, &game) ||
         events_init(&events, &game) || events_load_tables(&events, data) ||
         render_load(&game, &hipak) || snd_scene(&game)) return -1;
     actors.events = &events;
+    if (ai_pc_equip(&actors, &simulation, &game)) return -1;
     ai_start_clock(&actors, simulation.previous_ticks);
     events.actors = &actors;
     events.ticks = simulation.timer_ticks;
@@ -132,7 +139,9 @@ static int new_game(const char *data, unsigned scene, uint32_t ticks)
     if (ai_init_pc(&events, &simulation, &game.rng, &exe, scene, ticks)) return -1;
     memcpy(events.auto_ptr, ui.auto_ptr, sizeof events.auto_ptr);
     memcpy(events.auto_slot, ui.auto_slot, sizeof events.auto_slot);
-    return load_scene(data, scene);
+    if (load_scene(data, scene)) return -1;
+    actors.pc.cooldown = actors.pc.latch = 1; /* TitleMenu new game 055773. */
+    return 0;
 }
 
 static int encode_save(uint32_t *size)
@@ -157,6 +166,8 @@ static int save_game(const char *user, unsigned slot)
     char name[24];
     uint32_t size;
     if (slot > UI_SAVE_SLOTS) return cm_fail("SaveGame", slot, "invalid save slot");
+    if (auto_save < -1 || auto_save >= EVENTS_AUTO_MAX)
+        return cm_fail("GAMENAME.USR", slot, "invalid automatic save reference");
     snprintf(name, sizeof name, "SAVE%03u.DAT", slot);
     if (make_path(save_path, sizeof save_path, user, name) || encode_save(&size)) return -1;
     if (platform_file_write(save_path, save_data, size)) return -1;
@@ -169,48 +180,87 @@ static int save_game(const char *user, unsigned slot)
     return game_names_write();
 }
 
+static int save_sim_check(const uint8_t *data)
+{
+    sim_state checked;
+    uint32_t values[29], fire[4];
+    unsigned i;
+    for (i = 0; i < 29; ++i) values[i] = cm_u32(data + 0x6d4 + 4 * i);
+    for (i = 0; i < 4; ++i) fire[i] = cm_u32(data + 0x34f09 + 4 * i);
+    return sim_save_import(&checked, values) || sim_save_fire_import(&checked, fire) ? -1 : 0;
+}
+
+static int import_sim(void)
+{
+    uint32_t fire[4] = {save.FireCheck, save.FireTilePanel, save.FireTileArt, save.FireDamage};
+    return sim_save_import(&simulation, save.unk_6D4) ||
+           sim_save_fire_import(&simulation, fire) ? -1 : 0;
+}
+
 static int load_game(const char *data, const char *user, unsigned slot, uint32_t ticks)
 {
+    uint8_t latch = simulation.kb_latch, modifiers = simulation.bios_shift;
     char name[24];
     cm_file file = {0};
-    int result;
+    int result, saved_auto;
     unsigned scene;
     if (slot > UI_SAVE_SLOTS) return cm_fail("LoadGame", slot, "invalid save slot");
-    auto_save = slot == UI_SAVE_SLOTS ? ui.restart_auto : ui.auto_ptr[slot];
-    if (auto_save < -1 || auto_save >= EVENTS_AUTO_MAX)
+    saved_auto = slot == UI_SAVE_SLOTS ? ui.restart_auto : ui.auto_ptr[slot];
+    if (saved_auto < -1 || saved_auto >= EVENTS_AUTO_MAX)
         return cm_fail("GAMENAME.USR", slot, "invalid automatic save reference");
     snprintf(name, sizeof name, "SAVE%03u.DAT", slot);
     if (make_path(save_path, sizeof save_path, user, name) ||
         platform_file_read(&file, save_path)) return -1;
-    if (ui_save_scene(file.data, file.size, &scene)) {
+    if (ui_save_scene(file.data, file.size, &scene) || save_sim_check(file.data)) {
         platform_file_release(&file);
         return -1;
     }
+    auto_save = saved_auto;
     sim_init(&simulation, ticks);
+    simulation.kb_latch = latch;
+    simulation.bios_shift = modifiers;
     result = load_scene(data, scene) ||
         ui_save_overlay(&save, &game, file.data, file.size);
     platform_file_release(&file);
-    if (result) return -1;
-    if (sim_save_import(&simulation, save.unk_6D4)) return -1;
-    simulation.fire_check = (int32_t)save.FireCheck;
-    simulation.fire_damage = (int32_t)save.FireDamage;
-    simulation.fire_tile_panel = (int32_t)save.FireTilePanel;
-    simulation.fire_tile_art = (int32_t)save.FireTileArt;
+    if (result || import_sim()) return -2; /* Scene replaced: caller must not resume it. */
     actors.difficulty = 1;
     events.ticks = ticks;
     if (ai_save_import(&actors, &game, &save) || events_save_import(&events, &save))
-        return -1;
+        return -2;
     actors.events = &events;
     ai_start_clock(&actors, ticks);
     events.actors = &actors;
     memcpy(events.auto_ptr, ui.auto_ptr, sizeof events.auto_ptr);
     memcpy(events.auto_slot, ui.auto_slot, sizeof events.auto_slot);
-    if (ai_set_difficulty(&actors, &game, (unsigned)ui.options[8])) return -1;
+    if (ai_set_difficulty(&actors, &game, (unsigned)ui.options[8])) return -2;
     ai_save_pc_info(&events, &game);
+    if (ai_pc_equip(&actors, &simulation, &game)) return -2;
     ui.shop_kind = 0;
     death_phase = 0;
     camera_follow();
+    ui.restart_game = (int32_t)slot;
     return 0;
+}
+
+static int load_requested(const char *data, const char *user, uint32_t ticks)
+{
+    ui_screen screen = ui.screen, return_screen = ui.return_screen;
+    unsigned selected = ui.selected;
+    int result = load_game(data, user, ui.slot, ticks);
+    if (result) {
+        if (result == -2) {
+            snd_kill(&game);
+            render_unload();
+            world_close(&game);
+            death_phase = 0;
+        }
+        ui_open(&ui, result == -2 ? UI_LOAD : screen);
+        ui.return_screen = result == -2 ? UI_TITLE : return_screen;
+        ui.selected = selected;
+        return result == -2 ? -1 : 0;
+    }
+    ui_open(&ui, UI_GAME);
+    return 1;
 }
 
 static int save_auto(const char *user, unsigned slot)
@@ -263,7 +313,7 @@ static int load_auto(const char *data, const char *user, unsigned slot)
         goto out;
     }
     if (load_scene(data, scene) || encode_save(&size) ||
-        sim_auto_unpack(save_data, size, file.data, file.size) ||
+        sim_auto_unpack(save_data, size, file.data, file.size) || save_sim_check(save_data) ||
         ui_save_overlay(&save, &game, save_data, size) ||
         events_save_import(&events, &save)) goto out;
     actors.difficulty = 1;
@@ -277,10 +327,7 @@ static int load_auto(const char *data, const char *user, unsigned slot)
         actors.souls[i].active = 0;
         game.objects[actors.souls[i].object].active = 0;
     }
-    simulation.fire_check = (int32_t)save.FireCheck;
-    simulation.fire_damage = (int32_t)save.FireDamage;
-    simulation.fire_tile_panel = (int32_t)save.FireTilePanel;
-    simulation.fire_tile_art = (int32_t)save.FireTileArt;
+    if (import_sim()) goto out;
     if (auto_return(previous, scene)) goto out;
     result = 0;
 out:
@@ -320,10 +367,23 @@ static int death_start(uint32_t ticks)
 {
     unsigned x;
     if (snd_kill_loops(&game, 1)) return -1;
+    simulation.swim_loop = -1;
+    actors.pc_sound = -1;
+    actors.pc.loop_sound = -1;
     for (x = 0; x < CM_WIDTH; ++x) death_columns[x] = 7;
     death_deadline = ticks + 60;
     death_phase = 1;
     return 0;
+}
+
+static ui_action menu_input(const cm_input *input, uint32_t ticks)
+{
+    ui_action action = ui_input(&ui, input, ticks);
+    if (ui.screen != UI_GAME && simulation.swim_loop != -1) {
+        snd_abort(simulation.swim_loop, 4);
+        simulation.swim_loop = -1;
+    }
+    return action;
 }
 
 static int death_step(const cm_input *input, uint32_t ticks, int no_sound)
@@ -384,14 +444,22 @@ static int state_dump(const char *directory, unsigned frame)
             " pc_hx=%" PRId32 " pc_hy=%" PRId32 " sword_frame=%" PRId32
             " p_3c=%" PRIu32 " p_40=%" PRIu32 " p_44=%" PRIu32 " p_48=%" PRIu32
             " auto_mode=%" PRId32 " auto_swing=%" PRId32 " auto_reset=%" PRId32
-            " auto_pos=%" PRId32 " auto_time=%" PRIu32 " spell_timer=%" PRIu32 "\n",
+            " auto_pos=%" PRId32 " auto_time=%" PRIu32 " spell_timer=%" PRIu32
+            " glow_frame=%" PRId32 " glow_set=%" PRId32 " hand_type=%u"
+            " muzzle_frame=%" PRId32 " muzzle_mode=%" PRId32 " muzzle_count=%" PRId32
+            " selected_spell=%" PRId32 " selected_melee=%" PRId32 " selected_weapon=%" PRId32
+            " pc_mode=%" PRId32 " render_x=%" PRId32 " render_y=%" PRId32 "\n",
             actors.pc_aim.weapon_aim_step, actors.pc.fire, actors.pc.cooldown, actors.pc.latch,
             events.energy, actors.pc_aim.aim_x, actors.pc_aim.aim_y,
             actors.pc.hand_x, actors.pc.hand_y, actors.pc.sword_frame,
             (uint32_t)pc->unk_003C, (uint32_t)pc->unk_0040,
             (uint32_t)pc->unk_0044, (uint32_t)pc->unk_0048,
             actors.pc.auto_s_mode, actors.pc.auto_swinging, actors.pc.auto_s_reset,
-            actors.pc.reset_pos, actors.pc.auto_s_time, actors.pc.spell_timer);
+            actors.pc.reset_pos, actors.pc.auto_s_time, actors.pc.spell_timer,
+            actors.pc.glow_frame, actors.pc.glow_set, actors.pc_aim.hand_type,
+            actors.pc.muzzle_frame, actors.pc.muzzle_mode, actors.pc.muzzle_count,
+            events.spell, events.hh_weapon, events.weapon, simulation.pc_mode,
+            actors.pc_aim.render_x, actors.pc_aim.render_y);
         if (add < 0 || (size_t)add >= sizeof text-(size_t)n)
             return cm_fail("state", frame, "combat state text overflow");
         n += add;
@@ -415,13 +483,37 @@ static int state_dump(const char *directory, unsigned frame)
             return cm_fail("state", frame, "missile state text overflow");
         n += add;
     }
+    {
+        int add = snprintf(text + n, sizeof text - (size_t)n,
+                           "swim=%" PRId32 " swim_deadline=%" PRIu32
+                           " hp=%d rng0=%u rng1=%u rng2=%u\n"
+                           "targets count=%u objects=",
+                           simulation.unk_144b50, simulation.swim_damage_time,
+                           (int)(int16_t)(uint16_t)pc->unk_0038,
+                           (unsigned)game.rng.word[0], (unsigned)game.rng.word[1],
+                           (unsigned)game.rng.word[2], actors.targets.count);
+        if (actors.targets.count > CM_OBJECT_MAX || add < 0 ||
+            (size_t)add >= sizeof text - (size_t)n)
+            return cm_fail("state", frame, "target state text overflow");
+        n += add;
+        for (i = 0; i < actors.targets.count; ++i) {
+            add = snprintf(text + n, sizeof text - (size_t)n, "%s%u",
+                           i ? "," : "", (unsigned)actors.targets.objects[i]);
+            if (add < 0 || (size_t)add >= sizeof text - (size_t)n)
+                return cm_fail("state", frame, "target state text overflow");
+            n += add;
+        }
+        if ((size_t)n + 1 >= sizeof text)
+            return cm_fail("state", frame, "target state text overflow");
+        text[n++] = '\n';
+    }
     return platform_state_dump(directory, frame, text, (size_t)n);
 }
 
 int main(int argc, char **argv)
 {
     const char *data = "orig/retail", *dump = NULL, *keys = NULL, *trace = NULL;
-    const char *state_directory = NULL, *user = NULL;
+    const char *state_directory = NULL, *user = NULL, *undefined_path = NULL;
     const char *control_mode = "classic";
     const uint8_t *pal_data;
     uint32_t pal_size;
@@ -429,10 +521,11 @@ int main(int argc, char **argv)
     cm_input input = {.mouse_x = 446, .mouse_y = 134};
     cm_input physical = {.mouse_x = 446, .mouse_y = 134};
     cm_replay_frame recorded;
-    unsigned frames = 0, frame = 0, bios_seed = 0;
+    unsigned frames = 0, frame = 0, bios_seed = 0, replay_slot = 0;
     uint32_t audio_ticks = 0;
     int headless = 0, status = 1, playing = 0, divergence = 0, seed_explicit = 0, i;
     int modern = 0;
+    int replay_load = 0;
     int applied_settings[5], settings_applied = 0;
     for (i = 1; i < argc; ++i) {
         if (!strcmp(argv[i], "--headless")) headless = 1;
@@ -441,6 +534,7 @@ int main(int argc, char **argv)
                   !strcmp(argv[i], "--state-dump") ||
                   !strcmp(argv[i], "--user") || !strcmp(argv[i], "--bios-seed") ||
                   !strcmp(argv[i], "--controls") ||
+                  !strcmp(argv[i], "--replay-load-slot") || !strcmp(argv[i], "--import-undefined") ||
                   !strcmp(argv[i], "--replay")) && i + 1 < argc) {
             const char *arg = argv[i++];
             if (!strcmp(arg, "--data")) data = argv[i];
@@ -449,6 +543,14 @@ int main(int argc, char **argv)
             else if (!strcmp(arg, "--state-dump")) state_directory = argv[i];
             else if (!strcmp(arg, "--user")) user = argv[i];
             else if (!strcmp(arg, "--controls")) control_mode = argv[i];
+            else if (!strcmp(arg, "--import-undefined")) undefined_path = argv[i];
+            else if (!strcmp(arg, "--replay-load-slot")) {
+                if (number(argv[i], &replay_slot) || replay_slot > UI_SAVE_SLOTS) {
+                    cm_fail("arguments", 0, "--replay-load-slot must be 0..10");
+                    return 2;
+                }
+                replay_load = 1;
+            }
             else if (!strcmp(arg, "--bios-seed")) {
                 if (number(argv[i], &bios_seed) || bios_seed > UINT16_MAX) {
                     cm_fail("arguments", 0, "--bios-seed must be 0..65535");
@@ -462,7 +564,7 @@ int main(int argc, char **argv)
                 return 2;
             }
         } else {
-            platform_report("usage: cybermage [--data DIR] [--user DIR] [--bios-seed N] [--controls classic|modern] [--headless] [--frames N] [--dump DIR] [--state-dump DIR] [--keys FILE | --replay TRACE]");
+            platform_report("usage: cybermage [--data DIR] [--user DIR] [--bios-seed N] [--controls classic|modern] [--headless] [--frames N] [--dump DIR] [--state-dump DIR] [--keys FILE | --replay TRACE [--replay-load-slot N | --import-undefined PERSONS]]");
             return 2;
         }
     }
@@ -476,6 +578,14 @@ int main(int argc, char **argv)
         return 2;
     }
     if (trace && keys) { cm_fail("arguments", 0, "--keys and --replay are exclusive"); return 2; }
+    if (replay_load && (!trace || !user)) {
+        cm_fail("arguments", 0, "--replay-load-slot requires --replay and an explicit --user directory");
+        return 2;
+    }
+    if (undefined_path && (!trace || replay_load)) {
+        cm_fail("arguments", 0, "--import-undefined is replay-only and cannot replace saved PERSON state");
+        return 2;
+    }
     if (headless && !frames && !trace) frames = 1;
     if (platform_init(headless)) goto out;
     if (!user) user = platform_user_dir();
@@ -533,8 +643,23 @@ int main(int argc, char **argv)
             if (!next) break;
             ticks = (uint32_t)recorded.values[CM_TRACE_TICKS];
             if (!playing) {
-                if (new_game(data, (unsigned)recorded.values[CM_TRACE_SCENE],
-                             (uint32_t)recorded.values[CM_TRACE_PREVIOUS])) goto out;
+                uint32_t start_ticks = (uint32_t)recorded.values[CM_TRACE_PREVIOUS];
+                if (replay_load) {
+                    if (load_game(data, user, replay_slot, start_ticks)) goto out;
+                } else if (new_game(data, (unsigned)recorded.values[CM_TRACE_SCENE], start_ticks)) goto out;
+                if (undefined_path) {
+                    cm_file file = {0};
+                    char message[PATH_BYTES + 128];
+                    int result;
+                    if (platform_file_read(&file, undefined_path)) goto out;
+                    result = ai_import_person_undefined(&game, file.data, file.size);
+                    platform_file_release(&file);
+                    if (result) goto out;
+                    snprintf(message, sizeof message,
+                        "VERIFICATION ONLY: imported PERSON+0x24 for %u actors from %s; no other fields imported",
+                        game.person_count, undefined_path);
+                    platform_report(message);
+                }
                 audio_ticks = ticks;
                 playing = 1;
             }
@@ -574,7 +699,7 @@ int main(int argc, char **argv)
             if (shop_modal) sim_input(&simulation, &input);
         }
         action = trace || shop_modal || death_phase == 1 || death_phase == 2 ?
-            UI_NONE : ui_input(&ui, &input, ticks);
+            UI_NONE : menu_input(&input, ticks);
         if (playing && actors.difficulty != ui.options[8] &&
             ai_set_difficulty(&actors, &game, (unsigned)ui.options[8])) goto out;
         if (!settings_applied ||
@@ -591,18 +716,20 @@ int main(int argc, char **argv)
         }
         if (action == UI_SPEECH_REPLAY && snd_log_replay(&game, ui.slot)) goto out;
         if (action == UI_NEW_GAME || action == UI_TRAINING) {
-            if (new_game(data, 1, ticks) || save_game(user, UI_SAVE_SLOTS)) goto out;
+            unsigned scene = action == UI_TRAINING ? 11u : 1u;
+            if (new_game(data, scene, ticks) || save_game(user, UI_SAVE_SLOTS)) goto out;
             input.raw_count = 0;
             playing = 1;
         }
         if (action == UI_SAVE_GAME || action == UI_LOAD_GAME) {
             if (action == UI_SAVE_GAME) {
                 if (save_game(user, ui.slot)) goto out;
+                ui_open(&ui, UI_GAME);
             } else {
-                if (load_game(data, user, ui.slot, ticks)) goto out;
-                playing = 1;
+                int loaded = load_requested(data, user, ticks);
+                if (loaded > 0) playing = 1;
+                else if (loaded < 0) playing = 0;
             }
-            ui_open(&ui, UI_GAME);
         }
         if (playing) {
             ui_view view;
@@ -616,10 +743,13 @@ int main(int argc, char **argv)
                 goto audio_output;
             }
             if (ui.screen == UI_GAME && !shop_modal) {
+                uint32_t fast_ticks, normal_ticks;
                 if (sim_frame(&simulation, &game, &input, ticks) ||
                     ai_pc_input(&actors, &simulation, &game) ||
-                    events_step(&events, &simulation, &actors, &game) ||
-                    ai_update_objects(&actors, &simulation, &game, ticks) ||
+                    events_step(&events, &simulation, &actors, &game)) goto out;
+                fast_ticks = trace ? recorded.fast_actor_ticks : platform_ticks(frame);
+                normal_ticks = trace ? recorded.normal_actor_ticks : platform_ticks(frame);
+                if (ai_update_objects(&actors, &simulation, &game, normal_ticks, fast_ticks) ||
                     ai_pc_hand2hand(&actors, &simulation, &game) ||
                     events_countdown(&events, &simulation, &actors, &game)) goto out;
                 if (events.scene_requested.pending && next_scene(data, user)) goto out;
@@ -648,6 +778,10 @@ int main(int argc, char **argv)
                 view.height = CM_HEIGHT;
             }
             if (render_set_view(view.x, view.y, view.width, view.height)) goto out;
+            if (ui.screen == UI_GAME && !shop_modal) {
+                vis_view target = {view.x, view.y, view.width, view.height};
+                if (target_query(&actors.targets, &game, &game.camera, &target)) goto out;
+            }
             if (ui.screen != UI_GAME) memset(pixels, 0, sizeof pixels);
             if (render_draw(&game, &game.camera, pixels)) goto out;
             if (ui.screen == UI_GAME && !shop_modal) {
@@ -655,9 +789,11 @@ int main(int argc, char **argv)
                 if (ui_draw_backdrop(&ui, pixels, simulation.pc_mode,
                                      simulation.vehicle_type, view)) goto out;
                 if (simulation.pc_mode == 7 &&
-                    ui_draw_vehicle(&ui, &game, pixels, simulation.vehicle_type,
-                                    simulation.flight_unk_144B48, simulation.unk_131418))
-                    goto out;
+                    ((simulation.vehicle_type == 1 &&
+                      ui_draw_vehicle_muzzle(&ui, &actors, pixels)) ||
+                     ui_draw_vehicle(&ui, &game, pixels, simulation.vehicle_type,
+                                     simulation.flight_unk_144B48, simulation.unk_131418)))
+                     goto out;
                 if ((simulation.pc_mode == 1 || simulation.pc_mode == 2 || simulation.pc_mode == 5) &&
                     ui_draw_live_hand(&ui, &game, pixels, simulation.pc_mode,
                                       &events, &actors, view)) goto out;
@@ -693,8 +829,10 @@ audio_output:
             if (ui_draw_menu_cursor(&ui, &game, pixels, aim_x, aim_y,
                                     ui_cursor_pose(aim_x, aim_y, input.mouse_buttons != 0))) goto out;
         }
-        if (platform_present(pixels, palette) ||
-            (dump && platform_dump(dump, frame, pixels, palette)) ||
+        if (platform_present(pixels, palette)) goto out;
+        if (playing && ui.screen == UI_GAME && !shop_modal && !death_phase)
+            ai_pc_draw_advance(&actors, &simulation);
+        if ((dump && platform_dump(dump, frame, pixels, palette)) ||
             (playing && (state_directory || dump) &&
              state_dump(state_directory ? state_directory : dump, frame))) goto out;
         platform_wait(frame++);

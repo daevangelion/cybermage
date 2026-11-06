@@ -80,14 +80,17 @@ int sim_save_import(sim_state *s, const uint32_t v[29])
 
 int sim_save_fire_import(sim_state *s, const uint32_t v[4])
 {
+    int32_t panel = signed_word(v[1]), art = signed_word(v[2]);
     if (v[0] > 1) return cm_fail("SAVE*.DAT", 0x34f09, "invalid saved fire flag");
-    if (v[1] > UINT8_MAX) return cm_fail("SAVE*.DAT", 0x34f0d, "invalid saved fire panel");
-    if (v[2] >= CM_PANEL_MAX) return cm_fail("SAVE*.DAT", 0x34f11, "invalid saved fire art");
+    if (panel != SIM_NO_SURFACE && (panel < 0 || panel > UINT8_MAX))
+        return cm_fail("SAVE*.DAT", 0x34f0d, "invalid saved fire panel");
+    if (art != SIM_NO_SURFACE && (art < 0 || art >= CM_PANEL_MAX))
+        return cm_fail("SAVE*.DAT", 0x34f11, "invalid saved fire art");
     if (v[3] > INT32_MAX / 7)
         return cm_fail("SAVE*.DAT", 0x34f15, "saved fire damage overflows seven-die scale");
     s->fire_check = (int32_t)v[0];
-    s->fire_tile_panel = (int32_t)v[1];
-    s->fire_tile_art = (int32_t)v[2];
+    s->fire_tile_panel = panel;
+    s->fire_tile_art = art;
     s->fire_damage = (int32_t)v[3];
     return 0;
 }

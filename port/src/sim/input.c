@@ -29,6 +29,8 @@ void sim_init(sim_state *s, uint32_t ticks)
     s->timer_ticks = s->previous_ticks = s->bp_limit_time = ticks;
     s->unk_144b00 = 16;
     s->swim_loop = -1;
+    s->swim_panel = s->swim_art = SIM_NO_SURFACE;
+    s->fire_tile_panel = s->fire_tile_art = SIM_NO_SURFACE;
     /* CM_HI.EXE Xox::ReKeyDefaults 052644..052718. */
     s->kb_side_toggle = 0x2a;
     s->kb_side_left = 0x2c;
