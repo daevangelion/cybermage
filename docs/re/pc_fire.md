@@ -218,16 +218,21 @@ The final read-only producer is binary6c7597f4 / whole patch0fa820aa. Changing
 only UI action typing leaves frames, actors, actor clocks, seed, draw clocks and
 death inputs byte-identical to the previous door-jamb capture.
 
-The original-only `vehicle-powerblade` scenario loads the genuinely earned
+The `vehicle-powerblade` scenario loads the genuinely earned
 `captures/earned-water` slot0, follows the river, stands/vaults onto the dry
 outcropping, picks up item4, then uses F1/F1 and Space. The 34-second capture has448
 frame entries, inventory120+4, mode2 and changing sword frames7/4/8. It does not
-inject coordinates, inventory or hand state. This is an original pickup/punch
-oracle, not yet a claim of native replay parity:
+inject coordinates, inventory or hand state. Frozen nativee924f16 matches all448
+player entries and, across447 completed frames, all22 PC fields and5,364 missile
+checkpoints (all12 slots, none active during this melee scenario). Field
+differences are empty. The fresh original is
+`captures/Standing-original-retry-f0186a3/original/vehicle-powerblade`; native
+states are its `Port-e924f16` subdirectory. This proves the real pickup/selector/
+Powerblade hand path, not an active projectile-launch case.
 
 ```
 tools/oracle.sh vehicle-powerblade --import-saves captures/earned-water \
-  --frame-trace --actor-trace --rng-trace \
+  --frame-trace --actor-trace --rng-trace --event-trace --item-trace --selector-trace \
   --trace-range x:1444e8:1536 --trace-range x:130d64:1600 \
   --trace-range x:1313a4:128 --trace-range x:135ecc:576 \
   --trace-range x:62518:48 --trace-range x:65180:48 \
