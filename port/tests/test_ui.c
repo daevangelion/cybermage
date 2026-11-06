@@ -417,6 +417,18 @@ int main(int argc, char **argv)
         assert(ui_draw_live_hand(&ui,&w,screen,5,&events,&actors,view) == 0);
         assert(memcmp(encoded,screen,sizeof screen) == 0);
         actors.pc_aim.aim_x=ui.CenterAimX[1];
+        {
+            int32_t x=ui.Glv_xOff[1][4],y=ui.Glv_yOff[1][4];
+            int16_t mx=ui.MuzzleX[1][4][0],my=ui.MuzzleY[1][4][0];
+            actors.pc.muzzle_mode=1;actors.pc.muzzle_frame=0;actors.pc.muzzle_count=0;
+            ui.Glv_xOff[1][4]=INT32_MAX;ui.MuzzleX[1][4][0]=1;
+            assert(ui_draw_live_hand(&ui,&w,screen,5,&events,&actors,view) == -1);
+            ui.Glv_xOff[1][4]=x;ui.MuzzleX[1][4][0]=mx;
+            ui.Glv_yOff[1][4]=INT32_MIN;ui.MuzzleY[1][4][0]=1;
+            assert(ui_draw_live_hand(&ui,&w,screen,5,&events,&actors,view) == -1);
+            ui.Glv_yOff[1][4]=y;ui.MuzzleY[1][4][0]=my;
+            actors.pc.muzzle_mode=0;
+        }
         hud.hp = cm_u16(original.data+UI_SAVE_PREFIX+0x38);
         hud.max_hp = cm_u16(original.data+UI_SAVE_PREFIX+0x3A);
         hud.energy = save.unk_130D50[864];

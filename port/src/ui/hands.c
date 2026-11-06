@@ -68,8 +68,8 @@ static int player_hand(const cm_ui *ui, world *w, uint8_t *dst,
         hand.aim_y = (int)y;
     }
     if (muzzle) {
-        hand.x_off += ui->MuzzleX[glove][frame][a->pc.muzzle_count];
-        hand.y_off -= ui->MuzzleY[glove][frame][a->pc.muzzle_count];
+        hand.x_off = world_add32(hand.x_off,ui->MuzzleX[glove][frame][a->pc.muzzle_count]);
+        hand.y_off = world_sub32(hand.y_off,ui->MuzzleY[glove][frame][a->pc.muzzle_count]);
     }
     if (mode == 2) {
         hand.sword = 1;

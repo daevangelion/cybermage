@@ -328,6 +328,8 @@ changing texture_count, and out-of-range/unprepared icons fail explicitly.
 Live aim offsets use the original32-bit wrapping addition before the
 W_MAX_* clamps(18ADE..18B1B); full-width saved aim values are not rejected
 before the clamp. INT32_MAX+1 is tested against its explicitly clamped render.
+Muzzle offset additions/subtractions also wrap before raster bounds checks;
+malformed INT32_MAX/INT32_MIN Glv offsets are negative UBSan fixtures.
 
 - SetGammaBright5253C adds the signed brightness to each6-bit DAC component,
   clipping0..63. SetGammaContrast52598 averages the three already-brightened
