@@ -81,7 +81,8 @@ static int crush_damage(sim_state *s, ai_state *a, world *w, unsigned person, in
     if(person==w->player_person) {
         damage=world_rnd(&w->rng,wall?3:8)+(wall?1:4);
         if(ai_damage_person(a,w,person,damage,100,50)) return -1;
-        if(a->pc_sound<3) a->pc_sound=3;
+        /* All four crushers raise Xox+1444E8, never the PCSound handle. */
+        if(a->pc_flash<3) ai_pc_set_flash(a,3,0);
     } else {
         damage=world_rnd(&w->rng,wall?4:8)+(wall?2:4);
         if(ai_damage_monster(a,w,person,damage,-1)) return -1;

@@ -160,6 +160,38 @@ static void draining_feedback(void)
     assert(a.pc_flash==0 && a.pc.unk_1444EC>=1 && a.pc.unk_1444EC<=5);
 }
 
+static int crush_once(unsigned kind)
+{
+    switch(kind) {
+    case 0: return events_zflat_dcrash(&s,&a,&w,3);
+    case 1: return events_zwall_dcrash(&s,&a,&w,3);
+    case 2: return events_zflat_ucrash(&s,&a,&w,3,0);
+    default: return events_ycrush_crash(&s,&a,&w,3,2);
+    }
+}
+
+static void crushing_feedback(void)
+{
+    unsigned kind;
+    for(kind=0;kind<4;++kind) {
+        world_object *pc,*wall;
+        event_setup(0);w.person_count=1;snd_enable(0,0);
+        pc=&w.objects[1];wall=&w.objects[3];
+        pc->x=pc->y=wall->x=wall->y=0x18000;
+        pc->z=2000;pc->height=4000;
+        wall->radius=10000;wall->height=10000;wall->z=3000;
+        w.persons[0].unk_0038=100<<16|100;a.pc_sound=-1;
+        if(kind==1) { wall->z=5000;wall->height=2000; }
+        if(kind==2) { wall->z=pc->floor_z=40000;pc->z=20000;pc->height=10000; }
+        if(kind==3) { wall->z=5000;wall->height=5000;--pc->y;w.objects[2].y=wall->y-1000; }
+        assert(crush_once(kind)==1);
+        assert(a.pc_flash==3 && a.pc_sound==-1);
+        a.pc_flash=4;
+        assert(crush_once(kind)==1);
+        assert(a.pc_flash==4 && a.pc_sound==-1);
+    }
+}
+
 static void retail_cosmetics(const char *data)
 {
     unsigned scene,tick,i;
@@ -314,6 +346,7 @@ int main(int argc, char **argv)
     remaining_events();
     cosmetics();
     draining_feedback();
+    crushing_feedback();
     event_setup(0);snd_enable(0,0);e.autoDestruct=4;e.autoDTime=16800;e.autoMSlot=-1;
     e.ticks=2400;
     assert(events_countdown(&e,&s,&a,&w)==0 && e.autoDestruct==4);

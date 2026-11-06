@@ -227,6 +227,10 @@ near drain clears flash and replaces the effect state with RND(5)+1. These
 transient fields are absent from the explicit SAVE codec, so no save bytes change.
 Fixtures assert teleport feedback, both far-flash cases, near feedback and both
 gem flicker/expiry paths against the state actually consumed by player effects.
+The common crusher damage helper also raises that AI flash state to at least3,
+preserving higher values and leaving the PCSound sample handle alone.
+All four original branches agree (037423,0376AB,037886,037A9C); fixtures exercise
+sideways/wall/descending-flat/rising-flat crushers and both flash cases.
 
 Integration contracts: `events_init` now resets scene metadata, **preserving**
 player inventory/status. AI's `ai_init_pc` owns original boot/new-game
