@@ -40,6 +40,10 @@ static void controls(void)
     snd_snapshot(state); assert(state[0].sample == 999 && state[0].active);
     snd_speech_skip(); assert(snd_tick(&w) == 0);
     snd_message_stop(); snd_kill(&w);
+    assert(snd_log_replay(&w, 0) == 0);
+    assert(snd_text()->scene == 1 && snd_text()->message == 15 && snd_text()->object == 0);
+    assert(snd_log_replay(&w, 63) == -1);
+    snd_message_stop();
 }
 
 static void movies(const char *data)

@@ -96,6 +96,7 @@ void snd_song_pause(int paused);
 int snd_tick(struct world *w);
 int snd_message(const struct world *w, unsigned scene, unsigned message,
                  int object);
+int snd_log_replay(const struct world *w, unsigned log_index);
 void snd_message_stop(void);
 void snd_speech_skip(void);
 void snd_speech_override(int enabled);

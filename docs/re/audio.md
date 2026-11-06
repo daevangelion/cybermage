@@ -259,6 +259,9 @@ exception. Positive speech links select a PERSON object; negative links>-100
 are exposed once via snd_take_video, matching original videoChain assignment.
 Code links-100..-102 queue the four scene4 messages from the24-byte coder string
 (A-D versus1-4, original branch0x178E5..0x17992); snd_code supplies that state.
+snd_log_replay(world,index) maps the63 recorder entries through the original
+speechLogData table0x95ED8 and enables narration override; the mapping is not
+stored in SPEECH.ENG/TEXT.MSG. A normal snd_message clears that override.
 
 snd_movie_begin/step/end in movie.c replace IntroEpilogue0x1F4EC. Original
 selector **1=intro,2=credits,other=ending**, with English/French/German filenames.

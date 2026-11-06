@@ -398,8 +398,27 @@ int snd_message(const world *w, unsigned scene, unsigned message, int object)
     snd_message_stop();
     dialogue.scene = scene; dialogue.message = message; dialogue.object = object;
     dialogue.active = 1; dialogue.spoken = speech_enabled && enabled; dialogue.link = 0;
+    speech_override = 0;
     ++dialogue.revision; next_segment = dialogue.spoken ? 1 : 0;
     return 0;
+}
+/* CM_HI.EXE speechLogData0x95ED8: recorder slot -> scene/message. */
+int snd_log_replay(const world *w, unsigned index)
+{
+    static const uint8_t messages[63][2] = {
+        {1,15},{1,1},{1,2},{1,3},{2,12},{2,13},{9,5},{9,6},{9,15},
+        {9,16},{9,17},{4,1},{4,11},{4,32},{4,31},{4,20},{9,28},{9,29},
+        {9,30},{9,31},{9,32},{9,33},{9,34},{5,1},{5,15},{5,16},{5,17},
+        {5,18},{5,19},{5,20},{5,21},{5,22},{5,10},{5,3},{9,35},{9,36},
+        {9,37},{9,38},{3,1},{3,12},{3,2},{3,3},{3,4},{3,5},{3,6},{3,7},
+        {3,8},{7,1},{8,7},{8,1},{8,2},{8,3},{8,8},{8,4},{8,5},{8,6},
+        {8,9},{8,10},{8,15},{10,1},{10,2},{10,3},{10,4}
+    };
+    int result;
+    if (index >= 63) return cm_fail("SpeechRecorder", index, "recording outside speech log");
+    result = snd_message(w, messages[index][0], messages[index][1], 0);
+    if (!result) speech_override = 1;
+    return result;
 }
 void snd_message_stop(void)
 {
