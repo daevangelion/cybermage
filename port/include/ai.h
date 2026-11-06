@@ -1,0 +1,131 @@
+#ifndef CM_AI_H
+#define CM_AI_H
+
+#include "sim.h"
+
+#define AI_MONSTER_MAX 109
+#define AI_MONSTER_DISK_SIZE 276
+#define AI_GSX_MAX 55
+#define AI_GSX_DISK_SIZE 58
+#define AI_SEQUENCE_MAX 56
+#define AI_SEQUENCE_DISK_SIZE 4532
+#define AI_ANIM_STATES 30
+#define AI_ANIM_STEPS 40
+#define AI_ANIM_FRAMES 20
+#define AI_FACTIONS 12
+#define AI_SPELL_MAX 64
+#define AI_SOUL_MAX 10
+#define AI_MISSILE_MAX 12
+#define AI_DYNAMIC_FIRST 2378
+#define AI_PERSON_DISK_SIZE 351
+#define AI_TARGET_COLUMN 320
+
+typedef struct { uint8_t count, sides; int16_t add; } ai_dice;
+typedef struct {
+    int16_t gsx;
+    uint8_t attack[20], unk_002C, unk_002D;
+    int16_t unk_002E;
+    int32_t range, turn_speed;
+    uint8_t accuracy, aggression, kind, faction;
+    int8_t rank[AI_FACTIONS];
+    uint16_t sounds[8];
+    int32_t sound_range, melee_range, unk_0060;
+    int16_t unk_0064, unk_0066, unk_0068, unk_006A;
+    uint8_t unk_006C;
+    ai_dice melee_damage;
+    int32_t fire_range, unk_0078;
+    int16_t unk_007C, unk_007E;
+    uint8_t fire, unk_0081, unk_0082, unk_0083;
+    int16_t unk_0084;
+    int32_t unk_0088, unk_008C, unk_0090;
+    int16_t unk_0094, unk_0096;
+    uint8_t throw_type, unk_0099, unk_009A, unk_009B;
+    int16_t unk_009C;
+    ai_dice unk_009E[5];
+    uint8_t spells[16];
+    unsigned spell_count;
+    uint8_t resistance[8], flags;
+    int32_t unk_00D0;
+} ai_monster;
+
+typedef struct {
+    uint8_t start[AI_ANIM_STATES], step[AI_ANIM_STEPS];
+    int32_t radius[AI_ANIM_FRAMES], height[AI_ANIM_FRAMES];
+    int32_t unk_011C[AI_ANIM_FRAMES], unk_016C[AI_ANIM_FRAMES];
+    int32_t speed[AI_ANIM_FRAMES], vertical[AI_ANIM_FRAMES];
+    uint8_t image[AI_ANIM_FRAMES];
+} ai_sequence;
+
+typedef struct {
+    unsigned count;
+    uint16_t objects[CM_OBJECT_MAX];
+} ai_target_list;
+
+typedef struct {
+    int32_t active, object, vertical, ticks; /* +0,+4,+8,+C */
+    int32_t type, target, source, frame;    /* +10,+14,+18,+1C */
+    int32_t sound, speed, variant, radius; /* +20,+24,+28,+2C */
+} ai_missile;
+typedef struct {
+    int32_t active, object, fxo, type, value, lifetime, frame;
+} ai_soul;
+
+typedef struct ai_state {
+    struct events_state *events;
+    ai_monster monsters[AI_MONSTER_MAX];
+    ai_sequence sequences[AI_SEQUENCE_MAX];
+    int16_t gsx_sequence[AI_GSX_MAX];
+    unsigned monster_count, sequence_count, gsx_count;
+    uint32_t timer_ticks, animation_deadline, fast_animation_deadline;
+    int32_t acquisition_phase;
+    unsigned missile_count;
+    uint16_t missile_objects[CM_OBJECT_MAX];
+    ai_target_list targets;
+    ai_missile missiles[AI_MISSILE_MAX];
+    ai_soul souls[AI_SOUL_MAX];
+    int32_t swim_damage, swim_check, mon_swim_damage_time;
+    int32_t swim_panel, swim_art;
+    int32_t difficulty;
+    int32_t pc_sound, body_mark_count[6];
+    int32_t gem_count_down, gem_count_down_timer;
+    int32_t unk_144AE0;
+} ai_state;
+
+int ai_init(ai_state *a, world *w);
+int ai_init_persons(ai_state *a, world *w);
+int ai_update_objects(ai_state *a, sim_state *s, world *w, uint32_t timer_ticks);
+int ai_monster_blocked(ai_state *a, sim_state *s, world *w, unsigned object,
+                       unsigned collisions);
+int ai_init_missiles(ai_state *a, world *w);
+int ai_init_soul_fire(ai_state *a, world *w);
+int ai_make_soul_fire(ai_state *a, world *w, unsigned source, int32_t type,
+                      int32_t value, int32_t lifetime, int on_floor);
+void ai_update_soul_fire(ai_state *a, sim_state *s, world *w);
+int ai_monster_decode(ai_monster *m, const uint8_t *data, uint32_t size);
+int ai_sequence_decode(ai_sequence *s, const uint8_t *data, uint32_t size);
+int32_t ai_do_dice(world_rng *rng, ai_dice d);
+int ai_person_kind(const ai_state *a, const world *w, unsigned person);
+int target_query(ai_target_list *out, const world *w, const world_camera *camera);
+int32_t ai_set_auto_target(const ai_state *a, const world *w);
+void ai_make_missile_list(ai_state *a, const world *w);
+void ai_track_target(world *w, unsigned object, unsigned other, int offset);
+int ai_sight_person(const ai_state *a, sim_state *s, world *w,
+                    unsigned source, unsigned target, int32_t range);
+int ai_find_target(const ai_state *a, sim_state *s, world *w,
+                   unsigned source, int32_t range);
+void ai_update_pc_object(world *w, int tick);
+int ai_move_object(ai_state *a, sim_state *s, world *w, unsigned person,
+                   int tick, int moving);
+int ai_dragon_fly(ai_state *a, sim_state *s, world *w, unsigned person,
+                  unsigned target);
+int ai_face_shooter(const ai_state *a, world *w, unsigned shooter, int32_t target);
+int ai_blast_physics(const ai_state *a, world *w, unsigned target,
+                     unsigned source, int32_t force);
+int ai_damage_monster(ai_state *a, world *w, unsigned person,
+                      int32_t damage, int32_t shooter);
+int ai_damage_person(ai_state *a, world *w, unsigned person, int32_t damage,
+                     int32_t armor_percent, int32_t erosion_percent);
+int ai_launch_missile(ai_state *a, sim_state *s, world *w, unsigned source,
+                      unsigned target, unsigned type);
+
+#endif
