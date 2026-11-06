@@ -124,7 +124,13 @@ The persistent physical state must not be overwritten by semantic output.
 the existing frame reducer supplies acceleration, collision and the original
 jump-table setup. Jump and held hand aim are distinct, unlike classic Ctrl's
 Forward+Ctrl jump versus stationary hand-screen fallback. Classic IRQ bytes,
-first-key swallowing and original frame replay transport are unchanged.
+first-key swallowing and keyboard-only frame replays are unchanged.
+Classic mouse input has separate signed DOS mickey/count fields: unlike modern
+look, original `HandleMouseEvents` (`014334..014581`) uses vertical mickeys for
+walking, horizontal mickeys for yaw, and right-button hold for forward movement.
+Keyboard motion takes priority; classic absolute hand coordinates remain
+640x240 DOS space at the driver boundary. See
+[physical mouse oracle/config provenance](bootstrap.md#physical-mouse-and-original-configuration).
 
 Original input fields and jump physics: `docs/re/sim.md`, CM_HI.EXE
 `HandleKeyboardEvents` 012DD4, `ProcessInputEvents` 014754 (jump setup

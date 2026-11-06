@@ -5,7 +5,37 @@ import subprocess
 import tempfile
 import unittest
 import hashlib
-from oracle import verified_sources, copy_saves
+from oracle import verified_sources, copy_saves, scenario
+
+
+class HardwareMouseScenarios(unittest.TestCase):
+    def parse(self, text):
+        with tempfile.TemporaryDirectory(prefix="cm-oracle-input-") as directory:
+            path = Path(directory) / "mouse.keys"
+            path.write_text(text)
+            return scenario(path)
+
+    def test_raw_mouse_events_use_driver_coordinates_and_button_masks(self):
+        ips, events, captures, states = self.parse(
+            "key 1 1c\nmouse 1.25 639 239 0x3\nmouse 2 320 120 0\ncapture 3\n")
+        self.assertEqual(ips, 60_000_000)
+        self.assertEqual(events, ["--key", "1.0:1c",
+                                 "--raw-mouse", "1.25:639:239:3",
+                                 "--raw-mouse", "2.0:320:120:0"])
+        self.assertEqual(captures, [3.0])
+        self.assertEqual(states, [])
+
+    def test_raw_mouse_rejects_out_of_driver_range_and_nonfinite_time(self):
+        for event in ("-1 0 0 0", "nan 0 0 0", "inf 0 0 0",
+                      "1 -1 0 0", "1 640 0 0", "1 0 -1 0",
+                      "1 0 240 0", "1 0 0 4", "1 0 0 -1"):
+            with self.subTest(event=event), self.assertRaises(ValueError):
+                self.parse(f"mouse {event}\ncapture 3\n")
+
+    def test_keyboard_only_scenario_transport_is_unchanged(self):
+        self.assertEqual(self.parse("key 8 9c\nhold 9 10 e48\ncapture 12\n"),
+                         (60_000_000, ["--key", "8.0:9c", "--hold", "9.0:10.0:e48"],
+                          [12.0], []))
 
 
 class SavePersistence(unittest.TestCase):
@@ -60,6 +90,54 @@ class SavePersistence(unittest.TestCase):
         (self.source / "SAVE000.DAT").write_bytes(b"save")
         with self.assertRaises(ValueError):
             copy_saves(self.source, self.source)
+
+    def test_original_configuration_is_copied_separately_with_its_hash(self):
+        from oracle import copy_config
+        config = b"\x00\x01original CMDATA bytes\x00\xff"
+        (self.source / "CMDATA.CNF").write_bytes(config)
+        (self.source / "SAVE000.DAT").write_bytes(b"separate save")
+        self.assertEqual(copy_config(self.source, self.destination),
+                         hashlib.sha256(config).hexdigest())
+        self.assertEqual((self.destination / "CMDATA.CNF").read_bytes(), config)
+        self.assertFalse((self.destination / "SAVE000.DAT").exists())
+
+    def test_configuration_missing_symlink_duplicate_and_self_copy_are_rejected(self):
+        from oracle import copy_config
+        with self.assertRaises(ValueError):
+            copy_config(self.source, self.destination)
+        outside = Path(self.temp.name) / "outside.cnf"
+        outside.write_bytes(b"not an original run config")
+        path = self.source / "CMDATA.CNF"
+        path.symlink_to(outside)
+        with self.assertRaises(ValueError):
+            copy_config(self.source, self.destination)
+        path.unlink()
+        path.write_bytes(b"original config")
+        with self.assertRaises(ValueError):
+            copy_config(self.source, self.source)
+        (self.source / "cmdata.cnf").write_bytes(b"ambiguous config")
+        with self.assertRaises(ValueError):
+            copy_config(self.source, self.destination)
+
+
+class HardwareBaselines(unittest.TestCase):
+    def test_corrected_hardware_receipt_is_the_baseline_not_the_old_trace(self):
+        from check_oracle_bda import expected_outputs
+        pixels = {"frame000000.png": "corrected pixels"}
+        receipt = {"movement": {"new_producer": "corrected producer",
+                                "pixels_after": pixels, "trace_after": "corrected flags"}}
+        self.assertEqual(expected_outputs(Path("/unused"), {"binary_sha256": "old producer"},
+                                          receipt, "movement"),
+                         ("corrected producer", pixels, "corrected flags"))
+
+    def test_incomplete_hardware_receipt_is_rejected(self):
+        from check_oracle_bda import expected_outputs
+        with self.assertRaises(ValueError):
+            expected_outputs(Path("/unused"), {}, {}, "movement")
+        receipt = {"movement": {"new_producer": "source", "trace_after": None,
+                                "pixels_after": {"../frame000000.png": "hash"}}}
+        with self.assertRaises(ValueError):
+            expected_outputs(Path("/unused"), {}, receipt, "movement")
 
 
 class SourceTrust(unittest.TestCase):

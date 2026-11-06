@@ -195,6 +195,41 @@ back into game state**. Native transport converts DOS Y to 640x480 input Y×2
 and DOS right bit 2 to SDL right bit 4, but preserves DOS mickey/count semantics
 in dedicated input fields rather than feeding enhanced relative-look deltas.
 
+Observed producer `48bd0c88cf40899a7c39d73399259860f26acdc2d80a0d9439d4fee509319ff4`
+with patch `962e4411bd2d1c549db75a1241b7f876b674015ef34e44e4c0029af947166e4b`:
+
+- `captures/mouse-config/CMDATA.CNF` is the original-written 172-byte file,
+  SHA-256 `a40f5572b7b99fde71274bfa54fccc5d24a16c6f684a2e96dfb42424b44b0b7d`;
+  its device DWORD at offset 4 is 1. The first observed poll returns through
+  `054196`, with original `inDevice=1`, Xox mouse flag 65535 and joystick flag 0.
+- `captures/mouse-movement` imports exactly those bytes. Its 154 pre-frame
+  records and 921 ordered polls show position `(819200,1753088,131072)` →
+  `(769376,1589249,131072)`, heading 49152 → 47488, and a real jump peaking at
+  Z=152320. One left press count and one right press count are observed.
+- Normal gameplay polls return through `057F38` during drawing, **after** that
+  frame's movement. For example poll frame 16 has mickeys `(140,70)`; pre-frame
+  17 still has the old pose, and pre-frame 18 contains the resulting turn/move.
+  Do not apply that draw poll to frame 16's earlier input phase.
+
+The required default title/new-game/movement/door-event recaptures are recorded
+in `captures/raw-mouse/comparison.json`: all four are unchanged against the
+corrected BIOS-modifier producer `99bd75b2…`. Title has a pixel baseline only;
+the other three match whole frame CSVs and pixels. This compares against the
+previous **corrected** modifier trace, not the already-explained obsolete
+movement trace whose Shift byte was always zero:
+
+```
+.venv/bin/python tools/check_oracle_bda.py --label raw-mouse \
+  --baseline-receipt captures/bios-modifiers/comparison.json
+tools/run_capped.sh .venv/bin/python tools/test_oracle.py
+```
+
+The fourteen Python scenario/save/config/baseline/trust unit tests pass. The
+joint producer's three Rust mouse tests cover bounded script arguments,
+INT 33h consumable counters/mickeys, guest warps and programmed driver bounds.
+These are hardware and transport observations, not a claim that the native
+mouse replay comparison has passed.
+
 ## Frame traces
 
 ```
@@ -361,10 +396,6 @@ Its actor, actor-clock and seed files are byte-identical to the earlier
 `Port-first-telecom-rng` capture. The native lifecycle matches48,032 actor
 checkpoints across316 completed frames, including RNG.
 
-The hardware-only `mouse TIME X Y BUTTONS` scenario directive supplies raw
-INT33 device events. `mouse-input.csv` observes Mouse::ReadStatus06BB24
-**before** it consumes counters:
-`sequence,frame,ticks,caller,x,y,buttons,mickey_x,mickey_y,press_left,press_right,in_device,mouse_present,joystick_present`.
-The last three columns audit original routing; they are never installed as
-game inputs. Actual CMDATA.CNF bytes and their SHA256 are captured separately;
-original Options selects the device, not the observer.
+The separate [physical mouse/config boundary](#physical-mouse-and-original-configuration)
+defines ordered `mouse-input.csv` polls and original-written configuration
+provenance. Its routing audit columns are never installed as game inputs.
