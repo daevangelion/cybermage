@@ -19,6 +19,7 @@ static events_event *event_setup(unsigned type)
     w.player_object=1;w.object_count=4;w.person_count=3;
     w.persons[0].object=1;w.persons[1].object=2;w.persons[2].object=3;
     e.event_count=511;e.switch_count=4;e.event_heads[0]=1;a.events=&e;
+    e.actors=&a;a.tables_loaded=1;
     e.events[1].type=(uint8_t)type;e.events[1].enabled=1;e.ambient_slot=-1;
     return &e.events[1];
 }
@@ -204,10 +205,12 @@ static void pending_vehicle(void)
     assert(events_input(&e,&s,&a,&w)==0);
     assert(e.tank_flag==1 && w.player_object==1 && w.player_person==0 && s.pc_mode==5);
     w.persons[55].status=2;
-    assert(events_input(&e,&s,&a,&w)==0);
+    assert(events_frame_begin(&e,&s,&a,&w)==0);
     assert(e.tank_flag==1 && w.player_object==1 && s.pc_mode==5);
     w.persons[55].status=0;
     assert(events_input(&e,&s,&a,&w)==0);
+    assert(e.tank_flag==1 && w.player_object==1 && s.pc_mode==5);
+    assert(events_frame_begin(&e,&s,&a,&w)==0);
     assert(!e.tank_flag && w.player_object==2 && w.player_person==55 && s.pc_mode==7);
 }
 
@@ -225,13 +228,59 @@ static void queued_vehicle_exit(void)
     assert(sim_modern_input(&s,&w,&in)==0);
     assert(s.kb_scan_status[0x0F]==2 && !s.kb_scan_status[0x1C]);
     assert(events_input(&e,&s,&a,&w)==0 && s.pc_mode==7 && e.tank_flag==-1);
-    assert(events_input(&e,&s,&a,&w)==0 && s.pc_mode==5 && !e.tank_flag);
+    assert(events_frame_begin(&e,&s,&a,&w)==0 && s.pc_mode==5 && !e.tank_flag);
     assert(w.player_object==1 && w.player_person==0);
     assert(events_set_tank_mode(&e,&s,&w,1)==0);
     w.persons[55].status=2;w.persons[0].unk_0038=100<<16;
-    assert(events_input(&e,&s,&a,&w)==0 && s.pc_mode==7);
+    assert(events_frame_begin(&e,&s,&a,&w)==0 && s.pc_mode==7);
     w.persons[0].unk_0038|=100;
-    assert(events_input(&e,&s,&a,&w)==0 && s.pc_mode==5 && !e.tank_flag);
+    assert(events_frame_begin(&e,&s,&a,&w)==0 && s.pc_mode==5 && !e.tank_flag);
+}
+
+static void selector_shortcuts(void)
+{
+    static const uint8_t codes[20]={0x3B,0x3C,0x3D,0x3E,0x3F,0x40,0x41,0x42,0x43,0x44,
+        0x57,0x58,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09};
+    unsigned key,i;
+    event_setup(0);e.items[0].type=120;e.items[0].kind=0;
+    e.items[1].type=6;e.items[1].kind=9;e.items[1].quantity=1;
+    w.persons[0].unk_0038=40<<16|17;e.previous_mode=5;s.pc_mode=3;
+    assert(events_make_selector(&e,3)==0 && e.selector_keys[3]==1);
+    a.pc.fire=a.pc.cooldown=a.pc.latch=1;
+    s.kb_scan_status[0x3E]=2;
+    assert(events_process_selector(&e,&s,&w)==0);
+    assert((uint16_t)w.persons[0].unk_0038==40);
+    assert(!e.items[1].type && !e.items[1].quantity && !e.selector_kind && s.pc_mode==5);
+    assert(!a.pc.fire && !a.pc.cooldown && !a.pc.latch);
+    for(key=0;key<20;++key) {
+        event_setup(0);e.selector_kind=3;e.selector_count=20;e.previous_mode=5;s.pc_mode=3;
+        w.persons[0].unk_0038=40<<16|17;
+        for(i=0;i<20;++i) {
+            e.selector_items[i]=(int32_t)i;e.selector_keys[i]=(int32_t)(19-i);
+            e.items[i].type=6;e.items[i].kind=9;e.items[i].quantity=1;
+        }
+        s.kb_scan_status[codes[key]]=2;
+        if(key==19) s.kb_scan_status[0x3B]=s.kb_scan_status[0x58]=2;
+        assert(events_process_selector(&e,&s,&w)==0);
+        assert(!e.items[19-key].type && !e.items[19-key].quantity);
+        for(i=0;i<20;++i) {
+            assert(!s.kb_scan_status[codes[i]]);
+            if(i!=19-key) assert(e.items[i].type==6 && e.items[i].quantity==1);
+        }
+    }
+    event_setup(0);e.selector_kind=3;e.selector_count=2;e.previous_mode=5;s.pc_mode=3;
+    w.persons[0].unk_0038=40<<16|17;
+    for(i=0;i<2;++i) {
+        e.selector_items[i]=(int32_t)i;e.items[i].type=6;e.items[i].kind=9;e.items[i].quantity=1;
+    }
+    e.selector_keys[3]=-1;s.kb_scan_status[0x3E]=2;
+    assert(events_process_selector(&e,&s,&w)==0 && e.selector_kind==3 && e.items[0].type==6);
+    s.kb_scan_status[0x0A]=s.kb_scan_status[0x0B]=2;
+    assert(events_process_selector(&e,&s,&w)==0 && e.selector_kind==3);
+    assert(s.kb_scan_status[0x0A]==2 && s.kb_scan_status[0x0B]==2);
+    e.selector_keys[3]=1;s.kb_scan_status[0x1C]=s.kb_scan_status[0x3E]=s.kb_scan_status[0x4D]=2;
+    assert(events_process_selector(&e,&s,&w)==0 && !e.items[0].type && e.items[1].type==6);
+    for(i=0;i<SIM_SCAN_COUNT;++i) assert(!s.kb_scan_status[i]);
 }
 
 static void retail_cosmetics(const char *data)
@@ -303,6 +352,7 @@ int main(int argc, char **argv)
     memset(&e, 0, sizeof(e));
     memset(&s, 0, sizeof(s));
     memset(&a, 0, sizeof(a));
+    a.events=&e;e.actors=&a;a.tables_loaded=1;
     w.object_count = 10;
     w.person_count = 85;
     w.player_object = 1;
@@ -391,6 +441,7 @@ int main(int argc, char **argv)
     crushing_feedback();
     pending_vehicle();
     queued_vehicle_exit();
+    selector_shortcuts();
     event_setup(0);snd_enable(0,0);e.autoDestruct=4;e.autoDTime=16800;e.autoMSlot=-1;
     e.ticks=2400;
     assert(events_countdown(&e,&s,&a,&w)==0 && e.autoDestruct==4);

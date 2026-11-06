@@ -1206,9 +1206,8 @@ static int dispatch(events_state *e, sim_state *s, ai_state *a, world *w, unsign
     return 0;
 }
 
-int events_input(events_state *e, sim_state *s, ai_state *a, world *w)
+int events_frame_begin(events_state *e, sim_state *s, ai_state *a, world *w)
 {
-    unsigned i;
     if (!e || !s || !a || !w || w->player_object >= w->object_count) return cm_fail("MoveWorld",0,"missing simulation state");
     e->ticks = s->timer_ticks;
     e->actors = a;
@@ -1226,6 +1225,14 @@ int events_input(events_state *e, sim_state *s, ai_state *a, world *w)
            (int16_t)w->persons[e->foot_person].unk_0038>0))
             if(events_set_tank_mode(e,s,w,0)) return -1;
     }
+    return 0;
+}
+
+int events_input(events_state *e, sim_state *s, ai_state *a, world *w)
+{
+    unsigned i;
+    if (!e || !s || !a || !w || w->player_object >= w->object_count) return cm_fail("MoveWorld",0,"missing simulation state");
+    e->ticks=s->timer_ticks;e->actors=a;
     {
         int chain=snd_take_video();
         if(chain) e->video_chain=chain;
@@ -1238,11 +1245,11 @@ int events_input(events_state *e, sim_state *s, ai_state *a, world *w)
         if(e->text_trigger) { snd_message_stop();e->text_skip_pending=1; }
     }
     if(!e->text_skip_pending && dialogue_tick(e,w)) return -1;
-    if (e->selector_kind) return events_process_selector(e,s,w)?-1:1;
+    if (e->selector_kind) return events_process_selector(e,s,w);
     for (i = 0; i < 3; ++i) if (s->kb_scan_status[0x3B+i]) {
         s->kb_scan_status[0x3B+i] = 0; e->previous_mode = s->pc_mode;
         if (events_make_selector(e,i+1)) return -1;
-        s->pc_mode = 3; return 1;
+        s->pc_mode = 3; return 0;
     }
     if(s->pc_mode==7 && (s->kb_scan_status[0x0F]&2u)) {
         s->kb_scan_status[0x0F]=0;e->tank_flag=-1;

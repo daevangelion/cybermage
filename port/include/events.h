@@ -111,7 +111,9 @@ typedef struct events_state {
 int events_init(events_state *e, world *w);
 int events_load_tables(events_state *e, const char *asset_dir);
 int events_step(events_state *e, sim_state *s, struct ai_state *a, world *w);
-/* Input: -1 error, 0 proceed to world, 1 modal selector consumed the frame. */
+/* HandleNextFrame01C1CB..01C23F, after missile/soul updates, before input. */
+int events_frame_begin(events_state *e, sim_state *s, struct ai_state *a, world *w);
+/* Input: -1 error, 0 proceed to world. Selectors do not stop MoveWorld. */
 int events_input(events_state *e, sim_state *s, struct ai_state *a, world *w);
 int events_move_world(events_state *e, sim_state *s, struct ai_state *a, world *w);
 void events_scene_cosmetics(events_state *e, const world *w);

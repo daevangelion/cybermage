@@ -1,4 +1,6 @@
 #include "events.h"
+#include "ai.h"
+#include <string.h>
 
 /* CM_HI.EXE cmselect.cpp 056DDC/057154/057A0C; docs/re/events.md. */
 static int weapon_order(int type)
@@ -28,7 +30,6 @@ int events_make_selector(events_state *e, unsigned kind)
     static const uint8_t spell_order[16] = {0,3,1,4,2,255,255,5,7,255,255,255,6,255,255,255};
     unsigned i, j, count = 0, other = 5;
     if (!e || kind < 1 || kind > 3) return cm_fail("selector", kind, "invalid selector kind");
-    for (i = 0; i < EVENTS_SELECTOR_MAX; ++i) e->selector_keys[i] = -1;
     for (i = 0; i < (kind == 2 ? 64u : EVENTS_ITEM_MAX); ++i) {
         int order, eligible;
         if (kind == 2) {
@@ -77,10 +78,32 @@ static int scan(sim_state *s, unsigned code)
 
 int events_process_selector(events_state *e, sim_state *s, world *w)
 {
+    static const uint8_t keys[EVENTS_SELECTOR_MAX]={
+        0x3B,0x3C,0x3D,0x3E,0x3F,0x40,0x41,0x42,0x43,0x44,
+        0x57,0x58,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09
+    };
     unsigned col, row, next;
+    unsigned i,kind;
+    int shortcut=-1,confirm;
     if (!e || !s || !w || !e->selector_kind) return 0;
-    if (scan(s, 1)) { e->selector_kind = 0; s->pc_mode = e->previous_mode; return 0; }
+    if (scan(s, 1)) {
+        memset(s->kb_scan_status,0,sizeof(s->kb_scan_status));
+        s->pc_mode=e->previous_mode;
+        if(ai_pc_select(e->actors,s,w,0)) return -1;
+        e->selector_kind=e->selector_count=0;
+        return 0;
+    }
     if (!e->selector_count) return 0;
+    confirm=scan(s,0x1C);
+    /* HandleKeyboardEvents01340D..013548: scan order, not a Shift bank.
+     * Every pressed shortcut is cleared; the last scanned press wins. */
+    if(confirm) memset(s->kb_scan_status,0,sizeof(s->kb_scan_status));
+    else for(i=0;i<EVENTS_SELECTOR_MAX;++i) if(scan(s,keys[i])) shortcut=(int)i;
+    if(!confirm && shortcut>=0 && e->selector_keys[shortcut]>=0) {
+        next=(unsigned)e->selector_keys[shortcut];
+        if(next>=e->selector_count) return cm_fail("selector",(uint32_t)shortcut,"shortcut outside selector list");
+        e->selector_index=next;confirm=1;
+    }
     col = e->selector_index % 5; row = e->selector_index / 5;
     if (scan(s, 0x4B) && col) --col;
     if (scan(s, 0x4D) && col < 4 && col < e->selector_count - 1) ++col;
@@ -88,8 +111,9 @@ int events_process_selector(events_state *e, sim_state *s, world *w)
     if (scan(s, 0x50) && row < 3 && row < (e->selector_count - 1) / 5) ++row;
     next = row * 5 + col;
     if (next < e->selector_count) e->selector_index = next;
-    if (scan(s, 0x1C)) {
+    if (confirm) {
         unsigned selected = (unsigned)e->selector_items[e->selector_index];
+        kind=e->selector_kind;
         s->pc_mode = e->previous_mode;
         if (e->selector_kind == 2) { e->spell = (int32_t)selected; s->pc_mode = 5; }
         else if (e->selector_kind == 1) {
@@ -100,7 +124,8 @@ int events_process_selector(events_state *e, sim_state *s, world *w)
                 e->weapon_slot=selected;s->pc_mode=1;
             }
         } else if (events_use_item(e, s, w, selected)) return -1;
-        e->selector_kind = 0;
+        if(ai_pc_select(e->actors,s,w,kind)) return -1;
+        e->selector_kind=e->selector_count=0;
     }
     return 0;
 }

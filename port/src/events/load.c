@@ -13,7 +13,7 @@ int events_init(events_state *e, world *w)
     memset(e->event_heads,0,sizeof(e->event_heads));
     e->event_count=e->switch_count=0;
     e->scene=w->scene;
-    e->selector_kind=e->selector_count=e->selector_index=0;
+    e->selector_kind=e->selector_count=0;e->selector_index=UINT32_MAX;
     e->text_trigger=e->text_object=e->text_message=0;
     e->text_skip_pending=0;
     e->text_serial=0;

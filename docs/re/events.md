@@ -299,6 +299,20 @@ preserving higher values and leaving the PCSound sample handle alone.
 All four original branches agree (037423,0376AB,037886,037A9C); fixtures exercise
 sideways/wall/descending-flat/rising-flat crushers and both flash cases.
 
+HandleKeyboardEvents01340D..013548 consumes F1–F12 and digits1–8 as twenty
+selector shortcuts, clearing every scanned press and choosing the last one.
+Enter takes precedence and clears keyboard state. MakePCKeyList057D5E writes
+assigned shortcut slots without resetting the remaining map. Fixtures exercise
+all twenty mappings, simultaneous presses, unmapped keys, Enter priority and
+F4 Regen Pak use (HP17→40, item6 quantity1→0). Selection completion/cancellation
+uses AI's original equip/aim/fire-reset provider rather than changing equipment
+words alone. Active and newly opened selectors still proceed through MoveWorld.
+
+`events_frame_begin` owns the prior vehicle-request/dead-vehicle transition at
+01C1CB..01C23F, after missile/soul updates and before keyboard/motion. Late
+`events_input` cannot consume a request: fixtures explicitly distinguish those
+phases. Sim owns the early call and refreshes cached player pointers afterward.
+
 Integration contracts: `events_init` now resets scene metadata, **preserving**
 player inventory/status. AI's `ai_init_pc` owns original boot/new-game
 initialization and its RNG calls. `events_load_tables` reads numeric monitor
