@@ -141,6 +141,10 @@ displacement is twice half-stick displacement, and running is twice walking.
 The tests also exercise normalisation, fractional look, context
 release, rebinding rejection, keyboard/mouse/controller movement/look/jump/fire,
 controller disconnect, focus loss, menu taps, simultaneous gameplay fingers and
-an overlay pixel outside the 4:3 area. These are action/transport tests, not a
+an overlay pixel outside the 4:3 area. Menu mouse/controller hover motion,
+successive wheel detents, vehicle key translation and sub-game-pixel swipe
+accumulation have regression tests. The platform exports bounded touch-overlay
+rectangle geometry for either presenter; headless/classic/menu paths produce none.
+These are action/transport tests, not a
 physical-controller usability or classic replay parity claim. The integrated
 build, original movement replay and Android emulator capture are separate gates.

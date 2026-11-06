@@ -7,6 +7,9 @@
 #define CM_KEY_COUNT 128
 #define CM_RAW_SCANS_MAX 256
 #define CM_TOUCH_MAX 32
+#define CM_TOUCH_RECTS_MAX 256
+
+typedef struct { int x, y, w, h; } cm_rect;
 
 enum { CM_TOUCH_DOWN = 1, CM_TOUCH_MOVE, CM_TOUCH_UP };
 
@@ -63,6 +66,9 @@ void platform_shutdown(void);
 int platform_keys(const char *path);
 int platform_poll(cm_input *input, unsigned frame);
 int platform_controls(int modern, int gameplay);
+/* RGB 160,220,220; window/output coordinates, top-left origin. */
+unsigned platform_touch_rects(int width, int height,
+                               cm_rect rectangles[CM_TOUCH_RECTS_MAX]);
 int platform_present(const uint8_t *pixels, const uint8_t *palette);
 int platform_dump(const char *directory, unsigned frame,
                   const uint8_t *pixels, const uint8_t *palette);

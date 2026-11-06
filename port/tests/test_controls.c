@@ -80,6 +80,32 @@ int main(void)
     frame(&c, CONTROLS_FOOT, &in, &out);
     assert(out.move_speed);
     controls_init(&c);
+    memset(&in, 0, sizeof in);
+    in.mouse_x = 123;
+    in.mouse_y = 100;
+    in.mouse_dx = 4;
+    in.mouse_dy = 5;
+    frame(&c, CONTROLS_MENU, &in, &out);
+    assert(out.mouse_x == 123 && out.mouse_y == 100);
+    assert(out.mouse_dx && out.mouse_dy); /* Menu hover gets motion, not just clicks. */
+    in.mouse_dx = in.mouse_dy = 0;
+    in.pad_axes[2] = 16384;
+    frame(&c, CONTROLS_MENU, &in, &out);
+    assert(out.mouse_dx > 0);
+    controls_init(&c);
+    memset(&in, 0, sizeof in);
+    in.held[0x49] = in.held[0x2c] = 1;
+    in.mouse_wheel = -1;
+    frame(&c, CONTROLS_VEHICLE, &in, &out);
+    assert(out.fly == 1 && out.held[0x1e] && out.cycle == 1);
+    frame(&c, CONTROLS_VEHICLE, &in, &out);
+    assert(out.cycle == 1); /* Adjacent-frame wheel detents are separate edges. */
+    in.held[0x49] = in.held[0x2c] = 0;
+    in.held[0x51] = in.held[0x2e] = in.held[0x2f] = 1;
+    in.mouse_wheel = 0;
+    frame(&c, CONTROLS_VEHICLE, &in, &out);
+    assert(out.fly == -1 && out.held[0x20] && out.pressed[0x1f]);
+    controls_init(&c);
     assert(controls_parse(&c, (const uint8_t *)"foot.jump = key:999\n", 20));
     assert(controls_parse(&c, (const uint8_t *)"unknown = 1\n", 12));
     puts("controls: normalisation, fractional look, context ownership, focus/disconnect and bindings PASS");

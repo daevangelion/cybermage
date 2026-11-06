@@ -66,6 +66,12 @@ int main(void)
     assert(!platform_poll(&physical, 3));
     controls_frame(&c, CONTROLS_FOOT, &physical, &out);
     assert(!out.move_speed && !out.jump && !out.held[0x39]);
+    finger(SDL_FINGERDOWN, 6, 1400, 400, 0, 0);
+    for (id = 0; id < 8; ++id)
+        finger(SDL_FINGERMOTION, 6, 1400 + (float)id, 400, 1, 0);
+    assert(!platform_poll(&physical, 4));
+    controls_frame(&c, CONTROLS_FOOT, &physical, &out);
+    assert(out.look_yaw < 0); /* Sub-game-pixel motion must accumulate. */
     platform_shutdown();
     puts("controls touch: menu tap, multi-touch move/look/fire/jump, release and letterbox overlay PASS");
     return 0;

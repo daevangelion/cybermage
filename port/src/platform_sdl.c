@@ -21,6 +21,8 @@ typedef struct {
 static cm_error error;
 static char error_file[PATH_MAX_BYTES], error_message[512];
 static SDL_Window *window;
+static SDL_GLContext gl_context;
+static int gl_window;
 static SDL_Surface *surface;
 static SDL_Surface *converted;
 static SDL_AudioDeviceID device;
@@ -36,6 +38,7 @@ static SDL_GameController *controller;
 static SDL_JoystickID controller_id = -1;
 static int modern_controls, gameplay_controls, input_focus = 1;
 static int touch_visible;
+static double touch_look_fraction_x, touch_look_fraction_y;
 
 #define TOUCH_FINGERS_MAX 10
 typedef struct {
@@ -211,12 +214,16 @@ void platform_audio_unlock(void)
 
 void platform_shutdown(void)
 {
+    if (gl_context) SDL_GL_DeleteContext(gl_context);
+    gl_context = NULL;
+    gl_window = 0;
     if (controller) SDL_GameControllerClose(controller);
     controller = NULL;
     controller_id = -1;
     modern_controls = gameplay_controls = touch_visible = 0;
     input_focus = 1;
     memset(fingers, 0, sizeof fingers);
+    touch_look_fraction_x = touch_look_fraction_y = 0;
     if (device) SDL_CloseAudioDevice(device);
     if (surface) SDL_FreeSurface(surface);
     if (converted) SDL_FreeSurface(converted);
@@ -280,6 +287,8 @@ static void touch_layout(int w, int h, SDL_Rect *stick, SDL_Rect buttons[6])
     unsigned i;
     if (side < 24) side = 24;
     if (diameter < 48) diameter = 48;
+    if (view.x >= 64 * unit && diameter > view.x - unit * 8)
+        diameter = view.x - unit * 8;
     stick->w = stick->h = diameter;
     stick->x = view.x >= diameter + unit * 8 ?
         (view.x - diameter) / 2 : view.x + unit * 8;
@@ -288,8 +297,13 @@ static void touch_layout(int w, int h, SDL_Rect *stick, SDL_Rect buttons[6])
     else right -= unit * 6;
     for (i = 0; i < 6; ++i) {
         buttons[i].w = buttons[i].h = side;
-        buttons[i].x = right - (2 - (int)(i % 2)) * (side + unit * 4);
-        buttons[i].y = h - (3 - (int)(i / 2)) * (side + unit * 6);
+        if (view.x >= side + unit * 12 && view.x < 2 * side + unit * 12) {
+            buttons[i].x = w - (view.x + side) / 2;
+            buttons[i].y = h - (6 - (int)i) * (side + unit * 6);
+        } else {
+            buttons[i].x = right - (2 - (int)(i % 2)) * (side + unit * 4);
+            buttons[i].y = h - (3 - (int)(i / 2)) * (side + unit * 6);
+        }
     }
 }
 
@@ -339,8 +353,15 @@ static int modern_touch(cm_input *input, const SDL_TouchFingerEvent *event,
     finger->x = x;
     finger->y = y;
     if (finger->role == 3 && event->type == SDL_FINGERMOTION && gameplay_controls) {
-        input->touch_look_dx += (int)(event->dx * 640);
-        input->touch_look_dy += (int)(event->dy * 480);
+        int dx, dy;
+        touch_look_fraction_x += event->dx * 640;
+        touch_look_fraction_y += event->dy * 480;
+        dx = (int)touch_look_fraction_x;
+        dy = (int)touch_look_fraction_y;
+        input->touch_look_dx += dx;
+        input->touch_look_dy += dy;
+        touch_look_fraction_x -= dx;
+        touch_look_fraction_y -= dy;
     }
     i = (unsigned)finger->role;
     if (event->type == SDL_FINGERUP) finger->active = 0;
@@ -678,6 +699,7 @@ int platform_poll(cm_input *input, unsigned frame)
                     input->pad_buttons = input->touch_buttons = 0;
                     memset(input->pad_axes, 0, sizeof input->pad_axes);
                     memset(fingers, 0, sizeof fingers);
+                    touch_look_fraction_x = touch_look_fraction_y = 0;
                     if (platform_controls(1, gameplay_controls)) return -1;
                 }
             } else if (e.window.event == SDL_WINDOWEVENT_FOCUS_GAINED && modern_controls) {
@@ -698,7 +720,8 @@ int platform_poll(cm_input *input, unsigned frame)
     return 0;
 }
 
-static int touch_overlay(SDL_Surface *dest)
+unsigned platform_touch_rects(int width, int height,
+                               cm_rect rectangles[CM_TOUCH_RECTS_MAX])
 {
     static const uint8_t letters[6][7] = {
         {31,16,16,30,16,16,16}, {7,2,2,2,18,18,12},
@@ -706,36 +729,54 @@ static int touch_overlay(SDL_Surface *dest)
         {17,27,21,21,17,17,17}, {14,17,17,31,17,17,17}
     };
     SDL_Rect stick, buttons[6], r;
-    Uint32 color;
-    unsigned i, x, y;
+    unsigned i, x, y, count = 0;
     int unit;
-    if (!modern_controls || !gameplay_controls || !touch_visible) return 0;
-    touch_layout(dest->w, dest->h, &stick, buttons);
-    unit = dest->h / 480 + 1;
-    color = SDL_MapRGB(dest->format, 160, 220, 220);
+    if (is_headless || !modern_controls || !gameplay_controls || !touch_visible ||
+        width <= 0 || height <= 0) return 0;
+    touch_layout(width, height, &stick, buttons);
+    unit = height / 480 + 1;
+#define RECTANGLE() do { \
+    cm_rect *out = &rectangles[count++]; \
+    out->x = r.x; out->y = r.y; out->w = r.w; out->h = r.h; \
+} while (0)
+    /* At most 7*4 outline + 6*7*5 glyph + 1 centre = 239 rectangles. */
     for (i = 0; i < 7; ++i) {
         SDL_Rect box = i ? buttons[i - 1] : stick;
         r = box; r.h = unit;
-        if (SDL_FillRect(dest, &r, color)) return -1;
+        RECTANGLE();
         r.y = box.y + box.h - unit;
-        if (SDL_FillRect(dest, &r, color)) return -1;
+        RECTANGLE();
         r = box; r.w = unit;
-        if (SDL_FillRect(dest, &r, color)) return -1;
+        RECTANGLE();
         r.x = box.x + box.w - unit;
-        if (SDL_FillRect(dest, &r, color)) return -1;
+        RECTANGLE();
         if (!i) continue;
         for (y = 0; y < 7; ++y) for (x = 0; x < 5; ++x)
             if (letters[i - 1][y] & (16u >> x)) {
                 r.x = box.x + box.w / 2 + ((int)x - 2) * unit;
                 r.y = box.y + box.h / 2 + ((int)y - 3) * unit;
                 r.w = r.h = unit;
-                if (SDL_FillRect(dest, &r, color)) return -1;
+                RECTANGLE();
             }
     }
     r.x = stick.x + stick.w / 2 - unit * 3;
     r.y = stick.y + stick.h / 2 - unit * 3;
     r.w = r.h = unit * 6;
-    return SDL_FillRect(dest, &r, color);
+    RECTANGLE();
+#undef RECTANGLE
+    return count;
+}
+
+static int touch_overlay(SDL_Surface *dest)
+{
+    cm_rect rectangles[CM_TOUCH_RECTS_MAX];
+    unsigned count = platform_touch_rects(dest->w, dest->h, rectangles), i;
+    Uint32 color = SDL_MapRGB(dest->format, 160, 220, 220);
+    for (i = 0; i < count; ++i) {
+        SDL_Rect r = {rectangles[i].x, rectangles[i].y, rectangles[i].w, rectangles[i].h};
+        if (SDL_FillRect(dest, &r, color)) return -1;
+    }
+    return 0;
 }
 
 int platform_present(const uint8_t *pixels, const uint8_t *palette)
@@ -853,4 +894,76 @@ void platform_wait(unsigned frame)
     uint64_t now = SDL_GetTicks64();
     uint64_t target = start + (uint64_t)(frame + 1) * 1000 / CM_TICK_HZ;
     if (!is_headless && now < target) SDL_Delay((Uint32)(target - now));
+}
+
+void platform_gl_close(void)
+{
+    if (gl_context) SDL_GL_DeleteContext(gl_context);
+    gl_context=NULL;
+    if (gl_window && window) SDL_DestroyWindow(window);
+    if (gl_window) window=NULL;
+    gl_window=0;
+}
+
+int platform_gl_open(int headless,unsigned width,unsigned height,int *gles)
+{
+    Uint32 flags=SDL_WINDOW_OPENGL|SDL_WINDOW_ALLOW_HIGHDPI;
+    int es=0,major=0,minor=0;
+    if (!width || !height || width>8192 || height>8192 || gl_context)
+        return cm_fail("SDL GL",0,"invalid GL context request");
+    if (!(SDL_WasInit(SDL_INIT_VIDEO)&SDL_INIT_VIDEO)) {
+        if (headless) SDL_SetHintWithPriority("SDL_VIDEODRIVER","offscreen",SDL_HINT_DEFAULT);
+        if (SDL_InitSubSystem(SDL_INIT_VIDEO)) return cm_fail("SDL GL video",0,SDL_GetError());
+    }
+    if (surface) SDL_FreeSurface(surface);
+    if (converted) SDL_FreeSurface(converted);
+    surface=converted=NULL;
+    if (window) SDL_DestroyWindow(window);
+    window=NULL;
+#ifdef __ANDROID__
+    es=1;
+    flags|=SDL_WINDOW_FULLSCREEN_DESKTOP;
+#else
+    flags|=headless ? SDL_WINDOW_HIDDEN:SDL_WINDOW_RESIZABLE;
+#endif
+    SDL_GL_ResetAttributes();
+    if (SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK,es ? SDL_GL_CONTEXT_PROFILE_ES:SDL_GL_CONTEXT_PROFILE_CORE) ||
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION,3) ||
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION,es ? 0:3) ||
+        SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER,1) ||
+        SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE,24))
+        return cm_fail("SDL GL attributes",0,SDL_GetError());
+    window=SDL_CreateWindow("CyberMage Enhanced",SDL_WINDOWPOS_CENTERED,SDL_WINDOWPOS_CENTERED,
+                            (int)width,(int)height,flags);
+    if (!window) return cm_fail("SDL GL window",0,SDL_GetError());
+    gl_window=1;gl_context=SDL_GL_CreateContext(window);
+    if (!gl_context || SDL_GL_MakeCurrent(window,gl_context)) {
+        cm_fail("SDL GL context",0,SDL_GetError());platform_gl_close();return -1;
+    }
+    if (SDL_GL_GetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION,&major) ||
+        SDL_GL_GetAttribute(SDL_GL_CONTEXT_MINOR_VERSION,&minor) ||
+        major<3 || (!es && major==3 && minor<3)) {
+        cm_fail("SDL GL version",0,"requires OpenGL3.3 core or ES3.0");platform_gl_close();return -1;
+    }
+    (void)SDL_GL_SetSwapInterval(headless ? 0:1);
+    *gles=es;
+    return 0;
+}
+
+void *platform_gl_proc(const char *name)
+{
+    return SDL_GL_GetProcAddress(name);
+}
+
+void platform_gl_size(unsigned *width,unsigned *height)
+{
+    int w=0,h=0;
+    if (gl_context && window) SDL_GL_GetDrawableSize(window,&w,&h);
+    *width=w>0 ? (unsigned)w:0;*height=h>0 ? (unsigned)h:0;
+}
+
+int platform_gl_swap(void)
+{
+    if (!gl_context || !window) return cm_fail("SDL GL",0,"GL context not open");
+    SDL_GL_SwapWindow(window);return 0;
 }

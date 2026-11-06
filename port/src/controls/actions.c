@@ -155,6 +155,7 @@ void controls_frame(cm_controls *c, controls_context context,
         output_key(output, 0x1f, EDGE(GUN_CENTER));
         output_key(output, 0x21, EDGE(LAND));
     } else {
+        int old_x = c->pointer_x, old_y = c->pointer_y;
         output_key(output, 0x48, HELD(FORWARD) || ly < -0.5);
         output_key(output, 0x50, HELD(BACK) || ly > 0.5);
         output_key(output, 0x4b, HELD(LEFT) || lx < -0.5 || in->mouse_wheel > 0);
@@ -180,6 +181,8 @@ void controls_frame(cm_controls *c, controls_context context,
         if (c->pointer_y > 479) c->pointer_y = 479;
         output->mouse_x = c->pointer_x;
         output->mouse_y = c->pointer_y;
+        output->mouse_dx = c->pointer_x - old_x;
+        output->mouse_dy = c->pointer_y - old_y;
     }
     output_key(output, 1, EDGE(MENU) || EDGE(PAUSE));
     output_key(output, 0x0f, EDGE(MAP));
