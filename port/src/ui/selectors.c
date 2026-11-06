@@ -125,7 +125,8 @@ int ui_draw_selector(const cm_ui *ui, const world *w, const events_state *e, uin
 {
     const events_selector *q;
     unsigned i;
-    if(e->selector_kind<1 || e->selector_kind>3)
+    if(!e->selector_kind) return 0; /* Generic hand mode3 has no selector list. */
+    if(e->selector_kind>3)
         return cm_fail("selector",e->selector_kind,"invalid selector kind");
     q=&e->selectors[e->selector_kind-1];
     if (q->count > EVENTS_SELECTOR_MAX ||

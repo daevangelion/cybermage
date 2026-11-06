@@ -15,6 +15,14 @@ static ai_state actors;
 static cm_overlay overlay;
 static uint8_t encoded[UI_SAVE_MAX], screen[CM_WIDTH * CM_HEIGHT], palette[768];
 
+static int fixed_draw_time(void *context, uint32_t site, uint32_t *ticks)
+{
+    assert(site == 0x16391);
+    *ticks = *(const uint32_t *)context;
+    return 0;
+}
+static const cm_draw_clock draw_clock = {&ui.ticks, fixed_draw_time};
+
 static void background_view(const uint8_t *background, const cm_file *rendered,
                              ui_view view)
 {
@@ -78,12 +86,16 @@ int main(int argc, char **argv)
         memset(screen,22,sizeof screen);
         actors.pc.unk_1444EC=2;actors.pc_flash=1;
         assert(gfx_overlay_begin(&overlay,screen) == 0);
+        gfx_store(screen+1,22); /* Backdrop, unlike untouched world pixels. */
         assert(ui_draw_pc_tint(&ui,screen,&actors,view,0) == 0);
         expected=ui.bright[256+22];
         assert(screen[CM_WIDTH+1]==expected && screen[0]==22);
-        assert(overlay.coverage[CM_WIDTH+1]>1 && !overlay.coverage[0]);
+        assert(overlay.coverage[CM_WIDTH+1]>1 && overlay.coverage[0]==overlay.world_map);
+        assert(overlay.world_map>1 && overlay.coverage[1]==1 && screen[1]==22);
         assert(ui_draw_pc_tint(&ui,screen,&actors,view,1) == 0);
         assert(screen[CM_WIDTH+1]==ui.bright[ui.flashcolor[0]*256+expected]);
+        assert(screen[0]==22 && screen[1]==22 && overlay.coverage[1]==1);
+        assert(overlay.maps[overlay.coverage[0]-2][22]==ui.bright[ui.flashcolor[0]*256+expected]);
         assert(actors.pc_flash==1 && actors.pc.unk_1444EC==2);
         assert(gfx_overlay_end() == 0);
         actors.pc.unk_1444EC=11;
@@ -462,14 +474,14 @@ int main(int argc, char **argv)
         }
         for (phase = 0; phase <= 2; ++phase) {
             hud.hp_count = phase;
-            assert(ui_render_bells_and_whistles(&ui, screen, &hud) == 0);
+            assert(ui_render_bells_and_whistles(&ui, screen, &hud, &draw_clock) == 0);
         }
         assert(platform_dump(argv[1], 2, screen, palette) == 0);
         memset(screen,9,sizeof screen);
-        assert(ui_render_bells_and_whistles(&ui,screen,&hud) == 0);
+        assert(ui_render_bells_and_whistles(&ui, screen, &hud, &draw_clock) == 0);
         memcpy(encoded,screen,sizeof screen);
         memset(screen,9,sizeof screen);ui.vdu=2;
-        assert(ui_render_bells_and_whistles(&ui,screen,&hud) == 0);
+        assert(ui_render_bells_and_whistles(&ui, screen, &hud, &draw_clock) == 0);
         for(i=0;i<34;++i) {
             assert(memcmp(screen+(10+i)*CM_WIDTH+10,
                           encoded+(436+i)*CM_WIDTH+10,206) == 0);
@@ -477,7 +489,7 @@ int main(int argc, char **argv)
                           encoded+(436+i)*CM_WIDTH+424,206) == 0);
         }
         ui.vdu=0;memcpy(encoded,screen,sizeof screen);
-        assert(ui_render_bells_and_whistles(&ui,screen,&hud) == 0);
+        assert(ui_render_bells_and_whistles(&ui, screen, &hud, &draw_clock) == 0);
         assert(memcmp(encoded,screen,sizeof screen) == 0);
         ui.vdu=1;
         if (argc == 3) {
@@ -486,7 +498,7 @@ int main(int argc, char **argv)
             assert(rendered.size == sizeof screen);
             background_view(background,&rendered,view);
             assert(ui_draw_player_hand(&ui,&w,screen,5,0,4,view) == 0);
-            assert(ui_render_bells_and_whistles(&ui,screen,&hud) == 0);
+            assert(ui_render_bells_and_whistles(&ui, screen, &hud, &draw_clock) == 0);
             assert(platform_dump(argv[1],3,screen,palette) == 0);
             background_view(background,&rendered,view);
             ui_open(&ui,UI_PAUSE);

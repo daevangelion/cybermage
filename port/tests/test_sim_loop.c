@@ -7,7 +7,7 @@
 
 void snd_close(void);
 static const char *test_user;
-static int training;
+static int training, generic_hand;
 
 static void dirty_selectors(void)
 {
@@ -41,6 +41,12 @@ static void selector_key(unsigned scan)
 void sim_loop_checks(void)
 {
     world_object position = game.objects[game.player_object];
+    if(generic_hand) {
+        assert(game.scene==1 && simulation.pc_mode==3 && !events.selector_kind);
+        assert(!events_selector_needs_input(&events));
+        snd_close();
+        return;
+    }
     if (training) {
         assert(game.scene == 11);
         assert(events.energy == 100 && events.cash == 60);
@@ -251,6 +257,8 @@ int main(int argc, char **args)
 {
     static const uint8_t training_keys[] =
         "0 raw 9c\n1 down e050\n1 up e050\n2 down 1c\n2 up 1c\n";
+    static const uint8_t generic_keys[] =
+        "0 raw 9c\n1 down 1c\n1 up 1c\n3 down 1d\n";
     char keys[PATH_BYTES];
     const char *argv[] = {"cybermage", "--headless", "--data", "../orig/retail",
         "--user", NULL, "--keys", "../tools/scenarios/port-movement.keys",
@@ -265,6 +273,11 @@ int main(int argc, char **args)
     argv[7] = keys;
     training = 1;
     assert(!cybermage_main((int)(sizeof argv / sizeof argv[0]), (char **)argv));
+    assert(!make_path(keys,sizeof keys,test_user,"generic-hand.keys"));
+    assert(!platform_file_write(keys,generic_keys,sizeof generic_keys-1));
+    training=0;generic_hand=1;
+    assert(!cybermage_main((int)(sizeof argv / sizeof argv[0]), (char **)argv));
+    generic_hand=0;
     {
         const char *bad_slot[] = {"cybermage", "--replay-load-slot", "11"};
         const char *missing_user[] = {"cybermage", "--replay", "frames.csv",

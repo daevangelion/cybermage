@@ -344,6 +344,18 @@ Outside selectors the file-menu shortcuts remain available; Help uses original
 keyHELP=53 decimal (scan35 hex; data0962B8, handler014026), not F1.
 F4 opens the regular pause menu only outside selectors (0135C3).
 
+UI capture regression attribution: isolated4983343 passes the complete retail
+UI suite;69261c3 first fails its old tint-coverage assertion. That commit
+intentionally records world-dependent Hor+ canvas pixels outside the bounded
+CPU tint rectangle. The fixture now distinguishes untouched world coverage
+(LUT) from an explicitly opaque backdrop pixel (replace), verifies both tint
+stages compose, and still requires outside CPU pixels to remain unchanged.
+No renderer/tint implementation was weakened to satisfy the old assertion.
+The same frozen checkpoint runs the real application through a held-Ctrl
+generic mode3 frame with no lists: that valid inactive selector draws nothing,
+while unknown selector kinds still fail. This catches the kind0 rendering
+fatal reported by the genuine blade replay, rather than testing replay alone.
+
 `events_frame_begin` owns the prior vehicle-request/dead-vehicle transition at
 01C1CB..01C23F, after missile/soul updates and before keyboard/motion. Late
 `events_input` cannot consume a request: fixtures explicitly distinguish those
