@@ -38,7 +38,8 @@ typedef struct {
     int32_t key_rot_rate;                 /* KeyRotRate */
     uint16_t movement_angle;               /* Xox+130D10 */
     int32_t movement_request, yaw_request; /* Xox+144B08/144B0C */
-    int running; /* ProcessInputEvents ground/running gate, before request clamping. */
+    int running; /* ProcessInputEvents running gate after primary-fire eligibility. */
+    int primary_fire; /* ProcessInputEvents+144B10, sampled once by Sim. */
     int32_t unk_144ae8, unk_144aec, unk_144af0, unk_144af4;
     int32_t unk_144af8, unk_144afc, unk_144b00;
     int32_t unk_144b1c, unk_144b20, unk_144b24;

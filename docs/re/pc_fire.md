@@ -5,9 +5,15 @@ Retail CM_HI.EXE v1.01F LE link addresses. Gameplay only; UI consumes state.
 - HandleNextFrame mode dispatch0x1D44E: mode1 firearm0x1D841, mode5 spell0x1DF9E,
   mode7 vehicle0x1E301. Mode2 hand stance is the movement branch0x1D466;
   Hand2Hand runs separately after MoveWorld/UpdateObjects at0x1E825.
+- Phase contracts: `ai_pc_prepare_input` runs after keyboard sampling/running
+  eligibility, before acceleration/water; `ai_pc_prepare_motion` runs hit response,
+  aim and sword stance after body calculations but before MovePerson. Late
+  `ai_pc_input` only launches weapons/spells/vehicles/linking missiles.
 - ProcessInputEvents0x1481E copies cooldown144AB4 to latch144AB8 before deriving
   fire144AB0. Keyboard fire is Space(scan39), mask1; HandleKeyboardEvents0x13E39
   consumes the bit2 edge but preserves held bit1. Defaults0x52644.
+  Sim samples primary144B10 once. With no primary, the logical keySwingSword206848
+  pulse supplies fire; it is not interchangeable with a held primary.
 - ResetAim0x12D60: mode1 uses CenterAim[hand_type144A40], mode5 index1, all others0.
 - EquipWeapon0x1040C: hand_type=weapon+2 unless mode5(index1); PCHandBound16x8
   and WeaponTrajectory16x2x8 are supplied executable tables, not compiled assets.
@@ -50,6 +56,8 @@ Retail CM_HI.EXE v1.01F LE link addresses. Gameplay only; UI consumes state.
   Muted playback still consumes the real random calls.
 - ProcessInputEvents0x14857/0x1496A/0x14C19 maintains the actual shared hum
   slot/sample: running1, held melee32, tank61 with momentum-derived volume.
+  Running precedes melee only after the real eligibility gate: held primary in
+  mode2 clears EDI at0x148C4, but keySwingSword alone does not.
   Switching starts the new loop before aborting the old one. Stop-running breath
   at0x14D04..0x14D41 uses the same PCSound handle. KillSound/KillLoops clear the
   slot only; modal event26 stops hum and swim at0x3AAA6..0x3AAE2. Pause stops
@@ -86,6 +94,12 @@ and inline basic blocks, not a second Python implementation of their rules.
 The low-HP respiration block additionally matches5,040 original-x86 draws across
 PERSON0/vehicle selection, death/half-health edges, hum gating and three RNG seeds.
 The oracle's real noSoundFlag option is set; chance/volume RND and PlayDIGI still run.
+Another3,120 original ProcessInputEvents frames match hum slot/sample, fire, PCSound
+and exact RND bounds/results/state for primary-versus-swing-pulse, run/melee,
+tank/aircar and stop-running breath. Read-only Unicorn observers record RND entry
+and actual return values without replacing instructions or registers. These direct
+loop fixtures take a prepared running gate; Sim's canonical sampling/cap fixture is
+separate.
 
 The genuine scene1 fire replay has193 completed frames,22 PC fields/frame and772
 missile checkpoints(17 active): no field divergence. It exercises Starbolt9/impact10,

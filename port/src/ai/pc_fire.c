@@ -249,15 +249,13 @@ static int prepare_aim(ai_state *a, const sim_state *s, int mode)
 
 /* ProcessInputEvents 0x147DD..0x14A3B: held input deliberately bypasses
  * the cooldown->latch copy. Semi-automatic spells require a release. */
-static void fire_input(ai_state *a, sim_state *s, world_person *person, int mode)
+static void fire_input(ai_state *a, const sim_state *s, world_person *person, int mode)
 {
     ai_pc_state *p = &a->pc;
-    unsigned key = p->kb_fire, mask = p->kb_fire_bit;
-    int held = key < SIM_SCAN_COUNT && (s->kb_scan_status[key] & (mask | mask*2));
-    if (held) s->kb_scan_status[key] &= (uint8_t)~(mask*2);
+    int held = s->primary_fire;
     if (!held) {
         p->latch = p->cooldown;
-        p->fire = 0;
+        p->fire = p->key_swing_sword;
     } else if (mode == 2) {
         if (!p->fire) {
             set_high(&person->unk_0040, 7); set_low(&person->unk_0040, 4);
@@ -271,6 +269,7 @@ static void fire_input(ai_state *a, sim_state *s, world_person *person, int mode
         p->fire = !p->latch;
         if (mode == 3 && p->fire) p->latch = 1;
     }
+    p->key_swing_sword = 0;
 }
 
 static int launch_pc(ai_state *a, sim_state *s, world *w, unsigned type, int aim)
@@ -298,11 +297,12 @@ static void player_loops(ai_state *a, const sim_state *s, world *w, int mode)
 {
     ai_pc_state *p = &a->pc;
     int keep = 0;
-    if (mode == 2 && p->fire) {
-        player_loop(p, 32, 32767, 16384, 0);
-        keep = 1;
-    } else if (s->running && (mode == 1 || mode == 2 || mode == 5)) {
+    /* Sim's running gate includes148C4's held-primary melee EDI clear. */
+    if (s->running && (mode == 1 || mode == 2 || mode == 5)) {
         player_loop(p, 1, 32767, 32767, 0);
+        keep = 1;
+    } else if (mode == 2 && s->primary_fire) {
+        player_loop(p, 32, 32767, 16384, 0);
         keep = 1;
     }
     if (mode == 7 && !s->vehicle_type) {
@@ -653,13 +653,22 @@ static int hand_stance(ai_state *a, sim_state *s, world *w)
     return 0;
 }
 
-int ai_pc_input(ai_state *a, sim_state *s, world *w)
+static int pc_ready(const ai_state *a, const sim_state *s, const world *w)
 {
-    int mode = combat_mode(s);
-    ai_pc_state *p = &a->pc;
-    if (!a->events || !a->tables_loaded || w->player_person >= w->person_count ||
+    if (!a || !s || !w || !a->events || !a->tables_loaded ||
+        w->player_person >= w->person_count ||
         w->player_object >= w->object_count)
         return cm_fail("PCFire", 0, "player combat is not initialized");
+    return 0;
+}
+
+/* ProcessInputEvents0x14754 precedes acceleration, water and hit response. */
+int ai_pc_prepare_input(ai_state *a, sim_state *s, world *w)
+{
+    int mode;
+    ai_pc_state *p;
+    if (pc_ready(a, s, w)) return -1;
+    mode = combat_mode(s); p = &a->pc;
     if (equip(a, s, w, mode)) return -1;
     /* HandleNextFrame 0x1BA49: the four glow frames use the 2-tick gate. */
     if (s->bp_limit_flag) p->glow_frame = (p->glow_frame+1)%4;
@@ -681,11 +690,30 @@ int ai_pc_input(ai_state *a, sim_state *s, world *w)
     keyboard_hand(p, s, mode);
     fire_input(a, s, &w->persons[w->player_person], mode);
     player_loops(a, s, w, mode);
-    if (ai_pc_hit_response(a, s, w) || prepare_aim(a, s, mode)) return -1;
+    return 0;
+}
+
+/* 0x1CF71..0x1D6xx: hit/aim/sword state precedes every MovePerson branch. */
+int ai_pc_prepare_motion(ai_state *a, sim_state *s, world *w)
+{
+    int mode;
+    if (pc_ready(a, s, w)) return -1;
+    mode = combat_mode(s);
+    if (ai_pc_hit_response(a, s, w) || prepare_aim(a, s, mode) ||
+        (mode == 2 && hand_stance(a, s, w))) return -1;
+    return 0;
+}
+
+/* Actual PCLaunchMissile dispatch follows movement at0x1D841..0x1E781. */
+int ai_pc_input(ai_state *a, sim_state *s, world *w)
+{
+    int mode;
+    ai_pc_state *p;
+    if (pc_ready(a, s, w)) return -1;
+    mode = combat_mode(s); p = &a->pc;
     if ((mode == 1 && ranged_fire(a, s, w)) ||
         (mode == 5 && spell_fire(a, s, w)) ||
-        (mode == 7 && tank_fire(a, s, w)) ||
-        (mode == 2 && hand_stance(a, s, w))) return -1;
+        (mode == 7 && tank_fire(a, s, w))) return -1;
     /* HandleNextFrame 0x1E781: delayed linking missiles precede NPC updates. */
     if (p->magic_link_ticks) {
         int object;

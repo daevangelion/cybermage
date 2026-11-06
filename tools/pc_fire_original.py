@@ -5,12 +5,40 @@ from pathlib import Path
 import struct
 import subprocess
 
-from unicorn.x86_const import UC_X86_REG_EBP, UC_X86_REG_EDI, UC_X86_REG_EIP, UC_X86_REG_ESI, UC_X86_REG_ESP
+from unicorn import UC_HOOK_CODE
+from unicorn.x86_const import UC_X86_REG_EAX, UC_X86_REG_EBP, UC_X86_REG_EDI, UC_X86_REG_EIP, UC_X86_REG_ESI, UC_X86_REG_ESP
 from world_original import Original, ROOT, STACK, THIS
 
 PERSON = 0xA00000
 FIELDS = (0x144AB0, 0x144AB4, 0x144AB8, 0x144AA8, 0x144AAC, 0x144A4C)
 DIRECTIONS = (0x48, 0x4D, 0x50, 0x4B, 0x47, 0x49, 0x4F, 0x51)
+
+def rng_observer(cpu):
+    calls, pending = [], []
+
+    def signed(value):
+        return value if value < 0x80000000 else value - 0x100000000
+
+    def observe(uc, address, size, context):
+        if address == 0x6731C:
+            stack = uc.reg_read(UC_X86_REG_ESP)
+            pending.append((struct.unpack('<I', uc.mem_read(stack, 4))[0],
+                            signed(uc.reg_read(UC_X86_REG_EAX))))
+        elif pending and address == pending[-1][0]:
+            _, bound = pending.pop()
+            calls.append((bound, signed(uc.reg_read(UC_X86_REG_EAX))))
+
+    cpu.hook_add(UC_HOOK_CODE, observe)  # Read-only: no register/code replacement.
+    return calls, pending
+
+
+def rng_fields(calls, pending):
+    if pending or len(calls) > 2:
+        raise ValueError('unexpected/incomplete original RND observation')
+    fields = [len(calls)]
+    for i in range(2):
+        fields.extend(calls[i] if i < len(calls) else (-1, -1))
+    return tuple(fields)
 
 
 def compare(native, weapon, position, auto, seed):
@@ -139,6 +167,7 @@ def compare_bob(native, phase, speed, x, y, moving):
 def compare_breath(native, hp, maximum, hum_slot, hum_sound, seed):
     original = Original()
     cpu = original.cpu
+    calls, pending = rng_observer(cpu)
     cpu.mem_write(THIS + 0x13141C, struct.pack('<I', PERSON))
     cpu.mem_write(THIS + 0x130D08, struct.pack('<I', 1))
     cpu.mem_write(PERSON + 0x38, struct.pack('<hh', hp, maximum))
@@ -156,15 +185,62 @@ def compare_breath(native, hp, maximum, hum_slot, hum_sound, seed):
     if len(rows) != 80:
         raise ValueError('native respiration fixture did not emit 80 frames')
     for frame, row in enumerate(rows):
+        calls.clear()
         cpu.emu_start(0x1928B, 0x19340, count=1024)
         if cpu.reg_read(UC_X86_REG_EIP) != 0x19340:
             raise ValueError('original respiration did not reach its exit')
         wanted = (frame, *struct.unpack('<3H', cpu.mem_read(0x9747F, 6)),
-                  struct.unpack('<i', cpu.mem_read(THIS + 0x144A3C, 4))[0])
+                  struct.unpack('<i', cpu.mem_read(THIS + 0x144A3C, 4))[0],
+                  *rng_fields(calls, pending))
         got = tuple(map(int, row.split()))
         if got != wanted:
             raise ValueError(f'breathing hp={hp}/{maximum} hum={hum_slot,hum_sound} '
                              f'seed={seed} frame={frame}: native={got}, original={wanted}')
+    return len(rows)
+
+def compare_hum(native, mode, primary, pulse, running, request, vehicle, slot, sample, seed):
+    original = Original()
+    cpu = original.cpu
+    calls, pending = rng_observer(cpu)
+
+    def put(address, value):
+        cpu.mem_write(address, struct.pack('<I', value & 0xFFFFFFFF))
+
+    for address, value in ((THIS + 0x13141C, PERSON), (THIS + 0x130D04, 1),
+                           (THIS + 0x14480C, mode), (THIS + 0x130D14, vehicle),
+                           (THIS + 0x144AB0, 1), (THIS + 0x144B00, 16),
+                           (THIS + 0x144A3C, -1), (0x9261C, slot),
+                           (0x1E3964, sample), (0x1E38C8, 1)):
+        put(address, value)
+    put(PERSON + 0x40, 4 | 4 << 16)
+    cpu.mem_write(0x9747F, struct.pack('<3H', *seed))
+    # Native takes the prepared running gate; Sim's separate fixture proves
+    # raw request/primary -> gate/cap. Here the original derives it from request.
+    rows = subprocess.check_output([str(native), str(ROOT / 'orig/retail/CM_HI.EXE'),
+                                   'hum', *map(str, (mode, primary, pulse, running, vehicle,
+                                                    slot, sample, *seed))],
+                                  text=True).splitlines()
+    if len(rows) != 80:
+        raise ValueError('native loop fixture did not emit 80 frames')
+    for frame, row in enumerate(rows):
+        put(THIS + 0x144B10, primary)
+        put(THIS + 0x144B08, request)
+        put(0x206848, pulse)
+        put(0x207473, 300 + frame * 2)
+        calls.clear()
+        original.call(0x14754, [THIS])
+        wanted = (frame, struct.unpack('<i', cpu.mem_read(THIS + 0x144AB0, 4))[0],
+                  struct.unpack('<i', cpu.mem_read(0x9261C, 4))[0],
+                  struct.unpack('<i', cpu.mem_read(0x1E3964, 4))[0],
+                  struct.unpack('<i', cpu.mem_read(THIS + 0x144A3C, 4))[0],
+                  *struct.unpack('<3H', cpu.mem_read(0x9747F, 6)),
+                  *rng_fields(calls, pending))
+        got = tuple(map(int, row.split()))
+        if got != wanted:
+            raise ValueError(f'loop mode={mode} primary/pulse={primary,pulse} '
+                             f'running/request={running,request} vehicle={vehicle} '
+                             f'initial={slot,sample} seed={seed} frame={frame}: '
+                             f'native={got}, original={wanted}')
     return len(rows)
 
 
@@ -204,6 +280,19 @@ def main():
                 count += compare_breath(args.native.resolve(), hp, maximum, hum_slot, hum_sound, seed)
     print(f'PC respiration: {count} unmodified original x86 frames matched '
           '(PERSON0, HP half/death edges, real muted RND/volume path, hum gate, 3 RNG seeds)')
+    count = 0
+    cases = ((2, 1, 0, 0, 768, 0, -1, 0), (2, 0, 1, 1, 768, 0, -1, 0),
+             (2, 0, 0, 1, 768, 0, -1, 0), (2, 0, 1, 0, 0, 0, -1, 0),
+             (2, 1, 0, 0, 0, 0, -1, 0), (5, 1, 0, 1, 768, 0, -1, 0),
+             (5, 0, 0, 1, 768, 0, -1, 0), (5, 0, 0, 0, 0, 0, 0, 1),
+             (5, 0, 0, 0, 0, 0, 0, 32), (7, 0, 0, 0, 0, 0, -1, 0),
+             (7, 0, 0, 0, 0, 1, -1, 0), (7, 0, 0, 0, 0, 1, 0, 1),
+             (2, 1, 0, 0, 768, 0, 0, 1))
+    for case in cases:
+        for seed in ((1, 2, 3), (3000, 44, 29999), (65535, 32768, 32767)):
+            count += compare_hum(args.native.resolve(), *case, seed)
+    print(f'PC loops: {count} unmodified original x86 input frames matched '
+          '(held-primary versus swing pulse, running, melee, tank/aircar, stop breath and exact RND calls)')
 
 
 if __name__ == '__main__':

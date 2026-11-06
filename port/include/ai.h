@@ -109,7 +109,7 @@ typedef struct {
     int32_t unk_1444EC;
     int32_t hit_camera_z; /* Current frame's +4B170 increment from +1444FC. */
     int32_t magic_link_ticks; /* +144AE4 */
-    int32_t key_hand_x, key_hand_y;
+    int32_t key_hand_x, key_hand_y, key_swing_sword; /* keySwingSword206848 */
     int32_t auto_s_flag, auto_swinging, auto_s_reset, reset_pos, auto_s_mode;
     int32_t auto_update_flag;
     uint32_t auto_s_time, spell_timer, tank_timer;
@@ -177,6 +177,10 @@ int ai_pc_load_tables(ai_state *a, const cm_exe *exe);
 int ai_reset_aim(ai_state *a, const sim_state *s);
 int ai_pc_equip(ai_state *a, const sim_state *s, const world *w);
 void ai_pc_hand_bob(ai_state *a, const sim_state *s);
+/* Sim: input before acceleration; motion after body and before MovePerson.
+ * Main: actual weapon fire after Sim, before world/NPC updates. */
+int ai_pc_prepare_input(ai_state *a, sim_state *s, world *w);
+int ai_pc_prepare_motion(ai_state *a, sim_state *s, world *w);
 int ai_pc_input(ai_state *a, sim_state *s, world *w);
 int ai_pc_hit_response(ai_state *a, sim_state *s, world *w);
 int ai_pc_hand2hand(ai_state *a, sim_state *s, world *w);
