@@ -1,0 +1,164 @@
+#include "ui.h"
+
+#define HAND_SCALE_ONE 65536u
+#define HAND_MAX_DIMENSION 1024
+
+int ui_draw_player_hand(const cm_ui *ui, world *w, uint8_t *dst,
+                        int mode, int weapon, unsigned frame, ui_view view)
+{
+    static const unsigned weapon_prop[10] = {13,56,55,132,133,134,135,139,140,141};
+    static const unsigned sword_prop[4] = {14,136,137,138};
+    const uint8_t *data;
+    uint32_t size, start, end, image;
+    unsigned resource, glove;
+    ui_hand hand = {0};
+    if (!ui->hand_tables_loaded || frame >= UI_HAND_FRAMES)
+        return cm_fail("hand graphics", frame, "missing pose data or invalid frame");
+    if (mode == 5) { resource = 48; glove = 1; }
+    else if (mode == -1) { resource = 47; glove = 0; }
+    else if (mode == 1 && weapon >= 0 && weapon < 10) {
+        resource = weapon_prop[weapon]; glove = (unsigned)weapon + 2;
+    } else if (mode == 2 && weapon >= 0 && weapon < 4) {
+        resource = sword_prop[weapon]; glove = (unsigned)weapon;
+    } else return cm_fail("hand graphics", (uint32_t)mode, "unsupported player hand mode");
+    image = (uint32_t)(mode == 2 ? ui->Swd_xFrame[glove][frame] :
+        ui->Glv_xFrame[glove][frame]);
+    if (rsc_entry(&w->props, resource, &data, &size)) return -1;
+    if (size < 1442 || data[0] > 120 || image >= data[0])
+        return cm_fail(w->props.path, resource, "hand frame exceeds prop package");
+    start = cm_u32(data + 962 + image * 4);
+    end = image + 1 < data[0] ? cm_u32(data + 962 + (image+1) * 4) : size;
+    if (start < 1442 || start > end || end > size)
+        return cm_fail(w->props.path, resource, "hand frame span exceeds package");
+    hand.pixels.data = data + start; hand.pixels.size = end - start;
+    /* LoadPROPDOSMEM0x259EB/0x259FD swaps disk width/height into TEX_H/TEX_W. */
+    hand.half_width = (int32_t)cm_u32(data + 6 + image * 8);
+    hand.half_height = (int32_t)cm_u32(data + 2 + image * 8);
+    hand.x_off = ui->Glv_xOff[glove][frame];
+    hand.y_off = ui->Glv_yOff[glove][frame];
+    hand.x_pos_off = ui->Glv_xPosOff[glove][frame];
+    hand.view_x = view.x; hand.view_y = view.y;
+    hand.view_width = view.width; hand.view_height = view.height;
+    /* MenuOptions0x4F222: glove pointer is posed at63,133 in the full screen. */
+    hand.aim_x = mode == -1 ? 63 : ui->CenterAimX[glove];
+    hand.aim_y = mode == -1 ? 133 : ui->CenterAimY[glove];
+    if (mode == 2) {
+        hand.sword = 1;
+        hand.x_off = ui->SwordX[glove][frame];
+        hand.y_off = hand.x_pos_off = hand.aim_x = hand.aim_y = 0;
+    }
+    if (mode == 5) {
+        int glow;
+        if (weapon < 0 || weapon >= 16 || (glow = ui->GlowSet[weapon]) < 0 || glow >= 4)
+            return cm_fail("hand graphics", (uint32_t)weapon, "invalid spell glow selector");
+        return ui_draw_xscale_aim(dst, &hand, ui->SpellGlow+glow*3);
+    }
+    return ui_draw_xscale_aim(dst, &hand, NULL);
+}
+
+/* DrawXScaleAim0x29260; DrawXScaleGlow0x29524 differs only for FD..FF.
+ * Pose tables Glv_xOff/yOff/xPosOff are supplied by the game, not the renderer.
+ * [rust: crates/game/src/native/cmdraw.rs] provided the packed-row guide. */
+int ui_draw_xscale_aim(uint8_t *dst, const ui_hand *h, const uint8_t *glow)
+{
+    int width, rows, top, left, y;
+    uint32_t ustep, vstep, v = 0, source_width, source_rows;
+    if (h->half_width <= 0 || h->half_width > HAND_MAX_DIMENSION ||
+        h->half_height <= 0 || h->half_height > HAND_MAX_DIMENSION ||
+        h->view_width <= 0 || h->view_width > CM_WIDTH ||
+        h->view_height <= 0 || h->view_height > CM_HEIGHT ||
+        h->view_x < 0 || h->view_x > CM_WIDTH-h->view_width ||
+        h->view_y < 0 || h->view_y > CM_HEIGHT-h->view_height ||
+        h->x_off < -HAND_MAX_DIMENSION || h->x_off > HAND_MAX_DIMENSION ||
+        h->y_off < -HAND_MAX_DIMENSION || h->y_off > HAND_MAX_DIMENSION ||
+        h->x_pos_off < -HAND_MAX_DIMENSION || h->x_pos_off > HAND_MAX_DIMENSION ||
+        h->aim_x < -HAND_MAX_DIMENSION || h->aim_x > HAND_MAX_DIMENSION ||
+        h->aim_y < -HAND_MAX_DIMENSION || h->aim_y > HAND_MAX_DIMENSION)
+        return cm_fail("hand graphics", 0, "hand pose outside engine limits");
+    source_width = (unsigned)h->half_height * 2;
+    source_rows = (unsigned)h->half_width * 2;
+    width = h->view_width * (int)source_width / CM_WIDTH * 2;
+    rows = h->view_width * (int)source_rows / CM_WIDTH * 2;
+    if (width <= 0 || rows <= 0 || source_rows > h->pixels.size / 4)
+        return cm_fail("hand graphics", 0, "truncated hand row table");
+    ustep = source_width * HAND_SCALE_ONE / (unsigned)width;
+    vstep = source_rows * HAND_SCALE_ONE / (unsigned)rows;
+    if (rows > h->view_height) {
+        v = vstep * (unsigned)(rows-h->view_height);
+        rows = h->view_height;
+    }
+    top = (h->y_off * 2 + CM_HEIGHT - h->aim_y * 2) * h->view_width / CM_WIDTH;
+    if (top < h->view_height-rows) top = h->view_height-rows;
+    else if (top > h->view_height-4) top = h->view_height-4;
+    left = (h->x_off * 2 + h->aim_x * 2 + CM_WIDTH/2 - h->x_pos_off * 2) *
+        h->view_width / CM_WIDTH;
+    if (h->sword) {
+        left = (h->x_off * h->view_width / CM_WIDTH + h->aim_x) * 2;
+        top = h->view_height - rows - h->aim_y;
+    }
+    for (y = top; y < h->view_height; ++y) {
+        uint32_t at, logical = 0, u = 0, row = v / HAND_SCALE_ONE;
+        int x = 0;
+        if (row >= source_rows)
+            return cm_fail("hand graphics", row * 4, "scaled row exceeds hand table");
+        at = cm_u32(h->pixels.data + row * 4);
+        if (at < source_rows * 4 || at > h->pixels.size)
+            return cm_fail("hand graphics", row * 4, "hand row points outside payload");
+        while (x < width) {
+            int run;
+            unsigned count;
+            uint32_t end;
+            if (at > h->pixels.size || h->pixels.size-at < 2)
+                return cm_fail("hand graphics", at, "truncated packed run");
+            run = cm_u16(h->pixels.data + at);
+            if (run >= 32768) run -= 65536;
+            at += 2;
+            if (run == 0 || run == -32768)
+                return cm_fail("hand graphics", at-2, "invalid packed run length");
+            count = (unsigned)(run < 0 ? -run : run);
+            if (count > source_width-logical ||
+                (run > 0 && count > h->pixels.size-at))
+                return cm_fail("hand graphics", at-2, "packed run exceeds hand row");
+            end = logical + count;
+            while (x < width && u / HAND_SCALE_ONE < end) {
+                int dx = h->view_x + left + x, dy = h->view_y + y;
+                if (run > 0 && dx >= h->view_x && dx < h->view_x+h->view_width &&
+                    dy >= h->view_y && dy < h->view_y+h->view_height) {
+                    uint8_t c = h->pixels.data[at + u / HAND_SCALE_ONE-logical];
+                    if (glow && c > 252) {
+                        c = glow[255-c];
+                        if (c) dst[dy * CM_WIDTH + dx] = c;
+                    } else dst[dy * CM_WIDTH + dx] = c;
+                }
+                ++x;
+                u += ustep;
+            }
+            logical = end;
+            if (run > 0) at += count;
+        }
+        v += vstep;
+    }
+    return 0;
+}
+
+/* PCDeath0x153EE initializes all columns to7. Each melt pass0x1547C–0x15534
+ * samples480 columns with RND(640), shifts8 rows, and reveals background. */
+int ui_pc_death(uint8_t *dst, const uint8_t *background,
+                unsigned columns[CM_WIDTH], world_rng *rng)
+{
+    unsigned sample;
+    for (sample = 0; sample < CM_WIDTH; ++sample)
+        if ((columns[sample] & 7u) != 7u || columns[sample] > CM_HEIGHT + 7u)
+            return cm_fail("PCDeath", sample, "invalid melt column state");
+    for (sample = 0; sample < CM_HEIGHT; ++sample) {
+        unsigned x = (unsigned)world_rnd(rng, CM_WIDTH), at = columns[x];
+        int y;
+        if (at >= CM_HEIGHT) continue;
+        for (y = CM_HEIGHT-1; y > (int)at; --y)
+            dst[y * CM_WIDTH + x] = dst[(y-8) * CM_WIDTH + x];
+        for (y = (int)at; y >= 0 && y > (int)at-8; --y)
+            dst[y * CM_WIDTH + x] = background[y * CM_WIDTH + x];
+        columns[x] += 8;
+    }
+    return 0;
+}

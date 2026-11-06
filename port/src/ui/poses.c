@@ -22,7 +22,9 @@ int ui_load_hand_tables(cm_ui *ui, const char *asset_dir)
     if (cm_exe_table(&p, 0x93C4C, ui->CenterAimX, UI_GLOVE_COUNT) ||
         cm_exe_table(&p, 0x93C8C, ui->CenterAimY, UI_GLOVE_COUNT) ||
         cm_exe_table(&p, 0x92690, ui->spellPower, 16) ||
-        cm_exe_table(&p, 0x926D0, ui->spellScon, 16)) goto out;
+        cm_exe_table(&p, 0x926D0, ui->spellScon, 16) ||
+        cm_exe_table(&p, 0x92EA0, ui->GlowSet, 16) ||
+        cm_exe_bytes(&p, 0x92E58, ui->SpellGlow, sizeof ui->SpellGlow)) goto out;
     for (i = 0; i < UI_GLOVE_COUNT; ++i) {
         uint32_t offset = i * UI_HAND_FRAMES * 4;
         if (cm_exe_table(&p, 0x93F88+offset, ui->Glv_xOff[i], UI_HAND_FRAMES) ||
