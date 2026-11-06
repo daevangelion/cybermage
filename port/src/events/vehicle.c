@@ -137,6 +137,7 @@ int events_set_tank_mode(events_state *e, sim_state *s, world *w, int enter)
     if (!e || !s || !w || w->player_object >= w->object_count)
         return cm_fail("vehicle", 0, "invalid player");
     e->tank_flag = 0;
+    s->tank_hand=0; /* SetTankMode0127A3 clears the secondary-hand global. */
     if (enter) {
         if (e->vehicle_person <= 0 || (unsigned)e->vehicle_person >= w->person_count)
             return cm_fail("vehicle", (uint32_t)e->vehicle_person, "invalid vehicle person");

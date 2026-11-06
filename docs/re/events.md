@@ -270,6 +270,65 @@ Fixtures cover held-vs-edge Tab, delayed exit, ignored Enter, modern F transport
 and both foot-life branches of dead-vehicle handling. The Enter regression failed
 before the cutover; all fixtures and the strict complete desktop build passed.
 
+## Full inventory and key-selector reducer proof
+
+The genuine `vehicle-regen-menu-items` route starts from original-written
+SAVE000 SHA256`f903211d8f42461a5ba5fad06325df29777d4a60d64d0222bd9b91583a7f3796`.
+Fresh read-only observations are in
+`captures/Standing-original-bee11c5/original/vehicle-regen-menu-items/`;
+producer binary63db872a and patchad772577 are pinned in its `run.json`.
+The original executable runs the same key schedule, with no scene/vehicle
+override or fabricated initial save.
+
+```
+tools/run_capped.sh .venv/bin/python port/tests/test_events_trace_original.py \
+  port/build/Events2/events_trace orig/retail \
+  captures/Standing-original-bee11c5/original/vehicle-regen-menu-items \
+  captures/earned-telecom
+```
+
+All341 checkpoints and12,361,932 independently computed bytes match.
+Every row compares all1600 inventory bytes,116 equipment/status bytes
+(including draw-computed regen interval),88 key-selector count/index/shared-map
+bytes and PERSON0 HP. The global spRegenTimer206834 is also required and checked.
+The one observed root pickup is frame114/tick547, type6/object889/source936;
+F4 uses it in frame216, producing HP17→40 at pre-frame217/tick657 and removing
+the item/quantity. There are47 actual ProcessSelector input rows and one real
+UI_Save reset,340 paired normal draws and one Save redraw.
+
+Draws use the canonical StatusMonitor and PC draw-state producers with every
+actual conditional clock read. The earlier fixed frame-clock approximation
+failed at frame67; unconditional HUD advancement then failed at selector
+opening169. The shared selector monitor predicate fixes that actual game bug;
+neither timer rows nor energy/status bytes are skipped.
+
+Seventeen positive/negative controls reject missing/wrong draw clocks, an altered
+conditional deadline read, changed inventory/equipment/interval/
+selector bytes, HP, partial spans, malformed or late pickup inputs, missing
+selector rows and routing inconsistent with the real CMDATA setting.
+A counterfactual pointer only routes after a counterfactual Mouse setting;
+it is not presented as original hardware evidence. The genuine route has
+mouse0/joystick0. Unit tests compare the byte getter against the real SAVE
+exporters and exercise the real pickup/use API.
+
+This is an isolated reducer/shared-draw-state gate, not integrated AI/RNG,
+movement or pixels. Twelve bytes at131418 (Sim flight height and two guest
+PERSON pointers) are explicitly excluded. Weapon/power selector count/index
+blocks are unverified.
+The twelve unverified link-address bytes are PC-owned spellTimer206828,
+waveTimer20682C and waveFrame206830, not guest pointers. The tool prints these
+and the Sim/guest-pointer exclusions separately. It rejects dedicated P/pause:
+HandleKeyboardEvents013F6A..013FED shifts Events-owned deadlines on resume,
+which this reducer does not model. The observed GUI Save redraw is a different
+path. Death/shop/mid-trace Load likewise require the full game-loop gate,
+rather than silently dropping those frames. An unpaired terminal checkpoint
+does not invent draw clock inputs.
+
+PCTankHand206824 now compares canonical `sim_state.tank_hand`, not vehicle type
+at Xox130D14. SetTankMode0127A3 resets that flag; the transition fixture starts
+it nonzero to ensure the reset is real. Tank secondary-input processing belongs
+to Sim's source-derived14E6D/14FF2 path.
+
 ## Review corrections
 
 Compact runtime props now retain their source disk record index and cached item

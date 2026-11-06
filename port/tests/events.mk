@@ -6,8 +6,9 @@ LDLIBS += $(shell pkg-config --libs sdl2) -lm
 SOURCES := $(filter-out src/main.c,$(wildcard src/*.c src/*/*.c))
 
 .PHONY: check
-check: $(B)/test_events
+check: $(B)/test_events $(B)/test_events_trace
 	$(B)/test_events
+	$(B)/test_events_trace
 
 $(B)/test_events: tests/test_events.c $(SOURCES) $(wildcard include/*.h)
 	@mkdir -p $(@D)
@@ -16,3 +17,7 @@ $(B)/test_events: tests/test_events.c $(SOURCES) $(wildcard include/*.h)
 $(B)/events_trace: tests/events_trace.c $(SOURCES) $(wildcard include/*.h)
 	@mkdir -p $(@D)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ tests/events_trace.c $(SOURCES) $(LDLIBS)
+
+$(B)/test_events_trace: tests/test_events_trace.c tests/events_trace.c $(SOURCES) $(wildcard include/*.h)
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ tests/test_events_trace.c $(SOURCES) $(LDLIBS)

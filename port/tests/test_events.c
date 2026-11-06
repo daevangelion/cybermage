@@ -208,10 +208,12 @@ static void pending_vehicle(void)
     assert(events_frame_begin(&e,&s,&a,&w)==0);
     assert(e.tank_flag==1 && w.player_object==1 && s.pc_mode==5);
     w.persons[55].status=0;
+    s.tank_hand=1;
     assert(events_input(&e,&s,&a,&w)==0);
     assert(e.tank_flag==1 && w.player_object==1 && s.pc_mode==5);
     assert(events_frame_begin(&e,&s,&a,&w)==0);
     assert(!e.tank_flag && w.player_object==2 && w.player_person==55 && s.pc_mode==7);
+    assert(!s.tank_hand);
 }
 
 static void queued_vehicle_exit(void)
