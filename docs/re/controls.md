@@ -138,8 +138,12 @@ The pure action unit test, SDL virtual GameController headless smoke, full
 and integrated new-game synthetic-input smoke have run successfully under
 strict C99 warnings. The integrated smoke uses the actual `--controls modern`
 main loop and observes changed world position, heading/pitch, active jump and
-the player's fire reducer. The simulation fixture verifies full walking
+the player's fire reducer. It writes an actual `--user/controls.cfg` rebinding
+forward to T and verifies that request before injecting controller motion.
+The simulation fixture verifies full walking
 displacement is twice half-stick displacement, and running is twice walking.
+It also exercises weapon cycling, selector category changes and shortcuts,
+non-consuming item cycling, item use and the existing flight-landing reducer.
 The tests also exercise normalisation, fractional look, context
 release, rebinding rejection, keyboard/mouse/controller movement/look/jump/fire,
 controller disconnect, focus loss, menu taps, simultaneous gameplay fingers and
