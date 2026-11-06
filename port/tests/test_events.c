@@ -7,6 +7,8 @@ static world w;
 static events_state e;
 static sim_state s;
 static ai_state a;
+static events_state restored;
+static ui_save_state saved;
 
 int main(void)
 {
@@ -61,5 +63,26 @@ int main(void)
     w.objects[1].heading = cm_atan64k(0, 0, 0x4000, 0);
     assert(events_switch_search(&e, &s, &a, &w) == 0);
     assert(e.tank_flag && e.vehicle_person == 84 && e.vehicle_type == 0);
+    memset(e.items,0,sizeof(e.items));
+    e.definition_count=2;e.definitions[1].kind=9;
+    assert(events_buy_item(&e,&w,1)==1);
+    assert(events_buy_item(&e,&w,1)==1);
+    assert(e.items[0].quantity==2);
+    assert(events_inventory_sell(&e,0,1)==1);
+    assert(e.items[0].quantity==1);
+    e.events[511].value[15]=-1234567;e.events[511].state=7;
+    e.cash=999;e.energy=12;e.max_energy=40;e.ammo[11]=37;
+    assert(events_save_export(&e,&saved)==0);
+    restored.definition_count=2;
+    assert(events_save_import(&restored,&saved)==0);
+    assert(restored.items[0].type==1 && restored.items[0].quantity==1);
+    assert(restored.events[511].value[15]==-1234567 && restored.events[511].state==7);
+    assert(restored.cash==999 && restored.energy==12 && restored.ammo[11]==37);
+    w.objects[3].x=w.objects[1].x;w.objects[3].y=w.objects[1].y;
+    w.objects[3].radius=w.objects[3].height=65536;w.objects[3].z=0;
+    w.objects[1].floor_z=65536;
+    events_zflat_drop(&w,3,65536);
+    assert(w.objects[1].floor_z==65536-0x4000);
+    assert(events_rescale_prop(&w,0,100)<0);
     return 0;
 }

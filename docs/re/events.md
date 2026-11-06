@@ -73,3 +73,57 @@ stance offsets. Aircar sets flight mode2. Exiting restores on-foot object at the
 vehicle's location/heading, reinserts it and invokes ClearVehicle046A78, whose
 ClearObject collision displacement is owned by Sim. Both transitions reset pitch
 and body shape_z+shape_z/2+1000. Physical vehicle movement remains Sim's module.
+
+## Current verification and gaps
+
+`tools/scenarios/events-door.txt` uses only original key input. The successful
+capture approaches switch51, waits for braking to finish, presses Enter and
+opens its door. Original state changes include switch51 and event134. The
+capture is `captures/events-door/frames.csv`; native game hooks and vehicle
+overrides are disabled by the original oracle wrapper.
+
+Focused reducer comparison:
+
+```
+tools/run_capped.sh make -C port -f tests/events.mk B=build/Events check build/Events/events_trace
+tools/run_capped.sh port/build/Events/events_trace orig/retail captures/events-door/frames.csv
+```
+
+The latest run matched252 pre-frame checkpoints and2,806,272 event/switch bytes.
+The comparator supplies recorded player position, clock and key observations as
+**inputs to the event reducer**. It independently initializes events from retail
+scene records and computes every compared event value. No expected event output
+is imported. This proves the isolated switch/door reducer scenario, not integrated
+movement/AI/pixel parity. There are251 observed frame-to-frame result edges.
+
+`test_events` also passes full-health nonconsumption, armor repair consumption,
+invalid slot rejection, sorted weapon/power selection, free/full auto-slot search,
+strict vehicle distance and heading acceptance, original BuyItem consumable
+stacking, inventory selling, saved event511 round-trip and descending-flat
+maximum4000 rider movement. The two printed ERROR diagnostics are intentional
+negative tests (invalid inventory slot and absent prop placement).
+
+All event sources compiled under strictC99. An earlier integrated build linked;
+the latest integrated link is blocked outside this slice by missing
+`ai_pc_input` and `ai_pc_hand2hand`. The focused event tests link and run against
+the current other subsystem sources.
+
+**This slice is not acceptance-complete.** MoveWorld dispatch types
+38,40,41,42,46,47,48,49,50,51,53,54,56,57,68,69,70,72,83,87 still reject
+explicitly; scene-specific water/candle updates and auto-destruction consumption
+are not ported. Every type present in the retail scene1 event table has a
+dispatch implementation, but only the initial real switch/door path is compared.
+Vehicle entry/exit has unit coverage, **not** the required real-oracle vehicle
+entry trace. The attempted real route only reached the post-door corridor.
+The supplied retail SAVE010.DAT is the initial scene1 position, not a vehicle
+save. No vehicle-debug override, coordinate patch or fabricated save was used.
+
+Integration contracts: `events_init` now resets scene metadata, **preserving**
+player inventory/status. AI's `ai_init_pc` owns original boot/new-game
+initialization and its RNG calls. `events_load_tables` reads numeric monitor
+tables from CM_HI.EXE once. The main-loop owner consumes `scene_requested` and
+`ending_requested`; UI consumes `shop_requested`, recorder and item notifications.
+`events_save_import/export` explicitly bridge inventory/status/event/switch
+runtime to UI's original byte codec. Runtime table/state fields never serialize
+native struct padding. Hostile bundle recursion and repeated empty random draws
+fail at named finite limits rather than hanging.

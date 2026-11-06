@@ -12,3 +12,7 @@ check: $(B)/test_events
 $(B)/test_events: tests/test_events.c $(SOURCES) $(wildcard include/*.h)
 	@mkdir -p $(@D)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ tests/test_events.c $(SOURCES) $(LDLIBS)
+
+$(B)/events_trace: tests/events_trace.c $(SOURCES) $(wildcard include/*.h)
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ tests/events_trace.c $(SOURCES) $(LDLIBS)

@@ -1,4 +1,5 @@
 #include "events.h"
+#include "ai.h"
 #include <string.h>
 
 static int32_t dice(world *w, const events_definition *d)
@@ -84,26 +85,15 @@ static int16_t add_limit(int16_t value, int32_t add, int16_t maximum)
     return result > maximum ? maximum : result;
 }
 
-/* CollItem 042700. Definition id is from PROP placement+6, not prop type. */
-int events_coll_item(events_state *e, world *w, unsigned object, unsigned source)
+static int grant_item(events_state *e, world *w, unsigned type, int object,
+                       unsigned depth)
 {
-    unsigned i, slot = EVENTS_ITEM_MAX, type, subtype;
+    unsigned i, slot = EVENTS_ITEM_MAX, subtype;
     const events_definition *d;
     world_person *pc;
     int32_t amount;
     int keep = 1, take = 1;
-    const uint8_t *record = NULL;
-    world_span props;
-    if (!e || !w || object >= w->object_count || source >= w->object_count)
-        return cm_fail("CollItem",object,"invalid pickup object");
-    if (source != w->player_object || !w->objects[object].active || w->player_person != e->foot_person) return 0;
-    props = w->scene_sections[1];
-    for (i = 0; i < w->prop_count; ++i) if (w->prop_objects[i] == object) {
-        if (props.size < 30 || i >= (props.size - 30) / 30) return cm_fail("CollItem",i,"truncated prop placement");
-        record = props.data + (i + 1) * 30; break;
-    }
-    if (!record) return cm_fail("CollItem",object,"pickup has no placement");
-    type = cm_u16(record + 26);
+    if(depth>=256) return cm_fail("CollItem",type,"cyclic item bundle");
     if (!type || type > e->definition_count) return cm_fail("CollItem",type,"invalid item definition");
     d = &e->definitions[type]; subtype = d->subtype;
     for (i = 0; i < EVENTS_ITEM_MAX; ++i) if (e->items[i].type == (int)type) { slot = i; break; }
@@ -168,8 +158,60 @@ int events_coll_item(events_state *e, world *w, unsigned object, unsigned source
         if (d->spell < 0 || d->spell >= 64) return cm_fail("CollItem",type,"invalid spell");
         e->spells[(unsigned)d->spell / 8] |= (uint8_t)(1u << ((unsigned)d->spell % 8)); keep = 0;
         break;
-    case 14: e->definitions[type].subtype = (uint8_t)w->objects[object].heading; subtype = e->definitions[type].subtype; break;
+    case 14:
+        if(object>=0) e->definitions[type].subtype = (uint8_t)w->objects[object].heading;
+        subtype = e->definitions[type].subtype; break;
     case 15: e->cash = (int32_t)((uint32_t)e->cash + (uint32_t)dice(w,d)); keep = 0; break;
+    case 16: {
+        unsigned mask=d->subtype&15u,choice;
+        int32_t effect=dice(w,d);
+        int16_t hp=(int16_t)pc->unk_0038,max=(int16_t)((uint32_t)pc->unk_0038>>16);
+        if(d->flags&4) effect=-effect;
+        if(!mask) mask=1;
+        choice=(unsigned)world_rnd(&w->rng,4);
+        for(i=0;i<4 && !(mask&(1u<<choice));++i) choice=(choice+1)%4;
+        if(choice==0 && (mask&2) && hp>=max) choice=e->energy<e->max_energy?1:2;
+        if(choice==1 && (mask&1) && e->energy>=e->max_energy) choice=hp<max?0:3;
+        if(choice==0) {
+            if(effect<0) {
+                if(!e->actors) return cm_fail("CollItem",type,"damage owner not bound");
+                if(ai_damage_person(e->actors,w,w->player_person,-effect*10,0,0)) return -1;
+            } else pc->unk_0038=(int32_t)((uint32_t)(uint16_t)max<<16 | (uint16_t)add_limit(hp,effect*10,max));
+        } else if(choice==1) {
+            int32_t energy=(int16_t)(uint16_t)((uint32_t)e->energy+(uint32_t)effect*10u);
+            if(energy<0) energy=0;
+            if(energy>e->max_energy) energy=e->max_energy;
+            e->energy=energy;
+        } else if(choice==2) {
+            max=(int16_t)(uint16_t)((uint32_t)(uint16_t)max+(uint32_t)effect);
+            if(max>999) max=999;
+            hp=add_limit(hp,effect,max);
+            pc->unk_0038=(int32_t)((uint32_t)(uint16_t)max<<16|(uint16_t)hp);
+        } else {
+            e->max_energy=(int16_t)(uint16_t)((uint32_t)e->max_energy+(uint32_t)effect);
+            if(e->max_energy>999) e->max_energy=999;
+            e->energy=add_limit((int16_t)e->energy,effect,(int16_t)e->max_energy);
+        }
+        keep=0;break;
+    }
+    case 17: {
+        unsigned pick,tries;
+        enum { BUNDLE_DRAW_MAX=65536 };
+        int nonempty=0;
+        if(object>=0) { world_omap_delete(w,(unsigned)object);w->objects[object].active=0; }
+        for(i=0;i<6;++i) if(d->extra[i]) nonempty=1;
+        if(!nonempty) return cm_fail("CollItem",type,"empty item bundle");
+        pick=0;
+        for(tries=0;tries<BUNDLE_DRAW_MAX;++tries) {
+            pick=(unsigned)world_rnd(&w->rng,6);
+            if((int8_t)d->extra[pick]) break;
+        }
+        if(tries==BUNDLE_DRAW_MAX) return cm_fail("CollItem",type,"item bundle draw limit reached");
+        if(grant_item(e,w,(unsigned)(int8_t)d->extra[pick],-1,depth+1) ||
+           grant_item(e,w,(unsigned)amount,-1,depth+1) ||
+           grant_item(e,w,subtype,-1,depth+1)) return -1;
+        return 0;
+    }
     default: break;
     }
     if (!take) return 0;
@@ -182,6 +224,23 @@ int events_coll_item(events_state *e, world *w, unsigned object, unsigned source
         v->quantity = (int32_t)((uint32_t)v->quantity + (uint32_t)amount);
     }
     notify(e,(int)type,d->icon);
-    world_omap_delete(w,object); w->objects[object].active = 0;
+    if(object>=0) { world_omap_delete(w,(unsigned)object); w->objects[object].active = 0; }
     return 0;
+}
+
+/* CollItem042700: targetable2 PROP auxiliary is the item definition id. */
+int events_coll_item(events_state *e, world *w, unsigned object, unsigned source)
+{
+    unsigned i,type;
+    world_span props;
+    if(!e || !w || object>=w->object_count || source>=w->object_count)
+        return cm_fail("CollItem",object,"invalid pickup object");
+    if(source!=w->player_object || !w->objects[object].active || w->player_person!=e->foot_person) return 0;
+    props=w->scene_sections[1];
+    for(i=0;i<w->prop_count;++i) if(w->prop_objects[i]==object) {
+        if(props.size<30 || i>=(props.size-30)/30) return cm_fail("CollItem",i,"truncated prop placement");
+        type=cm_u16(props.data+(i+1)*30+26);
+        return grant_item(e,w,type,(int)object,0);
+    }
+    return cm_fail("CollItem",object,"pickup has no placement");
 }

@@ -19,10 +19,13 @@ static int switch_object(const world *w, const events_switch *v)
     return world_fxo_object(w, (unsigned)v->fxo);
 }
 
-static int toggle_switch(events_state *e, world *w, unsigned index)
+int events_toggle_switch(events_state *e, world *w, unsigned index)
 {
-    events_switch *v = &e->switches[index];
-    int object = switch_object(w, v);
+    events_switch *v;
+    int object;
+    if (index >= e->switch_count) return cm_fail("switch",index,"invalid switch index");
+    v = &e->switches[index];
+    object = switch_object(w,v);
     if (object < 0) return cm_fail("switch", index, "invalid switch object");
     v->state ^= 1;
     w->objects[object].texture = v->textures[v->state];
@@ -55,7 +58,7 @@ int events_key_search(events_state *e, sim_state *s, world *w, unsigned key)
             (int64_t)p->floor_z + p->z + p->height <= o->z ||
             cm_distance(p->x,p->y,o->x,o->y) >= 0x8C00 ||
             angle_difference(p->heading,cm_atan64k(p->x,p->y,o->x,o->y)) >= 0x1000) continue;
-        if (toggle_switch(e,w,i)) return -1;
+        if (events_toggle_switch(e,w,i)) return -1;
         return 1;
     }
     return 0;
@@ -88,7 +91,7 @@ int events_switch_search(events_state *e, sim_state *s, ai_state *a, world *w)
             for (j = 0; j < EVENTS_ITEM_MAX; ++j)
                 if (e->items[j].type > 0 && e->items[j].kind == 14 && e->items[j].subtype == v->key) have_key = 1;
         if (!have_key) continue;
-        return toggle_switch(e,w,i);
+        return events_toggle_switch(e,w,i);
     }
     if (e->tank_flag || w->scene >= 12) return 0;
     for (i = 0; i < 4; ++i) {

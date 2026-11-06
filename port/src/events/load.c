@@ -7,15 +7,19 @@ int events_init(events_state *e, world *w)
     world_span span;
     unsigned i, j, count;
     const uint8_t *p;
-    static const int16_t ammo_size[12] = {250,400,60,250,150,500,500,100,100,0,0,0};
     if (!e || !w) return cm_fail("events", 0, "missing events/world storage");
-    memset(e, 0, sizeof(*e));
-    e->energy = e->max_energy = w->scene == 11 ? 100 : 40;
-    e->cash = w->scene == 11 ? 60 : 85;
-    e->spells[0] = 1;
-    for (i = 0; i < EVENTS_ARMOR_MAX; ++i) e->armor[i] = e->max_armor[i] = 30;
-    for (i = 0; i < 12; ++i) e->max_ammo[i] = ammo_size[i];
-    e->foot_object = w->player_object; e->foot_person = w->player_person;
+    memset(e->events,0,sizeof(e->events));
+    memset(e->switches,0,sizeof(e->switches));
+    memset(e->event_heads,0,sizeof(e->event_heads));
+    e->event_count=e->switch_count=0;
+    e->selector_kind=e->selector_count=e->selector_index=0;
+    e->text_trigger=e->text_object=e->text_message=0;
+    e->text_serial=0;
+    e->tank_flag=e->vehicle_person=e->vehicle_type=0;
+    e->shop_requested.kind=0;e->scene_requested.pending=0;
+    e->recorder_requested=0;e->item_up_time=0;
+    e->ambient_slot=-1;
+    e->foot_object = (unsigned)w->persons[0].object; e->foot_person = 0;
     span = w->scene_sections[4];
     if (!span.data || span.size < 328)
         return cm_fail("SCENE.RSC/events", span.size, "truncated event header");
@@ -82,11 +86,12 @@ int events_init(events_state *e, world *w)
         }
     }
     /* InitPC gives the speech recorder, not an invented default weapon. */
-    if (e->definition_count >= 120) {
-        events_item *v = &e->items[0]; const events_definition *d = &e->definitions[120];
-        memcpy(v->name, d->name, sizeof(v->name)); v->type = 120; v->object = d->icon;
-        v->kind = d->kind; v->subtype = d->subtype; v->icon = d->scon; v->quantity = -1;
-    }
+    if (e->definition_count >= 120)
+        for(i=0;i<EVENTS_ITEM_MAX;++i) if(e->items[i].type==120) {
+            events_item *v=&e->items[i];const events_definition *d=&e->definitions[120];
+            memcpy(v->name,d->name,sizeof(v->name));v->object=d->icon;
+            v->kind=d->kind;v->subtype=d->subtype;v->icon=d->scon;
+        }
     return 0;
 }
 
