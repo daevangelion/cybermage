@@ -32,7 +32,7 @@ The independent `target` module supplies ordered clipped projected props in the
 original 640x480 framebuffer coordinates, without pixels or world writes.
 `target_query` takes an explicit original view rectangle and drawing camera;
 it reads world texture extents/trig, never `render.h` or renderer caches. Its
-RayCast/CheckTile/CheckObjects list pass preserves generated-wall/flat ordering,
+shared `vis` RayCast/CheckTile/CheckObjects pass preserves generated-wall/flat ordering,
 cell countdowns and sprite rotation/near clipping. It includes only original
 PACK/INVIS/AURA modes with targetable==1 and inclusive left<=320<=right; MASK is
 excluded by visibility. SetAutoTarget scans this list in reverse. The MONSTER
@@ -65,7 +65,8 @@ rejects invalid animation frames, negative SoulFire lifetimes and active missile
 types outside1..52 at absolute save-file offsets. Gem deadlines use the current
 `ai_state.timer_ticks` at import/export, with modulo32-bit arithmetic.
 Fire/cooldown/latch and link counters are bounded on restore; underwater remains
-an arbitrary signed EventsAction72 payload, not a boolean.
+an arbitrary signed EventsAction72 payload, not a boolean. Aim X/Y retain their
+signed32 range (the original's consumers wrap arithmetic); tank aim is0..63.
 
 ## Actor oracle
 
