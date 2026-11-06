@@ -108,7 +108,7 @@ static int inter(tgv *m, const uint8_t *p, uint32_t n, uint32_t at)
 
 int tgv_open(tgv *m, const uint8_t *data, uint32_t len, const char *file)
 {
-    if (!m || !data || !file || len < 8) return cm_fail(file, 0, "empty TGV movie");
+    if (!m || !data || !file || len < 8) return cm_fail(file ? file : "TGV", 0, "empty TGV movie");
     memset(m, 0, sizeof *m);
     m->data = data; m->len = len; m->file = file;
     return 0;
@@ -144,11 +144,13 @@ int tgv_next(tgv *m)
             return TGV_FRAME;
         }
         if (!memcmp(tag, "1SNh", 4)) {
+            unsigned rate, channels;
             if (n < 32 || memcmp(p, "EACS", 4)) return bad(m, at, "invalid EACS header");
-            m->audio_rate = cm_u32(p + 4); m->audio_channels = p[9];
-            if (m->audio_rate < 4000 || m->audio_rate > 192000 || p[8] != 1 ||
-                (p[9] != 1 && p[9] != 2) || p[10] != 0)
+            rate = cm_u32(p + 4); channels = p[9];
+            if (rate < 4000 || rate > 192000 || p[8] != 1 ||
+                (channels != 1 && channels != 2) || p[10] != 0)
                 return bad(m, at + 8, "unsupported EACS audio format");
+            m->audio_rate = rate; m->audio_channels = channels;
             /* Some EACS headers append initial PCM after the 32-byte header. */
             p += 32; n -= 32;
             if (!n) continue;

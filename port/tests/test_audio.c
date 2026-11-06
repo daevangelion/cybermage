@@ -5,8 +5,10 @@
 #include <string.h>
 
 static cm_error error;
+static unsigned error_calls;
 int cm_fail(const char *file, uint32_t offset, const char *message)
 {
+    ++error_calls;
     error.file = file; error.offset = offset; error.message = message;
     return -1;
 }
@@ -81,6 +83,46 @@ static void song(void)
     assert(audio_banks(bank, sizeof bank, bank, sizeof bank) == -1);
 }
 
+static void stream(void)
+{
+    const uint8_t first[] = {127}, second[] = {128};
+    int16_t out[6];
+    assert(audio_init(11025) == 0);
+    assert(audio_stream_queue(first, 1, 11025, 1) == 0);
+    assert(audio_stream_queue(second, 1, 11025, 1) == 0);
+    assert(audio_stream_pending());
+    audio_mix(out, 3);
+    assert(out[0] == 32512 && out[1] == 32512);
+    assert(out[2] == -32768 && out[3] == -32768);
+    assert(out[4] == 0 && !audio_stream_pending());
+}
+
+static void callback_limits(void)
+{
+    static uint8_t hmi[22000];
+    int16_t out[1000];
+    unsigned which;
+    for (which = 0; which < 2; ++which) {
+        unsigned i, p = 0x184, before, count = which ? 4097 : 513;
+        memset(hmi, 0, sizeof hmi); memcpy(hmi, "HMI-MIDISONG061595", 18);
+        hmi[0xd4] = 120; hmi[0xe4] = 1; put32(hmi + 0xe8, 0x100);
+        put32(hmi + 0x100, 0x104); memcpy(hmi + 0x104, "HMI-MIDITRACK", 13);
+        put32(hmi + 0x15b, 0x80);
+        for (i = 0; i < count; ++i) {
+            hmi[p++] = 0;
+            hmi[p++] = which ? 0xb0 : 0x90;
+            hmi[p++] = which ? 10 : 60; hmi[p++] = 100;
+            if (!which) hmi[p++] = 127;
+        }
+        hmi[p++] = 0; hmi[p++] = 0xff; hmi[p++] = 0x2f; hmi[p++] = 0;
+        assert(audio_init(48000) == 0);
+        assert(audio_song(hmi, p, "limits.hmi") == 0);
+        before = error_calls; audio_mix(out, 500);
+        assert(audio_song_done() && error_calls == before);
+        assert(audio_song_error() == -1 && error_calls == before + 1);
+    }
+}
+
 static void speech(void)
 {
     uint8_t data[71] = {0};
@@ -125,11 +167,20 @@ static void movie(void)
     data[8 + 12 + 3 + 5] = 0;
     assert(tgv_open(&m, data, p, "backref.tgv") == 0);
     assert(tgv_next(&m) == -1);
+    assert(tgv_open(&m, data, p, NULL) == -1);
+    assert(error.file && !strcmp(error.file, "TGV"));
+    memset(data, 0, sizeof data);
+    memcpy(data, "1SNh", 4); put32(data + 4, 40);
+    memcpy(data + 8, "EACS", 4); put32(data + 12, 22050); data[16] = 1;
+    memcpy(data + 40, "1SNd", 4); put32(data + 44, 9);
+    assert(tgv_open(&m, data, 49, "bad-eacs.tgv") == 0);
+    assert(tgv_next(&m) == -1 && !m.audio_rate && !m.audio_channels);
+    assert(tgv_next(&m) == -1);
 }
 
 int main(void)
 {
-    samples(); song(); speech(); movie();
+    samples(); stream(); song(); callback_limits(); speech(); movie();
     puts("audio: PCM/pan/loop, HMI timing/rejects, TGV key/rejects passed");
     return 0;
 }

@@ -26,9 +26,16 @@ typedef struct {
 } song;
 static song playing;
 static unsigned out_rate;
+static int mixing_tick;
+static const char *callback_error;
+static uint32_t callback_error_pos;
 
 static int reject(const song *s, uint32_t pos, const char *why)
 {
+    if (mixing_tick) {
+        callback_error = why; callback_error_pos = pos;
+        return -1;
+    }
     return cm_fail(s->file, pos, why);
 }
 
@@ -162,16 +169,17 @@ static int parse(song *s, const uint8_t *data, uint32_t len, const char *file)
 int audio_song(const uint8_t *data, uint32_t len, const char *file)
 {
     song next;
+    if (!file) file = "HMI";
     if (!out_rate) return cm_fail(file, 0, "audio_init must precede song playback");
     if (!synth_ready()) return cm_fail(file, 0, "HMI instrument banks must be loaded before playback");
     if (parse(&next, data, len, file)) return -1;
-    synth_reset(); playing = next;
+    synth_reset(); playing = next; callback_error = NULL;
     return 0;
 }
 
 void audio_song_stop(void)
 {
-    playing.done = 1; synth_reset();
+    playing.done = 1; synth_reset(); callback_error = NULL;
 }
 void audio_song_pause(int paused)
 {
@@ -180,6 +188,10 @@ void audio_song_pause(int paused)
     if (paused) for (i = 0; i < 16; ++i) clear_channel(&playing, i);
 }
 int audio_song_done(void) { return playing.done; }
+int audio_song_error(void)
+{
+    return callback_error ? cm_fail(playing.file, callback_error_pos, callback_error) : 0;
+}
 void audio_midi_volume(unsigned volume) { synth_volume(volume & 127); }
 uint32_t audio_note_ons(void) { return playing.notes; }
 uint32_t audio_midi_events(void) { return playing.events; }
@@ -187,6 +199,7 @@ uint32_t audio_midi_events(void) { return playing.events; }
 void music_init(unsigned rate)
 {
     out_rate = rate; memset(&playing, 0, sizeof playing); playing.done = 1;
+    callback_error = NULL; mixing_tick = 0;
     synth_init(rate);
 }
 
@@ -224,7 +237,9 @@ void music_frame(int32_t *left, int32_t *right)
         playing.phase += playing.rate;
         if (playing.phase >= out_rate) {
             playing.phase -= out_rate;
-            if (tick(&playing)) audio_song_stop();
+            mixing_tick = 1;
+            if (tick(&playing)) { playing.done = 1; synth_reset(); }
+            mixing_tick = 0;
         }
     }
     synth_frame(left, right);

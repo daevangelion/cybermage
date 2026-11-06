@@ -30,9 +30,18 @@ int audio_song(const uint8_t *data, uint32_t len, const char *file);
 void audio_song_stop(void);
 void audio_song_pause(int paused);
 int audio_song_done(void);
+/* Main-thread control call (under the device lock), never from audio_mix. */
+int audio_song_error(void);
 void audio_midi_volume(unsigned volume);
 uint32_t audio_note_ons(void);
 uint32_t audio_midi_events(void);
+
+/* Movie PCM keeps borrowed chunk spans queued, with phase continuous at
+ * chunk boundaries. These controls obey the same callback-lock contract. */
+int audio_stream_queue(const uint8_t *data, uint32_t len, unsigned rate,
+                        unsigned channels);
+void audio_stream_stop(void);
+int audio_stream_pending(void);
 
 /* SPEECH.ENG contains its own scene/message/segment directory. Messages and
  * segments are one-based; scenes are 0..11. link is the signed original
@@ -42,5 +51,56 @@ int audio_speech_entry(const uint8_t *data, uint32_t len, unsigned scene,
                        uint32_t *length, int *link);
 int audio_speech_span(const uint8_t *data, uint32_t len,
                       uint32_t offset, uint32_t length, const uint8_t **out);
+
+struct world;
+#define SND_SAMPLE_COUNT 117
+#define SND_TEXT_LINES_MAX 256
+
+typedef struct {
+    int sample, volume, loops;
+    unsigned pan;
+    int active;
+} snd_slot;
+typedef struct {
+    const char *lines[SND_TEXT_LINES_MAX];
+    unsigned line_count, scene, message, revision;
+    int object, link, active, spoken;
+} snd_dialogue;
+
+/* Game-side resource owner. platform_init/audio_init precede snd_open.
+ * All control functions below lock the device internally. */
+int snd_open(const char *asset_dir);
+void snd_close(void);
+int snd_scene(const struct world *w);
+int snd_sample_load(unsigned sample);
+void snd_enable(int enabled, int speech_enabled);
+void snd_volumes(int digital, int speech, unsigned midi);
+int snd_play(unsigned sample, int volume, unsigned pan);
+int snd_loop(unsigned sample, int volume, unsigned pan);
+int snd_object(const struct world *w, unsigned sample, unsigned object,
+                int32_t range, int max_volume, int min_volume);
+int snd_clip(const struct world *w, unsigned object, int32_t range,
+              int max_volume, int min_volume, unsigned *pan, int *volume);
+int snd_speech_panvol(const struct world *w, unsigned object, unsigned scene,
+                      unsigned message, unsigned *pan, int *volume);
+int snd_done(int slot, unsigned sample);
+void snd_abort(int slot, unsigned sample);
+int snd_set_panvol(int slot, unsigned pan, int volume, int speech);
+int snd_set_volume(int slot, int volume);
+void snd_kill(struct world *w);
+int snd_kill_loops(struct world *w, int play_transition);
+void snd_snapshot(snd_slot out[AUDIO_SAMPLE_SLOTS]);
+int snd_song(int number, int loop);
+void snd_song_end(void);
+void snd_song_pause(int paused);
+int snd_tick(struct world *w);
+int snd_message(const struct world *w, unsigned scene, unsigned message,
+                 int object);
+void snd_message_stop(void);
+void snd_speech_skip(void);
+void snd_speech_override(int enabled);
+const snd_dialogue *snd_text(void);
+int snd_take_video(void);
+void snd_code(const char code[24]);
 
 #endif

@@ -11,6 +11,11 @@ typedef struct {
 
 static sample samples[AUDIO_SAMPLE_SLOTS];
 static unsigned output_rate;
+#define STREAM_CHUNKS_MAX 64
+typedef struct { const uint8_t *data; uint32_t frames; } stream_chunk;
+static stream_chunk stream_chunks[STREAM_CHUNKS_MAX];
+static unsigned stream_head, stream_count, stream_rate, stream_channels;
+static uint32_t stream_index, stream_phase;
 
 int audio_init(unsigned rate)
 {
@@ -18,6 +23,7 @@ int audio_init(unsigned rate)
         return cm_fail("audio", 0, "unsupported device sample rate");
     output_rate = rate;
     memset(samples, 0, sizeof samples);
+    audio_stream_stop();
     music_init(rate);
     return 0;
 }
@@ -79,12 +85,61 @@ static int16_t clip(int32_t n)
     return (int16_t)(n < -32768 ? -32768 : n > 32767 ? 32767 : n);
 }
 
+void audio_stream_stop(void)
+{
+    stream_head = stream_count = stream_rate = stream_channels = 0;
+    stream_index = stream_phase = 0;
+}
+
+int audio_stream_pending(void) { return stream_count != 0; }
+
+int audio_stream_queue(const uint8_t *data, uint32_t len, unsigned rate,
+                        unsigned channels)
+{
+    unsigned at;
+    if (!output_rate || !data || !len || rate < 4000 || rate > 192000 ||
+        (channels != 1 && channels != 2) || len % channels ||
+        stream_count == STREAM_CHUNKS_MAX ||
+        (stream_rate && (rate != stream_rate || channels != stream_channels)))
+        return cm_fail("movie PCM", 0, "invalid/full movie PCM queue");
+    stream_rate = rate; stream_channels = channels;
+    at = (stream_head + stream_count) % STREAM_CHUNKS_MAX;
+    stream_chunks[at].data = data; stream_chunks[at].frames = len / channels;
+    ++stream_count;
+    return 0;
+}
+
+static void stream_advance(void)
+{
+    while (stream_count && stream_index >= stream_chunks[stream_head].frames) {
+        stream_index -= stream_chunks[stream_head].frames;
+        stream_head = (stream_head + 1) % STREAM_CHUNKS_MAX; --stream_count;
+    }
+}
+
+static void stream_frame(int32_t *left, int32_t *right)
+{
+    const stream_chunk *s;
+    stream_advance();
+    if (!stream_count) return;
+    s = &stream_chunks[stream_head];
+    *left += pcm(s->data[stream_index * stream_channels], 1);
+    *right += pcm(s->data[stream_index * stream_channels + stream_channels - 1], 1);
+    stream_phase += stream_rate;
+    stream_index += stream_phase / output_rate;
+    stream_phase %= output_rate;
+    stream_advance();
+    /* Carry sub-sample phase across chunk boundaries, including temporary
+     * empty queues. Movie scheduling must not drop/resample chunk edges. */
+}
+
 void audio_mix(int16_t *out, unsigned frames)
 {
     unsigned f, n;
     for (f = 0; f < frames; ++f) {
         int32_t left = 0, right = 0;
         music_frame(&left, &right);
+        stream_frame(&left, &right);
         for (n = 0; n < AUDIO_SAMPLE_SLOTS; ++n) {
             sample *s = &samples[n];
             uint32_t advance;

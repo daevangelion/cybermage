@@ -44,6 +44,7 @@ def library(path=None):
         'audio_banks': ([PTR, U32, PTR, U32], C.c_int),
         'audio_song': ([PTR, U32, C.c_char_p], C.c_int),
         'audio_song_done': ([], C.c_int),
+        'audio_song_error': ([], C.c_int),
         'audio_note_ons': ([], U32), 'audio_midi_events': ([], U32),
         'audio_mix': ([C.POINTER(C.c_int16), UINT], None),
         'audio_play_pcm': ([UINT, PTR, U32, UINT, UINT, C.c_int, C.c_int, C.c_int, UINT], C.c_int),
@@ -117,9 +118,7 @@ def render_song(lib, path, output, banks, seconds=300, rate=48000, entry=None):
                 peak = max(peak, abs(x)); square += x*x
                 clipped += x in (-32768, 32767)
             total += n * 2; left -= n
-    e = lib.cm_last_error().contents
-    if e.message:
-        raise ValueError(f'HMI callback failed: {e.message.decode()}')
+    checked(lib, lib.audio_song_error())
     result = {'file': str(path), 'entry': entry, 'seconds': round(total / (2 * rate), 3),
               'finished': bool(lib.audio_song_done()), 'note_ons': lib.audio_note_ons(),
               'midi_events': lib.audio_midi_events(), 'peak': peak,

@@ -30,4 +30,16 @@ int tgv_open(tgv *movie, const uint8_t *data, uint32_t len, const char *file);
 int tgv_next(tgv *movie);
 const uint8_t *tgv_pixels(const tgv *movie);
 
+#define SND_MOVIE_INTRO 1
+#define SND_MOVIE_CREDITS 2
+#define SND_MOVIE_ENDING 3
+/* IntroEpilogue: language 0=English,1=French,2=German. Presentation stays
+ * with the caller; tick is the game's absolute 40 Hz tick count. */
+int snd_movie_begin(const char *asset_dir, unsigned kind, unsigned language,
+                     uint32_t tick);
+int snd_movie_step(uint32_t tick, int skip, uint8_t pixels[CM_WIDTH * CM_HEIGHT],
+                    uint8_t palette[768]);
+void snd_movie_end(void);
+int snd_movie_active(void);
+
 #endif

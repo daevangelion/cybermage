@@ -98,7 +98,10 @@ Limits: 64 tracks, 512 pending duration offs, 4096 events/tick. The complete
 track streams are checked before replacing a song. Unsupported/truncated data
 fails through cm_fail(file,offset,message), never default bytes. Failed song/bank
 loads preserve the previous song/banks. Device/control callers must serialize
-against the mixer.
+against the mixer. Runtime budget/dependency overflow stops music and records
+an error without calling cm_fail from the audio callback; the main thread
+reports it via audio_song_error under the device lock. snd_tick and the host
+renderer already do this. Regression fixtures exercise both runtime limits.
 
 ## SPEECH.ENG
 
@@ -187,10 +190,100 @@ not the already general decoder.
   allocation/velocity curves are unmeasured; this is not an SC55 match.
 - Polyphonic/channel pressure has no OPL modulation mapping. SysEx is parsed and
   skipped (no FM SysEx implementation). HMI branch/loop extensions reject;
-  no shipped song needs them. Game-level song looping is the caller's job.
-- Device acquisition, movie clock/presentation, game event dispatch and loaded
-  resource lifetime remain outside these pure decoders. platform_sdl calls
-  audio_mix(int16_t*,unsigned stereo_frames); audio_init gets the actual device
-  rate. Game/SDL caller must lock controls against its callback. These APIs do
-  not add guest-machine addresses or SDL calls to core code.
+  no shipped song needs them. Game-level song looping lives in snd_tick.
+- platform_sdl owns the device and calls audio_mix(int16_t*,unsigned
+  stereo_frames); audio_init gets its actual rate. Low-level audio_* calls
+  require the caller's device lock; game-side snd_* controls lock internally.
+  Core code calls no SDL or OS functions.
 - All generated WAVs/PNGs and retail data stay ignored, never committed.
+
+## Game-side API
+
+`src/audio/game.c` owns RAW.RSC, SPEECH.ENG and TEXT.MSG through platform file
+operations. Call snd_open(asset_dir) after platform_init; snd_scene(world) after
+loading actors; snd_tick(world) once per game frame; snd_close before platform
+shutdown. Core sample/music bytes remain borrowed from these owned files.
+The public header exposes snd_play/snd_loop, snd_object/snd_clip,
+snd_done/snd_abort, pan/volume controls, song/loop controls, dialogue and slot
+snapshots. No emulated Xox struct or offset-indexed game state was added.
+
+- PlayDIGI0x27CE0/LoopDIGI0x27E5C choose the **first free** of16 slots, no voice
+  stealing. Scale requested volume by DIGI_MASTER_VOL/32767 before clamping;
+  skip nonpositive effects. Loops use -1. Sample IDs survive slot completion,
+  so CheckSound0x28680 and AbortSound0x286AC compare **slot and sample ID**.
+- Speech uses ID999, clamps requested volume before SPK_MASTER_VOL scaling,
+  and can play at zero master volume so dialogue still progresses.
+- ClipPanVol0x280C0/PanVolDIGI0x27F2C use world player/object XY, original
+  distance and angle helpers. With range R>0, reject distance>=R; volume is
+  `((R-distance)>>4)*max/(R>>4)` (zero shifted denominator yields INT32_MAX,
+  as the Watcom multiply/divide helper does). With no range, volume is
+  `max + max/8 - (distance>>4)*max/32767`. Clamp against max, then min, then
+  32767. Rear angles fold across +/-0x4000; double with **signed16 wrap**,
+  subtract from0x8000 and clamp pan to0x2000..0xE000. The side-axis wrap is
+  preserved, not replaced by a sine pan law.
+- PanVolDistance0x17B80 uses volume `0x8FFE-(distance>>4)`, bounded
+  0x0FFF..0x7FFF. Original full-volume exceptions: scene9/message21,
+  scene3/messages6,7, scene8/messages7,15, and scene10; scene8/message15 also
+  forces centre pan. These are original branches0x17C71..0x17CDC.
+- Static soundDataLoad0x95C34 enables0..33 except4,9,11,12. snd_scene also
+  enables monster-definition sample words+0x52/+0x54/+0x56 and five words
+  +0xCC..+0xD4; class10 enables111/112. Evidence: LoadPERSONS0x226CC..0x22717,
+  LoadMONSTER0x23349..0x23400. A later spawn can use snd_sample_load.
+- snd_kill clears all voices and PERSON+0x4C/+0x50 handles; snd_kill_loops
+  clears looping/speech/actor handles and optionally plays transition31 for
+  playlist0,16 for playlist1 (KillLoops0x287B0).
+
+Background music is **not a scene-number lookup**: two playlists at0x95BF4
+continue across scenes, alternating when their -1 terminator is reached.
+HandleNextFrame0x1BED3..0x1BF57 advances that list when CheckSONG reports done;
+script events0x3ED0F..0x3ED65 replace the current song and looping flag.
+snd_song(number,loop) implements the explicit script replacement. snd_tick
+performs normal completion/playlist advance and repeats a scripted loop.
+Initialization0x10F59 sets index0/current=-1; the port omits the invalid -1
+resource request and reaches the same first valid playlist request18 on its
+first tick. Muting MIDI stops the song without advancing while muted.
+
+### Dialogue and movies
+
+LoadTextMessage0x17750 selects spoken dialogue when enabled; otherwise it reads
+TEXT.MSG's independent directory. Each text message has u16 line count, that
+many u16 offsets, then NUL-terminated strings. Offsets are relative to this
+string block. snd_text exposes borrowed lines, scene/message, speaker object,
+link, active/spoken flag and revision. UI owns typing/timing/rendering and
+completion-trigger application. snd_message sets the request; snd_tick starts
+or retries the next speech segment when the previous slot finishes; moving
+speakers update pan/volume each frame. snd_message_stop is KillSpeechText;
+snd_speech_skip stops only the current segment. The speech-log override is
+explicitly settable. Dead speakers cancel, including original scene9/person22
+exception. Positive speech links select a PERSON object; negative links>-100
+are exposed once via snd_take_video, matching original videoChain assignment.
+Code links-100..-102 queue the four scene4 messages from the24-byte coder string
+(A-D versus1-4, original branch0x178E5..0x17992); snd_code supplies that state.
+
+snd_movie_begin/step/end in movie.c replace IntroEpilogue0x1F4EC. Original
+selector **1=intro,2=credits,other=ending**, with English/French/German filenames.
+Caller supplies absolute40 Hz ticks and skip input; step returns640x480 indexed
+frames/palette without presenting or reading a host clock. Audio chunks enter
+a64-span borrowed PCM queue consumed by audio_mix, with phase preserved across
+chunk boundaries. The next audio chunk is prefetched before the next video
+deadline, preventing40 Hz polling from underrunning15 Hz movie chunks. Stop,
+skip and EOF drain/clear audio before releasing the movie file. All3 movies
+have been stepped completely to EOF with headless48000 Hz mixing, then reopened
+and skipped to test ownership and queue teardown. Headless callers must advance
+audio_mix explicitly; the interactive SDL callback already does so.
+
+```
+tools/run_capped.sh make -C port -f tests/audio.mk check-game
+```
+
+This also runs tools/sound_oracle.py:32 requests use **original scene1 snapshot
+coordinates**, four source objects, samples0/3/20/33, four listener headings
+and ranged/non-ranged attenuation. Unicorn executes original PanVolDIGI
+CM_HI.EXE:0x27F2C, including original x87 distance/atan/CRT code. Only SampleDone
+(free-slot result) and final CMsosPlaySample0x66C3C device boundary are intercepted.
+Sample,slot,pan,volume,loops match all32 native requests. These are isolated
+helper-call comparisons in a real scene state, **not a claim that all32 requests
+were naturally emitted during a gameplay recording**. JSON evidence is ignored
+at out/audio/game-sound-oracle.json. C tests additionally cover slot exhaustion,
+ID-protected abort, master volume, text/spoken triggering, PCM chunk boundaries,
+and full movie completion/skip.
