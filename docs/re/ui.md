@@ -312,6 +312,13 @@ VDU top/bottom rectangles compare equal after translation over identical
 underlays; off mode leaves the canvas unchanged. Expected malformed-input
 diagnostics are deliberate negative tests, not runtime fallback behavior.
 
+Saved PERSON records are validated before camera/spatial-map reconstruction:
+object1..loaded-object-count-1, a monster definition and compact monster slot
+inside the loaded tables, and the saved player PERSON/object link must agree.
+Failures identify `SAVE*.DAT` at `0x34F1D + person*192`. Negative object/type/
+compact-index and mismatched-player cases are rejected while the retail save
+still round-trips byte-for-byte.
+
 - SetGammaBright5253C adds the signed brightness to each6-bit DAC component,
   clipping0..63. SetGammaContrast52598 averages the three already-brightened
   components; mean<32 subtracts contrast, otherwise adds it, clipping0..63.

@@ -214,6 +214,23 @@ int main(int argc, char **argv)
            cm_u32(original.data + 0x4C87 + 936 * 4) + 1);
     assert(ui_save_game(&save, &w, encoded, UI_SAVE_PREFIX, &encoded_size) == -1);
     {
+        uint8_t *record;
+        memcpy(encoded,original.data,original.size);
+        record=encoded+UI_SAVE_PREFIX;
+        record[0]=record[1]=255;
+        assert(ui_save_overlay(&save,&w,encoded,original.size) == -1);
+        memcpy(encoded,original.data,original.size);
+        record[2]=record[3]=255;
+        assert(ui_save_overlay(&save,&w,encoded,original.size) == -1);
+        memcpy(encoded,original.data,original.size);
+        record[4]=record[5]=255;
+        assert(ui_save_overlay(&save,&w,encoded,original.size) == -1);
+        memcpy(encoded,original.data,original.size);
+        encoded[0x6DC]=1;encoded[0x6DD]=encoded[0x6DE]=encoded[0x6DF]=0;
+        assert(ui_save_overlay(&save,&w,encoded,original.size) == -1);
+        assert(ui_save_overlay(&save,&w,original.data,original.size) == 0);
+    }
+    {
         cm_input input = {0};
         int cash, quantity, slot = -1;
         unsigned i;

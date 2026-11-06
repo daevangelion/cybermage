@@ -273,10 +273,21 @@ int ui_save_overlay(ui_save_state *save, world *w, const uint8_t *data,
     for (i = 0; i < w->person_count; ++i) person(&io, NULL, &w->persons[i]);
     w->player_object = save->unk_6D4[2];
     w->player_person = save->unk_6D4[3];
+    if (!w->player_object || w->player_object>=w->object_count)
+        return cm_fail("SAVE*.DAT",0x6DC,"saved player object outside loaded scene");
+    for (i=0;i<w->person_count;++i) {
+        const world_person *p=&w->persons[i];
+        if (p->object<=0 || (unsigned)p->object>=w->object_count ||
+            p->type<0 || (unsigned)p->type>=w->monster_definitions.size/276 ||
+            p->monster_index>=w->loaded_monster_count ||
+            (i==w->player_person && (unsigned)p->object!=w->player_object))
+            return cm_fail("SAVE*.DAT",UI_SAVE_PREFIX+i*UI_PERSON_BYTES,
+                           "invalid saved person object, monster or player link");
+    }
     w->camera.u = w->objects[w->player_object].x;
     w->camera.v = w->objects[w->player_object].y;
-    w->camera.z = w->objects[w->player_object].floor_z +
-        signed32(save->unk_6D4[27]);
+    w->camera.z = signed32((uint32_t)w->objects[w->player_object].floor_z +
+        save->unk_6D4[27]);
     w->camera.angle = w->objects[w->player_object].heading;
     memcpy(w->light_param, save->light_param, sizeof save->light_param);
     memcpy(w->light_type, save->light_type, sizeof save->light_type);
