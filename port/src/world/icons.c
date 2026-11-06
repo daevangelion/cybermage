@@ -6,6 +6,9 @@ int world_load_prop_icons(world *w)
 {
     const uint8_t *items;
     uint32_t size,count,i;
+    if (!w->prop_definitions.data || w->prop_definitions.size<1051)
+        return cm_fail("SCENE.RSC/PROP",world_section_offset(w,97),
+                       "truncated icon prop definitions");
     if (rsc_entry(&w->scenes,101,&items,&size)) return -1;
     if (size<154 || (count=cm_u32(items))>=172 || count>(size-154)/154)
         return cm_fail("SCENE.RSC/ITEM",world_section_offset(w,101),"invalid item definitions");
@@ -17,7 +20,7 @@ int world_load_prop_icons(world *w)
         if (!resource || w->prop_icons[resource].pixels.data) continue;
         for (type=1;type<w->prop_definitions.size/1051;++type)
             if (cm_u16(w->prop_definitions.data+type*1051+28)==resource) break;
-        if (type==w->prop_definitions.size/1051)
+        if (type>=w->prop_definitions.size/1051)
             return cm_fail("SCENE.RSC/ITEM",world_section_offset(w,101)+i*154+22,
                            "icon resource has no prop definition");
         def=w->prop_definitions.data+type*1051;

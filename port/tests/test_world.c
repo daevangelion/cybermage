@@ -105,6 +105,14 @@ int main(int argc, char **argv)
                     assert(world_load_persons(&w) == -1);
                     w.scene_sections[3]=old;
                 }
+                {
+                    world_span old=w.prop_definitions;
+                    w.prop_definitions.size=0;
+                    assert(world_load_prop_icons(&w) == -1);
+                    w.prop_definitions.size=1050;
+                    assert(world_load_prop_icons(&w) == -1);
+                    w.prop_definitions=old;
+                }
                 assert(w.persons[0].state == 2 && w.persons[0].unk_001E == 10);
                 assert(w.persons[0].unk_00BC == 1 && w.objects[object].heading == 0x1234);
                 assert(w.objects[object].person == 0 && w.objects[object].active == 1);

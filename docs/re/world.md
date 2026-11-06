@@ -171,3 +171,6 @@ continue to load with the object/person/panel counts above.
 Renderer rectangle ordering uses the existing `r_add`/`r_sub` wrapping
 operators for edge biases and flat extents; an INT32_MAX extent vector passes
 the focused renderer check under nonrecovering UBSan.
+Item icon preparation also rejects a prop-definition table missing its complete
+1051-byte dummy record before searching resource IDs; zero/1050-byte tables
+are explicit negative fixtures.
