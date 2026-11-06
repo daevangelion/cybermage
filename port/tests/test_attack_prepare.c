@@ -5,11 +5,13 @@
 #include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 static ai_state a;
 static sim_state s;
 static events_state e;
 static world w;
+static unsigned backsteps;
 
 /* The original-x86 control intercepts these same external boundaries. */
 int __wrap_ai_sight_person(const ai_state *actors, sim_state *simulation,
@@ -38,6 +40,13 @@ int __wrap_ai_launch_missile(ai_state *actors, sim_state *simulation, world *gam
     (void)source; (void)target; (void)type;
     return 0;
 }
+int __wrap_sim_jumble_bound(sim_state *simulation, world *game, unsigned object,
+                            int32_t dx, int32_t dy, int collide)
+{
+    (void)simulation; (void)game; (void)object; (void)dx; (void)dy; (void)collide;
+    ++backsteps;
+    return 0;
+}
 
 static unsigned argument(const char *text, unsigned maximum)
 {
@@ -50,21 +59,22 @@ static unsigned argument(const char *text, unsigned maximum)
 static void checkpoint(void)
 {
     const world_person *p = &w.persons[1];
-    printf("%d %d %u %d %d %d %u %u %u\n", p->state, p->unk_0028,
+    printf("%d %d %u %d %d %d %u %u %u %u\n", p->state, p->unk_0028,
            (unsigned)p->unk_00BC, p->unk_0034, p->unk_001E, p->unk_001A,
-           w.rng.word[0], w.rng.word[1], w.rng.word[2]);
+           w.rng.word[0], w.rng.word[1], w.rng.word[2], backsteps);
 }
 
 int main(int argc, char **argv)
 {
     unsigned actor_kind, target_kind, alternate, seed, i;
-    if (argc != 5) return 2;
+    if (argc != 5 && argc != 6) return 2;
+    if (argc == 6 && strcmp(argv[5], "--hurt") && strcmp(argv[5], "--death")) return 2;
     actor_kind = argument(argv[1], 17); target_kind = argument(argv[2], 17);
     alternate = argument(argv[3], 1); seed = argument(argv[4], UINT16_MAX);
     assert(platform_init(1) == 0); snd_enable(0, 0);
     w.scene = 1; w.object_count = 3; w.person_count = 2; w.player_object = 1;
     w.rng.word[0] = 3000; w.rng.word[1] = (uint16_t)seed; w.rng.word[2] = 29999;
-    a.tables_loaded = 1; a.monster_count = 2; a.events = &e;
+    a.tables_loaded = 1; a.monster_count = 2; a.events = &e; a.difficulty = 1;
     a.monsters[0].kind = (uint8_t)actor_kind;
     a.monsters[0].attack[1] = a.monsters[0].attack[2] = 1;
     a.monsters[0].attack[5] = (uint8_t)alternate;
@@ -83,6 +93,10 @@ int main(int argc, char **argv)
     w.persons[0].type = 1;
     w.persons[1].state = 5; w.persons[1].target = 0;
     w.persons[1].distance = 0x20000;
+    if (argc == 6) {
+        w.persons[1].state = !strcmp(argv[5], "--hurt") ? 6 : 7;
+        w.persons[1].unk_001E = 2;
+    }
     assert(ai_update_objects(&a, &s, &w, 10, 10) == 0);
     checkpoint();
     w.persons[1].unk_0018 = 1;

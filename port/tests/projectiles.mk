@@ -39,4 +39,4 @@ $(B)/test_soul_load: tests/test_soul_load.c $(filter-out $(B)/main.o,$(OBJECTS))
 
 $(B)/test_attack_prepare: tests/test_attack_prepare.c $(filter-out $(B)/main.o,$(OBJECTS))
 	@mkdir -p $(@D)
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -Wl,--wrap=ai_sight_person -Wl,--wrap=ai_move_object -Wl,--wrap=ai_track_target -Wl,--wrap=ai_update_pc_object -Wl,--wrap=ai_launch_missile -o $@ $^ $(LDLIBS)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -Wl,--wrap=ai_sight_person -Wl,--wrap=ai_move_object -Wl,--wrap=ai_track_target -Wl,--wrap=ai_update_pc_object -Wl,--wrap=ai_launch_missile -Wl,--wrap=sim_jumble_bound -o $@ $^ $(LDLIBS)

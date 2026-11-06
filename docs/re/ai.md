@@ -112,9 +112,13 @@ that distinction. `actor_prepare_attack` now receives the caller's filtered
 flags. Original South NPC73's fire completion writes short cooldown2 at0360C1;
 the old native action0 instead chose24+RND(6)=29 and delayed its idle transition.
 The RNG words can still match because either bound consumes one draw.
-`check-attack-prepare` compares64 unmodified retail UpdateObjects cases covering
-mobile/stationary actors, all three excluded target kinds, alternate fire,
-action0/3/4 and the following short/long cooldown. No BP-clock or counter seed
+`check-attack-prepare` compares108 unmodified retail UpdateObjects cases covering
+actor kinds5/6/9, all three excluded target kinds, alternate fire, action0/3/4,
+the following short/long cooldown and hurt/death backstep admission. Kind5's
+jump-table entry at034828 targets034D75: min-range10000 then the034D7D
+can-move clear, which the old native switch omitted. That omission caused
+Lower NPC5's forbidden backstep(-733,-1351) at tick392 before its ordinary
+movement; no collision coefficient needs changing. No BP-clock or counter seed
 change is used.
 
 Death state8 samples recoil PERSON+A4/B0 **before** MoveObject

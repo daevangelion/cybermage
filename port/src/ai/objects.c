@@ -595,7 +595,7 @@ int ai_update_objects(ai_state *a, sim_state *s, world *w,
         if (p->unk_00BC != 28 && p->unk_00BC != 29) o->rotations = 8;
         switch (m->kind) {
         case 3: o->rotations = 1; break;
-        case 5: min_range = 0x10000; break;
+        case 5: min_range = 0x10000; can_move = 0; break; /* 034D75..034D7F. */
         case 6: can_move = 0; break;
         case 9: fire_moving = 1; break;
         case 14: p->state = 14; min_range = 0x10000; can_move = 0; break;
