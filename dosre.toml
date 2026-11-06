@@ -8,3 +8,7 @@ kind = "le"
 [modules."DEMO_HI.EXE"]
 path = "orig/demo/CMDEMO/CM_HI.EXE"
 kind = "le"
+
+[modules."PLAYTGV.EXE"]
+path = "orig/retail/PLAYTGV.EXE"
+kind = "le"

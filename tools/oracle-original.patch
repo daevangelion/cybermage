@@ -1,0 +1,55 @@
+diff --git a/crates/game/src/main.rs b/crates/game/src/main.rs
+--- a/crates/game/src/main.rs
++++ b/crates/game/src/main.rs
+@@ -90,7 +90,16 @@ impl Emu {
+         let exe = std::fs::read(game.join("CM_HI.EXE")).expect("CM_HI.EXE not found");
+-        m.load_program(&mut cpu, &exe, "").expect("load");
++        m.load_program(&mut cpu, &exe, if std::env::var_os("CM_ORIGINAL").is_some() { "-x" } else { "" }).expect("load");
+-        native::install(&mut m, &mut cpu);
++        if std::env::var_os("CM_ORIGINAL").is_some() {
++            assert!(m.verifier.is_none(), "original mode forbids verification hooks");
++            assert!(cfg.headless && !cfg.realtime && cfg.pads.is_empty() && cfg.desktop.is_empty());
++            assert!(std::env::var_os("CM_SCENE").is_none());
++            assert!(std::env::var_os("CM_VEHICLE").is_none());
++            assert!(m.hooks.is_empty());
++            eprintln!("ORACLE original-x86: native::install bypassed; hooks=0; asset patches=off; raw VGA");
++        } else {
++            native::install(&mut m, &mut cpu);
++        }
+         let watches = std::env::var("CM_WATCH")
+@@ -287,7 +296,11 @@ impl Emu {
+     pub fn screenshot(&mut self, path: &std::path::Path) {
+         let mut buf = Vec::new();
+-        let (w, h) = display::render(&mut self.m, &self.cpu, &mut buf);
++        let (w, h) = if std::env::var_os("CM_ORIGINAL").is_some() {
++            assert!(self.m.hooks.is_empty(), "native hook installed during original run");
++            self.m.vga.render(&self.cpu, &mut buf)
++        } else { display::render(&mut self.m, &self.cpu, &mut buf) };
+         write_bmp(path, w, h, &buf);
+     }
+diff --git a/crates/game/src/machine.rs b/crates/game/src/machine.rs
+--- a/crates/game/src/machine.rs
++++ b/crates/game/src/machine.rs
+@@ -742,7 +742,7 @@ impl Machine {
+                 self.pm_vec[n as usize] = (r.ds, r.edx);
+-                if n == 9 {
++                if n == 9 && std::env::var_os("CM_ORIGINAL").is_none() {
+                     // On real hardware the release of the Enter key used to start the
+@@ -813,7 +813,9 @@ impl Machine {
+                     Some(mut f) => {
+-                        let patch = if mode == 0 { crate::rebrand::title_patch(&name, &mut f) } else { None };
++                        let patch = if mode == 0 && std::env::var_os("CM_ORIGINAL").is_none() {
++                            crate::rebrand::title_patch(&name, &mut f)
++                        } else { None };
+                         let h = self.alloc_handle(DosFile { f, name: name.clone(), patch });
+diff --git a/crates/game/src/vga.rs b/crates/game/src/vga.rs
+--- a/crates/game/src/vga.rs
++++ b/crates/game/src/vga.rs
+@@ -206,8 +206,9 @@ impl Vga {
+     pub fn render_masked(&mut self, cpu: &Cpu, out: &mut Vec<u32>, mask: &[bool]) -> (usize, usize) {
++        let original = std::env::var_os("CM_ORIGINAL").is_some();
+         let pal: [u32;256] = std::array::from_fn(|i| {
+             let c = self.dac[i];
+-            let e = |x: u8| ((x as u32) << 2) | ((x as u32) >> 4);
++            let e = |x: u8| ((x as u32) << 2) | if original { 0 } else { (x as u32) >> 4 };
+             (e(c[0]) << 16) | (e(c[1]) << 8) | e(c[2])
