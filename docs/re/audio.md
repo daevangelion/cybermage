@@ -319,6 +319,11 @@ Its actors, actor clocks and per-call RNG files are byte-identical to
 The former native reconstruction dropped that future saved deadline and made
 one extra NPC dialogue RND4 at pre-words21042/25899/1659; the original's next
 call at those words is LaunchMissile02EEE4/RND4096.
+The same frozen native182dd69 first-extra-caller witnesses are retained at
+`captures/Audio-late-{fence,out}-native.txt`: Fence frame156 adds dialogue
+RND4 at4519/29883/27236 instead of original04657E/RND512; Fence-out frame173
+adds dialogue RND2 at27536/15818/3994 instead of original03544E/RND3.
+The latter also observes the prematurely cleared native gate and zero timer.
 `check-text-load` exercises the actual main.c save/load handoff, strict timer
 equality, late completion, re-export and foreign-scene cancellation, plus
 `tools/text_load_original.py` against unmodified original gate instructions.
