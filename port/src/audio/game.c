@@ -219,6 +219,7 @@ void snd_enable(int on, int spoken)
     if (!enabled) { reset_slots(); audio_song_stop(); music_loaded = 0; }
     platform_audio_unlock();
 }
+int snd_enabled(void) { return enabled; }
 void snd_volumes(int digi, int speech, unsigned midi)
 {
     platform_audio_lock(); digi_volume = clamp_volume(digi); speech_volume = clamp_volume(speech);

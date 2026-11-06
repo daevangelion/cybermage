@@ -206,6 +206,8 @@ shutdown. Core sample/music bytes remain borrowed from these owned files.
 The public header exposes snd_play/snd_loop, snd_object/snd_clip,
 snd_done/snd_abort, pan/volume controls, song/loop controls, dialogue and slot
 snapshots. No emulated Xox struct or offset-indexed game state was added.
+snd_enabled() exposes sound-enabled state (inverse noSoundFlag) to countdown and
+death conditionals; it does not change resource, volume or playback state.
 
 - PlayDIGI0x27CE0/LoopDIGI0x27E5C choose the **first free** of16 slots, no voice
   stealing. Scale requested volume by DIGI_MASTER_VOL/32767 before clamping;

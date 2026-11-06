@@ -21,7 +21,8 @@ static void controls(void)
     snd_song_end(); assert(snd_check_song() == 1);
     snd_volumes(32767,32767,0); assert(snd_check_song() == 0);
     snd_volumes(32767,32767,127);
-    snd_enable(0,0); assert(snd_check_song() == 0); snd_enable(1,1);
+    snd_enable(0,0); assert(snd_check_song() == 0 && !snd_enabled());
+    snd_enable(1,1); assert(snd_enabled());
     assert(snd_scene(&w) == 0);
     definition[0x7d] = 34;
     w.person_count = 1; w.persons[0].type = 0;

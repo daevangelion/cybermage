@@ -74,6 +74,7 @@ void snd_close(void);
 int snd_scene(const struct world *w);
 int snd_sample_load(unsigned sample);
 void snd_enable(int enabled, int speech_enabled);
+int snd_enabled(void);
 void snd_volumes(int digital, int speech, unsigned midi);
 int snd_play(unsigned sample, int volume, unsigned pan);
 int snd_loop(unsigned sample, int volume, unsigned pan);
