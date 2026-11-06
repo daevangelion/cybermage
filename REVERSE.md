@@ -85,25 +85,35 @@ and limitations. Captures and original files are ignored; never commit them.
 
 ## Port Progress
 
-| Subsystem | Status | Evidence |
-|-----------|--------|----------|
-| world | not started | map/object/FX ownership |
-| sight | not started | pixel-free grid queries |
-| target | not started | original centre-column targeting visibility |
-| render_sw | not started | faithful 640x480x8 reference |
-| input | not started | per-tick classic action state |
-| save/load | not started | original SAVE*.DAT byte format |
-| platform | in progress | SDL-only OS/file adapter; Port slice |
-| timer/RNG/fixed math | not started | exact integral semantics |
-| audio | in progress | Audio slice findings |
+Run heavy commands below through `tools/run_capped.sh`. Evidence scope and
+known gaps are deliberate; implementation is not full-game parity.
+
+| Subsystem | Status | Evidence command / result | Known gaps |
+|-----------|--------|---------------------------|------------|
+| resources/formats | Implemented retail loaders/title | `make -C port check`; `tools/compare_frames.py out/port/title/frame000000.ppm captures/title/frame000000.png`:0/307200 | Demo/encoding variants; not every TEXT mode ([formats](docs/re/formats.md)) |
+| world | Implemented; scene1 checkpoint parity | `make -C port -f tests/world.mk B=build/world check`; `tools/world_compare.py port/build/world/test_world captures/newgame/scene-start.xox --persons captures/newgame/scene-start.persons`:106640 values match | Other scenes load, but lack equivalent state comparisons ([world](docs/re/world.md)) |
+| sight | Implemented pixel-free queries | World gate:40 original RaySight/RayMissile vectors match | Broader retail routes/vertical edge coverage |
+| target | Implemented independently of pixels | `make -C port -f tests/render.mk B=build/render-test scene check`:packed/masked/centre-column eligibility | Full combat target-order oracle ([AI](docs/re/ai.md)) |
+| render_sw | Implemented; two scoped retail views | Render gate and `tools/compare_frames.py --rect 120,90,400,300`:zero differences outside hand footprints | Moving props, other scenes, painter ties/extreme pitch ([render](docs/re/render.md)) |
+| render_gl | Enhanced backend present; integration gates in progress | `tests/render_gl.mk` provides mesh/decoder/offscreen scene gates; no completed runtime result claimed here | CLI/presentation integration and GPU acceptance |
+| classic input/Sim | Integrated; movement trace MATCH | `make -C port B=build/Integrator check`; executable `--replay captures/movement/frames.csv`:106 frames MATCH;2400-frame keyed smoke exits0 | Classic mouse/joystick, broader collision/flight/vehicle oracle ([Sim](docs/re/sim.md)) |
+| modern controls | Opt-in action/touch/controller layer | `make -C port -f tests/controls.mk B=build/Controls controls-check`:six transport/game/physics gates pass | Physical-controller usability; Android runtime gate separate ([controls](docs/re/controls.md)) |
+| save/load | Codec and live subsystem bridges integrated | UI gate:retail SAVE010 all246045 bytes and GAMENAME all288 bytes round-trip; `test_sim_loop`:normal/AUTO/scene/death/difficulty pass | Full original-save playthrough and demo format ([UI](docs/re/ui.md),[Sim](docs/re/sim.md)) |
+| Events/inventory/vehicles | All90 event dispatches implemented | `tests/events.mk` gate; `events_trace` matches door252, ladder425, corridor592 checkpoints | Reducer positions are inputs; no integrated multi-scene/vehicle route parity ([Events](docs/re/events.md)) |
+| AI/NPC combat | Implemented; actor/RNG comparison still diverges | `tests/ai.mk`; `tools/compare_actors.py` / `tools/compare_rng.py` expose first divergence | Undefined PERSON+24 deviation; physical steering divergence; no full firefight parity ([AI](docs/re/ai.md)) |
+| player fire/projectiles | Integrated; scoped spell-flight parity | `tests/projectiles.mk` gate; `tools/compare_projectiles.py`:616 checkpoints/17 active match; CollFire120 original sweeps match | All52 missile paths, full melee/firearm/vehicle and post-draw counter parity ([AI](docs/re/ai.md)) |
+| UI/HUD/shops | Integrated; six named pixel comparisons match | `tests/ui.mk` gate; title/options/HUD/composed-newgame/pause comparisons0 differences | Shops/vehicles/live weapon variants need original traces; settings/arena work landing ([UI](docs/re/ui.md)) |
+| timer/RNG/fixed math | Implemented integral semantics | World gate:6144 trig values,106 angle/distance,60 RNG,16 rotation vectors match; movement trace MATCH | Whole-game RNG call order still under comparison |
+| audio/speech/movies | Integrated native PCM/OPL/HMI/TGV | `make -C port -f tests/audio.mk check`:38 songs validate; first30 frames of three movies match FFmpeg | Not exact SOS driver/mixer/voice-allocation parity ([audio](docs/re/audio.md)) |
+| platform/Android | SDL desktop and full-game dual-ABI APK verified | `port/android/build.sh` from frozen HEADc699ea4; API36 emulator:touch NEW→scene1→virtual-stick walking, no crash | Physical-device/long-play acceptance; [APK hash/screenshots](port/android/README.md) |
 
 ## Verification Checklist
 
-- [ ] Ph3: 3+ functions cross-checked against execution traces
-- [ ] Ph4: 5+ sprites/tiles visually compared to original
-- [ ] Ph5: key structure confirmed by emulator state reads
+- [x] Ph3: 3+ functions cross-checked against original execution (world math/rays and CollFire gates above).
+- [ ] Ph4: 5+ individually identified sprites/tiles visually compared to original; whole-frame UI/view matches are not that census.
+- [x] Ph5: key structures confirmed by original state reads (scene1 maps/objects/PERSON fields and both12392-node pools;106640 values match).
 - [ ] Ph6: full game session played without major logic gaps
-- [ ] Ph7: 3+ scenarios match frames + checkpoint state; strict C99 build clean
+- [ ] Ph7: 3+ integrated scenarios match both frames and checkpoint state; strict build/check and movement MATCH pass, but do not alone close this combined gate.
 
 ## Reference Resources
 
@@ -118,18 +128,14 @@ and limitations. Captures and original files are ignored; never commit them.
 
 - [x] Ph1: identify retail LE layout and import Watcom globals.
 - [x] Original-code oracle: title, new game and turning frames; zero native game hooks.
-- [ ] world: map tiles, panels, flats, FX/object maps and fixed-point coordinates.
-- [ ] sight: RaySight, TileSight, RayMissile grid stepping.
-- [ ] target: SetAutoTarget and original sprite candidate visibility list.
-- [ ] render_sw: image1.cpp / scale ASM rasterization and palette pipeline.
-- [ ] input: tick actions and classic key-state semantics.
-- [ ] save/load: original byte serialization and subsystem ownership.
-- [ ] platform: VESA/keyboard/files/audio service boundaries.
-- [ ] timer/RNG/fixed math: seed source, 40 Hz behaviour, integer wrap.
+- [ ] Resolve first NPC physical-steering divergence without masking actor/RNG comparisons.
+- [ ] Extend original combat/melee/vehicle/shop and multi-scene route comparisons.
+- [ ] Compare additional scenes/moving geometry/extreme pitch and live UI variants.
 
 ### Port Fixes
 
-- [ ] Integrate reviewed resource/title and audio slice deliverables.
+- [ ] Close full-game Android, GPU presentation and newly landing integration gates.
+- [ ] Complete a continuous original-cross-checked game playthrough.
 
 ### Documentation
 

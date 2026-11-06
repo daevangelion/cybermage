@@ -88,12 +88,36 @@ The AVD enforces2GiB guest RAM even if a smaller value is requested; the default
 writer against the same AVD. Save screenshots with `adb exec-out screencap -p`;
 retail-derived screenshots stay in ignored `captures/` or `out/`, never Git.
 
-Verified on `box-api36` x86_64: first-run data prompt, external folder loading,
+Historical title-only verification on `box-api36` x86_64: first-run data prompt, external folder loading,
 2400×1080 landscape title with centered4:3 game area, and a real touchscreen tap
 opening Options. Local evidence: `captures/android/first-run.png`,
 `title-landscape.png`, `options-touch.png`, `head-logcat.txt`.
-The checked dual-ABI APK is4,373,775 bytes, SHA256
+That earlier title-only dual-ABI APK was4,373,775 bytes, SHA256
 `1e12057cf818ea8d48f28686f931494304a8a12e6057377a8c6517615a8ddb0c`.
 Its archive contains no retail asset entries. Source-only title worktree,
 emulator process and115MiB Android build outputs were removed after verification;
 the shared SDK/SDL/Gradle inputs and resulting APK remain.
+
+## Full-game consolidated smoke
+
+Frozen source commit `c699ea4d97f735458793ae7794506c658b70ab4a` was built with
+the canonical script, `ABIS=arm64-v8a,x86_64 KEEP_BUILD=1`, and
+`PORT_SOURCE_DIR` pointing to an ignored `git archive HEAD port` snapshot.
+SDK/NDK/SDL/Gradle caches above were reused offline. Both ABIs compiled and
+linked; APK size3,696,689 bytes, SHA256
+`64053b74fcd0f288eb00489423c7863c2696ee2da1afff333776c4463ca53b0f`.
+It contains SDL/main libraries for both ABIs and no retail asset entries.
+
+Installed on the existing API36 `box-api36` x86_64 emulator
+(emulator36.3.10.0, SwiftShader,2400×1080 landscape), launched through
+`DataActivity --es controls modern`. A touchscreen tap on NEW entered the
+real scene1. The committed virtual stick and F/J/U/W/M/A overlay appeared in
+the side bars. A2200ms upward left-stick swipe visibly moved the player from
+the start toward the door. The same app PID remained alive; its142-line log
+contained no fatal exception/signal, abort or engine ERROR.
+
+Evidence: `captures/Integrator-android/{title,scene-start,scene-walk}.png`,
+`logcat.txt` and `run.json`. All screenshots were opened and inspected.
+The emulator was stopped and the job-owned Android build tree plus three
+frozen source views were removed (144,219,432 bytes); the3.7MB APK, evidence
+and shared SDK/SDL/Gradle caches remain.
