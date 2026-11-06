@@ -858,7 +858,7 @@ static int dispatch(events_state *e, sim_state *s, ai_state *a, world *w, unsign
                     world_omap_delete(w,(unsigned)person->object);
                     w->objects[person->object].active=0;
                 }
-                if(ai_set_person(a,w,i,(unsigned)person->type,p[0],world_add32(p[6],x),world_add32(p[5],y),0,p[4],(uint16_t)((uint32_t)p[9]>>16))) return -1;
+                if(ai_set_person(a,w,i,(unsigned)person->type,p[0],world_add32(p[6],x),world_add32(p[5],y),0,p[4],(uint16_t)p[10])) return -1;
                 world_omap_insert(w,(unsigned)w->persons[i].object);
                 x+=0x4000;
                 if(x>=width) { x=0x4000;y+=0x4000; }

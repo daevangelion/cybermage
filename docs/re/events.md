@@ -30,6 +30,17 @@ has90 entries indexed by type-1. Types1–5 are event toggle/position/switch/tim
 controllers; type6 moves FXO z, type7 x, type8 y. Motion uses
 speed*frame_delta/2 (signed integer division), not fixed40Hz catch-up.
 
+Type59's spawn grid width is payload word9 shifted left16 (`03D310..03D31E`).
+Its heading is the low16 bits of word10, not the high16 bits of word9:
+`03D37F` reads an unaligned dword at runtime payload+38 (`+139DB6`),
+`03D385` arithmetic-shifts it right16 and `03D388` pushes the signed heading
+for SetPERSON021B9C. Four executions of those unmodified instructions confirmed
+independent word9/word10 high-bit controls and headings45056/32769/32767/65535.
+The retail scene1 fixture respawns PERSON144..146 through the real reducer and
+checks each heading and quarter-tile grid coordinate. The old word9-high-half
+implementation failed its heading assertion; `tests/events.mk check` now also
+runs this fixture with the existing eleven-scene cosmetic coverage.
+
 ## Inventory
 
 InitPC010678 clears the inventory, grants recorder item120, sets power bit0,

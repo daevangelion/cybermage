@@ -357,6 +357,27 @@ static void retail_cosmetics(const char *data)
             e.ticks=(scene-1)*80+tick;
             assert(events_cosmetics(&e,&s,&a,&w)==0);
         }
+        if(scene==1) {
+            static const uint32_t heading[4]={45056,0x12348001,0xffff7fff,0x5678ffff};
+            events_event *v=&e.events[1];
+            unsigned n,person;
+            for(i=0;i<64;++i) e.event_heads[i]=1;
+            memset(v,0,sizeof *v);v->type=59;v->enabled=1;
+            v->value[0]=1;v->value[3]=144;v->value[8]=146;
+            v->value[5]=v->value[6]=24*65536;
+            for(n=0;n<4;++n) {
+                v->state=0;
+                v->value[9]=world_wrap32((n+1)*UINT32_C(0x12340000)+1);
+                v->value[10]=world_wrap32(heading[n]);
+                assert(events_move_world(&e,&s,&a,&w)==0 && v->state==1);
+                for(person=144;person<=146;++person) {
+                    const world_object *o=&w.objects[w.persons[person].object];
+                    assert(o->heading==(uint16_t)heading[n]);
+                    assert(o->x==24*65536+(int32_t)(person-143)*0x4000);
+                    assert(o->y==24*65536+0x4000);
+                }
+            }
+        }
         world_close(&w);
     }
     puts("retail cosmetics: all 11 scenes, 80 ticks each");

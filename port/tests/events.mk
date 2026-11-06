@@ -7,7 +7,7 @@ SOURCES := $(filter-out src/main.c,$(wildcard src/*.c src/*/*.c))
 
 .PHONY: check
 check: $(B)/test_events $(B)/test_events_trace
-	$(B)/test_events
+	$(B)/test_events ../orig/retail
 	$(B)/test_events_trace
 
 $(B)/test_events: tests/test_events.c $(SOURCES) $(wildcard include/*.h)
