@@ -54,6 +54,7 @@ const char *glr_world_fragment(void)
     "else if(r==2)off=t.y+t.x*128;else off=t.y+(127-t.x)*128;"
     "tc=ivec2(off/size.y,off%size.y);"
     "}else tc=clamp(ivec2(floor(v_uv*vec2(size))),ivec2(0),size-1);"
+    "if((mode&2048u)!=0u)tc.x=size.x-1-tc.x;"
     "uint index=texelFetch(u_index,tc,0).r;"
     "if(((mode&1u)!=0u&&index==0u)||((mode&2u)!=0u&&texelFetch(u_alpha,tc,0).r==0u))discard;"
     "int d=int(dot(v_world.xy-u_camera.xy,u_yaw)*65536.0),row;"

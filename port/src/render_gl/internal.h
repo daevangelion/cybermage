@@ -10,7 +10,7 @@
 #define GLR_MAX_SIZE 8192u
 
 enum {GLR_MASK=1,GLR_PACK=2,GLR_INVIS=4,GLR_AURA=8,
-      GLR_BILLBOARD=16,GLR_COLORLESS=32,GLR_FLAT=64};
+      GLR_BILLBOARD=16,GLR_COLORLESS=32,GLR_FLAT=64,GLR_MIRROR=2048};
 enum {GLR_ORIG_FLAT=0x02000000,GLR_ORIG_WALL=0x04000000,
       GLR_ORIG_FXO=0x08000000,GLR_ORIG_PROP=0x20000000,
       GLR_ORIG_TRANSPARENT=0x40000000,GLR_ORIG_PACK=0x00080000,
@@ -25,7 +25,8 @@ typedef struct {unsigned first,count;} glr_batch;
 
 int glr_texture_decode(const render_texture *texture,int packed,
                        uint8_t *pixels,uint8_t *alpha,size_t capacity);
-void glr_wall_quad(glr_vertex out[4],const world_object *o,unsigned light,unsigned mode);
+void glr_wall_quad(glr_vertex out[4],const world_object *o,const world_trig *trig,
+                    int32_t half_columns,unsigned light,unsigned mode);
 void glr_flat_quad(glr_vertex out[4],const world_object *o,int top,unsigned light,unsigned mode);
 void glr_prop_quad(glr_vertex out[4],const world_object *o,const render_texture *t,
                    unsigned light,unsigned mode);

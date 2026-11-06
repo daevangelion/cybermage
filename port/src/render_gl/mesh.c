@@ -8,12 +8,16 @@ static void vertex(glr_vertex *v,float x,float y,float z,float u,float t,unsigne
     v->half_w=v->depth=v->bottom=v->top=0;v->light=light;v->mode=mode;
 }
 
-void glr_wall_quad(glr_vertex out[4],const world_object *o,unsigned light,unsigned mode)
+void glr_wall_quad(glr_vertex out[4],const world_object *o,const world_trig *trig,
+                    int32_t half_columns,unsigned light,unsigned mode)
 {
     unsigned i;
+    float sin=(float)trig->sin[o->heading>>5]/65536,cos=(float)trig->cos[o->heading>>5]/65536;
+    float bias=(float)((o->radius/half_columns)>>1);
+    if (o->flags&UINT32_C(0x80000000)) mode|=GLR_MIRROR;
     for (i=0;i<4;++i) {
-        float u=(i==0 || i==3) ? 1.0f:0.0f;
-        if (o->flags&UINT32_C(0x80000000)) u=1.0f-u;
+        float local=-(float)((int64_t)o->corner_x[i]-o->x)*sin+(float)((int64_t)o->corner_y[i]-o->y)*cos;
+        float u=(local+(float)o->radius+bias)/((float)o->radius*2);
         vertex(out+i,units(o->corner_x[i]),units(o->corner_y[i]),
                units(o->z)+(i<2 ? -units(o->height):units(o->height)),
                u,i<2 ? 1.0f:0.0f,light,mode);
@@ -100,7 +104,8 @@ int glr_build_tiles(const world *w,glr_vertex *vertices,unsigned capacity,
                     glr_vertex *out=vertices+cursor[texture]++*4;
                     tile_object(&o,tile,level,face%4,plane,flags);
                     if (plane) glr_flat_quad(out,&o,plane==2,c->light,mode);
-                    else glr_wall_quad(out,&o,c->light,mode);
+                    else glr_wall_quad(out,&o,&w->trig,
+                        texture/2==CM_RENDER_TEXTURES ? 1:w->textures[texture/2].height,c->light,mode);
                 }
             }
         }

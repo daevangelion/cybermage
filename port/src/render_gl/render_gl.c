@@ -313,7 +313,11 @@ static int object_mesh(const world *w,unsigned id)
     if (!cache->valid || memcmp(cache->key,key,sizeof key)) {
         if (prop) glr_prop_quad(quad,o,t,light,mode);
         else if (mode&GLR_FLAT) glr_flat_quad(quad,o,(int)top,light,mode);
-        else glr_wall_quad(quad,o,light,mode);
+        else {
+            if (o->radius<=0 || o->height<=0 || s.assets->textures[texture].height<=0)
+                return cm_fail("GL wall",id,"invalid wall geometry");
+            glr_wall_quad(quad,o,&w->trig,s.assets->textures[texture].height,light,mode);
+        }
         s.gl.BindBuffer(GL_ARRAY_BUFFER,s.vbo[1]);
         s.gl.BufferSubData(GL_ARRAY_BUFFER,(GLintptr)(id*4*sizeof(glr_vertex)),sizeof quad,quad);
         memcpy(cache->key,key,sizeof key);cache->valid=1;cache->mode=mode;
@@ -380,6 +384,8 @@ int render_gl_draw(const world *w,const world_camera *camera)
 int render_gl_present(const cm_overlay *overlay)
 {
     float scale,x,y;
+    cm_rect rectangles[CM_TOUCH_RECTS_MAX];
+    unsigned count,i;
     if (!s.loaded) return cm_fail("GL present",0,"world not loaded");
     if (memcmp(s.palette_source,s.palette_bytes,768)) {
         bind(7,s.palette);s.gl.TexSubImage2D(GL_TEXTURE_2D,0,0,0,256,1,GL_RGB,GL_UNSIGNED_BYTE,s.palette_source);
@@ -402,7 +408,19 @@ int render_gl_present(const cm_overlay *overlay)
     s.gl.Uniform4f(s.u[2].overlay_rect,x,y,CM_WIDTH*scale,CM_HEIGHT*scale);
     s.gl.Uniform1i(s.u[2].overlay_on,overlay!=NULL);
     bind(0,s.color[0]);bind(1,s.palette);bind(2,s.overlay);bind(3,s.coverage);bind(4,s.overlay_maps);bind(5,s.sources);
-    s.gl.DrawArrays(GL_TRIANGLES,0,3);return error("GL palette and overlay resolve");
+    s.gl.DrawArrays(GL_TRIANGLES,0,3);
+    count=platform_touch_rects((int)s.width,(int)s.height,rectangles);
+    if (count) {
+        const GLfloat color[4]={160.0f/255,220.0f/255,220.0f/255,1};
+        s.gl.Enable(GL_SCISSOR_TEST);
+        for (i=0;i<count;++i) {
+            const cm_rect *r=rectangles+i;
+            s.gl.Scissor(r->x,(int)s.height-r->y-r->h,r->w,r->h);
+            s.gl.ClearBufferfv(GL_COLOR,0,color);
+        }
+        s.gl.Disable(GL_SCISSOR_TEST);
+    }
+    return error("GL palette and overlay resolve");
 }
 int render_gl_readback(uint8_t *pixels,size_t bytes,unsigned stride)
 {

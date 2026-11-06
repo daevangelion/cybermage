@@ -67,6 +67,18 @@ int main(void)
         assert(vertices[0].z==0 && vertices[0].x==0 && vertices[0].y==0);
         assert(vertices[2].x==1 && vertices[2].y==1);
         assert(glr_build_tiles(&map,vertices,0,batches,&count)!=0);
+        {
+            world_object o={0};
+            o.x=o.y=65536;o.z=o.radius=o.height=32768;map.trig.cos[0]=65536;
+            for (i=0;i<4;++i) {
+                o.corner_x[i]=65536;o.corner_y[i]=(i==0 || i==3) ? 32768:98304;
+            }
+            glr_wall_quad(vertices,&o,&map.trig,64,0,0);
+            assert(vertices[0].u>0 && vertices[0].u<0.01f && vertices[1].u>1);
+            o.flags=UINT32_C(0x80000000);
+            glr_wall_quad(vertices,&o,&map.trig,64,0,0);
+            assert(vertices[0].mode&GLR_MIRROR);
+        }
     }
     return 0;
 }
