@@ -933,13 +933,26 @@ int platform_directory(const char *path)
 
 int platform_file_write(const char *path, const uint8_t *data, uint32_t size)
 {
-    SDL_RWops *rw = SDL_RWFromFile(path, "wb");
+    char temporary[PATH_MAX_BYTES];
+    SDL_RWops *rw;
+    int n = snprintf(temporary, sizeof temporary, "%s.tmp", path);
+    if (n < 0 || (size_t)n >= sizeof temporary)
+        return cm_fail(path, 0, "temporary path too long");
+    rw = SDL_RWFromFile(temporary, "wb");
     if (!rw) return cm_fail(path, 0, SDL_GetError());
     if (SDL_RWwrite(rw, data, 1, size) != size) {
         SDL_RWclose(rw);
+        remove(temporary);
         return cm_fail(path, 0, "short file write");
     }
-    if (SDL_RWclose(rw)) return cm_fail(path, 0, "file close failed");
+    if (SDL_RWclose(rw)) {
+        remove(temporary);
+        return cm_fail(path, 0, "file close failed");
+    }
+    if (rename(temporary, path)) {
+        remove(temporary);
+        return cm_fail(path, 0, "file replacement failed");
+    }
     return 0;
 }
 

@@ -1,6 +1,7 @@
 #include "platform.h"
 
 #include <assert.h>
+#include <errno.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -35,6 +36,20 @@ int main(int argc, char **argv)
     assert(platform_file_read(&file, state_path) == 0);
     assert(file.size == 6 && !memcmp(file.data, "state\n", 6));
     platform_file_release(&file);
+    {
+        char path[1024], temporary[1024];
+        assert(snprintf(path, sizeof path, "%s/atomic", argv[2]) > 0);
+        assert(snprintf(temporary, sizeof temporary, "%s.tmp", path) > 0);
+        assert(!remove(temporary) || errno == ENOENT);
+        /* A failed temporary open must never truncate the existing save. */
+        assert(platform_file_write(path, (const uint8_t *)"old", 3) == 0);
+        assert(platform_directory(temporary) == 0);
+        assert(platform_file_write(path, (const uint8_t *)"replacement", 11) == -1);
+        assert(platform_file_read(&file, path) == 0);
+        assert(file.size == 3 && !memcmp(file.data, "old", 3));
+        platform_file_release(&file);
+        assert(!remove(temporary));
+    }
     script(argv[1], valid, sizeof valid - 1);
     assert(platform_file_exists(argv[1]) == 1);
     assert(platform_file_read(&file, argv[1]) == 0);
