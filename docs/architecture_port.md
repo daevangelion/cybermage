@@ -5,7 +5,7 @@ objects, PERSONs, maps, sight and integer math; `sim` owns movement and classic
 input; `ai` owns actor/combat decisions; `events` owns triggers and inventory;
 renderers read world state. SDL and OS access remain behind the platform adapter.
 User-file writes (CMDATA, GAMENAME, SAVE and AUTO) use a same-directory temporary
-file, checked write/close, then atomic rename. A failed write does not truncate the
+file, checked write/flush/fsync/close, then atomic rename. A failed write does not truncate the
 old file; temporary files are removed on write, close and rename failures.
 SDL application background/foreground events pause the platform epoch at the
 event-watch boundary, including time blocked inside Android's poll. Simulation

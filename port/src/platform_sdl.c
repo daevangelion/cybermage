@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 #define KEY_EVENTS_MAX 4096
 #define PATH_MAX_BYTES 1024
@@ -974,6 +975,12 @@ int platform_file_write(const char *path, const uint8_t *data, uint32_t size)
         SDL_RWclose(rw);
         remove(temporary);
         return cm_fail(path, 0, "short file write");
+    }
+    if (rw->type != SDL_RWOPS_STDFILE || fflush(rw->hidden.stdio.fp) ||
+        fsync(fileno(rw->hidden.stdio.fp))) {
+        SDL_RWclose(rw);
+        remove(temporary);
+        return cm_fail(path, 0, "file sync failed");
     }
     if (SDL_RWclose(rw)) {
         remove(temporary);

@@ -25,7 +25,7 @@ $(B)/%.o: src/%.c
 check: $(B)/test_core $(B)/test_platform $(B)/test_platform_lifecycle $(B)/test_touch $(B)/test_sim $(B)/test_replay $(B)/test_exe $(B)/test_sim_loop $(B)/test_sim_collision $(B)/test_sim_swim $(B)/test_sim_swim_ubsan $(B)/test_sim_swim_original $(B)/test_sim_fire $(B)/test_sim_fire_ubsan $(B)/test_attack_ignore
 	$(B)/test_core
 	$(B)/test_platform $(B)/platform-keys.txt $(B)/platform-dump
-	$(B)/test_platform_lifecycle
+	$(B)/test_platform_lifecycle $(B)/lifecycle-write.bin
 	$(B)/test_touch
 	$(B)/test_sim
 	$(B)/test_replay
