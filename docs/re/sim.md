@@ -3,6 +3,8 @@
 HandleNextFrame01BC3F..01BC4E starts death only on PCDeadMan. A destroyed
 vehicle PERSON is not the foot player's death flag; Events must still run its
 vehicle-exit branch when the foot player survived the spill damage.
+Every successful menu load clears PCDeadMan (01BCC2/01BCD9), including a
+load after an earlier overlay failure. Disarming an incomplete scene clears it too.
 
 | Function | Link address | Contract |
 |---|---:|---|

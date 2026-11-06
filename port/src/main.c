@@ -418,6 +418,7 @@ static int load_game(const char *data, const char *user, unsigned slot, uint32_t
     camera_follow();
     ui.restart_game = (int32_t)slot;
     events_reset_selectors(&events); /* LoadGame0515F8..05162A, after import. */
+    events.pc_dead_man = 0;
     return 0;
 }
 
@@ -433,6 +434,7 @@ static int load_requested(const char *data, const char *user, uint32_t ticks)
             render_unload();
             world_close(&game);
             death_phase = 0;
+            events.pc_dead_man = 0;
         }
         ui_open(&ui, result == -2 ? UI_LOAD : screen);
         ui.return_screen = result == -2 ? UI_TITLE : return_screen;
@@ -1068,7 +1070,6 @@ int main(int argc, char **argv)
                     }
                     if (load_game(data, user, slot, command.ticks)) goto out;
                     replay_input(&simulation, &recorded);
-                    events.pc_dead_man = 0;
                 }
                 /* Both01BD28 and PCDeath015650 clear keyboard states before
                  * the remaining simulation, without importing game outputs. */
@@ -1120,7 +1121,6 @@ int main(int argc, char **argv)
                     if (from_death) {
                         simulation.replay_delta = death_frame_ticks;
                         death_resume = 1;
-                        events.pc_dead_man = 0;
                     }
                 }
                 else if (loaded < 0) {

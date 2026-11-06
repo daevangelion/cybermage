@@ -302,9 +302,13 @@ void sim_loop_checks(void)
         assert(!encode_save(&size));
         save_data[UI_SAVE_PREFIX] = save_data[UI_SAVE_PREFIX + 1] = 0xff;
         assert(!platform_file_write(path, save_data, size));
+        events.pc_dead_man = 1;
         assert(load_requested("../orig/retail", test_user, 75) == -1);
         assert(ui.screen == UI_LOAD && ui.return_screen == UI_TITLE);
-        assert(!game.object_count);
+        assert(!game.object_count && !events.pc_dead_man);
+        events.pc_dead_man = 1;
+        assert(!load_game("../orig/retail", test_user, 0, 76));
+        assert(!events.pc_dead_man);
     }
     {
         unsigned kind;
