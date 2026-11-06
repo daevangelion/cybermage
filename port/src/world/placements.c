@@ -25,7 +25,7 @@ static int load_fxo(world *w)
     };
     unsigned count, i;
     world_span span = w->scene_sections[2];
-    if (world_section_records(span, 30, &count)) return -1;
+    if (world_section_records(span,30,"SCENE.RSC/FXO",world_section_offset(w,2),&count)) return -1;
     for (i = 0; i < count; ++i) {
         const uint8_t *p = span.data + (i + 1) * 30;
         int type = world_s16(p + 24);
@@ -44,6 +44,10 @@ static int load_fxo(world *w)
         o->heading = cm_u16(p + 12); o->active = p[28]; o->kind = 0;
         o->radius = world_s32(p + 16) ? world_s32(p + 16) : world_s32(def);
         o->height = world_s32(p + 20) ? world_s32(p + 20) : world_s32(def + 4);
+        if (!world_xy_valid(o->x) || !world_xy_valid(o->y) ||
+            !world_z_valid(o->z) || o->radius<0 || o->radius>CM_WORLD_XY_MAX)
+            return cm_fail("SCENE.RSC/FXO",world_section_offset(w,2)+(i+1)*30,
+                           "FX object coordinate or radius outside world bounds");
         o->unk_6F220 = world_sub32(0,o->height); o->unk_71E88 = o->height;
         if (world_s16(def + 12) <= 0)
             return cm_fail("SCENE.RSC/FXO", i, "invalid FX image resource");
@@ -76,7 +80,7 @@ static int load_props(world *w)
 {
     world_span span = w->scene_sections[1];
     unsigned count, i;
-    if (world_section_records(span, 30, &count)) return -1;
+    if (world_section_records(span,30,"SCENE.RSC/PROP",world_section_offset(w,1),&count)) return -1;
     for (i = 0; i < count; ++i) {
         const uint8_t *p = span.data + (i + 1) * 30, *def;
         int type = world_s16(p + 20), degrees;
@@ -94,6 +98,11 @@ static int load_props(world *w)
         o->y = world_add32(world_s32(p+4),world_s32(def+4));
         o->z = world_add32(world_s32(p+8),world_s32(def+8));
         o->floor_z = world_s32(p + 16);
+        if (!world_xy_valid(world_s32(p)) || !world_xy_valid(world_s32(p+4)) ||
+            !world_xy_valid(o->x) || !world_xy_valid(o->y) ||
+            !world_z_valid(o->z) || !world_z_valid(o->floor_z))
+            return cm_fail("SCENE.RSC/PROP",world_section_offset(w,1)+(i+1)*30,
+                           "prop coordinate outside world bounds");
         o->radius = world_s32(def + 12); o->height = world_s32(def + 16);
         o->unk_6F220 = world_sub32(0,o->height); o->unk_71E88 = o->height;
         degrees = world_s32(p + 12);
@@ -110,6 +119,7 @@ static int load_props(world *w)
         }
         if (type == 174) o->flags |= 0x400u;
         w->prop_objects[w->prop_count] = (uint16_t)w->object_count++;
+        w->prop_placements[w->prop_count] = i;
         w->prop_types[w->prop_count++] = (int16_t)type;
     }
     return 0;
@@ -141,7 +151,10 @@ int world_set_person(world *w, unsigned index, unsigned type, unsigned state,
     o = &w->objects[(unsigned)person->object];
     mon = w->monster_definitions.data + type * 276;
     gsx = world_s16(mon + 0x17);
-    if (gsx < 0 || world_load_gsx_flags(w, (unsigned)gsx, mon[0x113] & 6u)) return -1;
+    if (gsx < 0)
+        return cm_fail("SCENE.RSC/MONSTER",world_section_offset(w,98)+type*276+0x17,
+                       "negative GSX definition index");
+    if (world_load_gsx_flags(w, (unsigned)gsx, mon[0x113] & 6u)) return -1;
     g = w->gsx_definitions.data + (unsigned)gsx * 58;
     seqid = world_s16(g);
     if (seqid < 0 || (unsigned)seqid >= w->animation_definitions.size / 4532)
@@ -173,6 +186,9 @@ int world_set_person(world *w, unsigned index, unsigned type, unsigned state,
     o->flags = 0x60080000;
     o->x = world_add32(x,world_s32(seq)); o->y = world_add32(y,world_s32(seq+4));
     o->z = world_add32(z,world_s32(seq+8)); o->floor_z = floor_z; o->heading = heading;
+    if (!world_xy_valid(o->x) || !world_xy_valid(o->y) ||
+        !world_z_valid(o->z) || !world_z_valid(o->floor_z))
+        return cm_fail("world/PERSON",index,"person coordinate outside world bounds");
     o->active = 1; o->rotations = 8; o->kind = 2;
     o->person = (int16_t)index; o->targetable = 1;
     o->radius = world_s32(seq + 0x84 + frame * 4);
@@ -190,13 +206,17 @@ int world_load_persons(world *w)
 {
     unsigned count, i;
     world_span span = w->scene_sections[3];
-    if (world_section_records(span, 351, &count)) return -1;
+    if (world_section_records(span,351,"SCENE.RSC/PERSON",world_section_offset(w,3),&count)) return -1;
     for (i = 0; i < count; ++i) {
         const uint8_t *p = span.data + (i + 1) * 351;
         int type = world_s16(p + 345);
         world_person *person;
         world_object *o;
         if (type <= 0) continue;
+        if (!world_xy_valid(world_s32(p+319)) || !world_xy_valid(world_s32(p+323)) ||
+            !world_z_valid(world_s32(p+327)) || !world_z_valid(world_s32(p+347)))
+            return cm_fail("SCENE.RSC/PERSON",world_section_offset(w,3)+(i+1)*351,
+                           "person coordinate outside world bounds");
         if ((unsigned)type >= w->monster_definitions.size / 276)
             return cm_fail("SCENE.RSC/PERSON", i, "invalid monster definition");
         if (object_slot(w, &o)) return -1;

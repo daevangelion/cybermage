@@ -268,6 +268,14 @@ int ui_save_overlay(ui_save_state *save, world *w, const uint8_t *data,
     w->unk_5E7A8 = signed32(word32(&io, 0));
     prefix(&io, save);
     object_read(&io, w);
+    for (i=1;i<CM_OBJECT_MAX;++i) {
+        const world_object *o=&w->objects[i];
+        uint32_t offset=!world_xy_valid(o->x)?0x4C87:
+            !world_xy_valid(o->y)?0x78EF:!world_z_valid(o->z)?0xA557:
+            !world_z_valid(o->floor_z)?0xD1BF:0;
+        if (offset) return cm_fail("SAVE*.DAT",offset+i*4,
+                                   "saved object coordinate outside world bounds");
+    }
     suffix(&io, save);
     w->person_count = word32(&io, 0);
     for (i = 0; i < w->person_count; ++i) person(&io, NULL, &w->persons[i]);

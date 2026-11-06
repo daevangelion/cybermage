@@ -6,7 +6,8 @@
  * [rust: native/image1/lists.rs], independently checked original FXO/DBL/FLAT. */
 static unsigned tile_of(int32_t x, int32_t y)
 {
-    return ((uint32_t)y >> 16) * CM_MAP_SIDE | (((uint32_t)x >> 16) & 31u);
+    if (!world_xy_valid(x) || !world_xy_valid(y)) return CM_MAP_CELLS;
+    return ((uint32_t)y >> 16) * CM_MAP_SIDE | ((uint32_t)x >> 16);
 }
 
 static int insert(world_chain *m, unsigned cell, unsigned obj)
@@ -149,6 +150,9 @@ int world_make_omap(world *w)
     for (i = 1; i < w->object_count; ++i) {
         const world_object *o = &w->objects[i];
         if (!o->active) continue;
+        if (!world_xy_valid(o->x) || !world_xy_valid(o->y) ||
+            !world_z_valid(o->z) || !world_z_valid(o->floor_z))
+            return cm_fail("world/map",i,"object coordinate outside world bounds");
         if (o->flags & 0x02000000u) { if (single(w, i, 1, 1)) return -1; }
         else if (o->flags & 0x08000000u) {
             if (o->flags & 0x4000u) { if (double_fx(w, i, 1)) return -1; }

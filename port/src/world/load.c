@@ -20,7 +20,7 @@ static int load_passages(world *w)
 {
     world_span span = w->scene_sections[6];
     unsigned count, i;
-    if (world_section_records(span, 18, &count)) return -1;
+    if (world_section_records(span,18,"SCENE.RSC/PASS",world_section_offset(w,6),&count)) return -1;
     if (count >= 96) return cm_fail("SCENE.RSC/PASS", count, "too many passages");
     for (i = 0; i < count; ++i) {
         const uint8_t *p = span.data + (i + 1) * 18;

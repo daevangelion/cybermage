@@ -12,14 +12,21 @@ int world_path(char *out, const char *dir, const char *name)
     return 0;
 }
 
-int world_section_records(world_span s, unsigned stride, unsigned *count)
+uint32_t world_section_offset(const world *w, unsigned section)
+{
+    unsigned entry=section<8 ? section*12+w->scene:section;
+    return w->scenes.data ? cm_u32(w->scenes.data+8+entry*4):0;
+}
+
+int world_section_records(world_span s, unsigned stride, const char *path,
+                            uint32_t offset, unsigned *count)
 {
     uint32_t n;
     if (!s.data || s.size < stride || stride < 4)
-        return cm_fail("SCENE.RSC", 0, "truncated record header");
+        return cm_fail(path, offset, "truncated record header");
     n = cm_u32(s.data);
     if (n >= UINT32_MAX / stride || (n + 1) * stride != s.size)
-        return cm_fail("SCENE.RSC", 0, "record count/length mismatch");
+        return cm_fail(path, offset, "record count/length mismatch");
     *count = n;
     return 0;
 }

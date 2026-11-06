@@ -47,14 +47,14 @@ static int rectangle(const render_state *s,const world_object *flat,bounds b)
     int32_t cu=s->camera.u,cv=s->camera.v;
     if (cu>=xmin && cu<=xmax && cv>=ymin && cv<=ymax) return 1;
     if (xmax<cu) {
-        if (b.x<xmax-16) {
+        if (b.x<r_sub(xmax,16)) {
             if (b.xmax<xmin) return 1;
             if (ymin<cv) {
-                if (ymax>cv || b.y<ymax-16) return 1;
+                if (ymax>cv || b.y<r_sub(ymax,16)) return 1;
                 if (b.ymin<cv && b.xmax>xmin) return 0;
                 return r_sub(cu,b.xmax)>r_sub(cv,ymax);
             }
-            if (b.y>ymin+16) return 1;
+            if (b.y>r_add(ymin,16)) return 1;
             if (b.ymax>cv && b.xmax>xmin) return 0;
             return r_sub(cu,b.xmax)>r_sub(ymin,cv);
         }
@@ -62,14 +62,14 @@ static int rectangle(const render_state *s,const world_object *flat,bounds b)
         return b.ymin>ymax;
     }
     if (xmin>cu) {
-        if (b.x>xmin+16) {
+        if (b.x>r_add(xmin,16)) {
             if (b.xmin>xmax) return 1;
             if (ymin<cv) {
-                if (ymax>cv || b.y<ymax-16) return 1;
+                if (ymax>cv || b.y<r_sub(ymax,16)) return 1;
                 if (b.ymin<cv && b.xmin<xmax) return 0;
                 return r_sub(b.xmin,cu)>r_sub(cv,ymax);
             }
-            if (b.y>ymin+16) return 1;
+            if (b.y>r_add(ymin,16)) return 1;
             if (b.ymax>cv && b.xmin<xmax) return 0;
             return r_sub(b.xmin,cu)>r_sub(ymin,cv);
         }
@@ -78,10 +78,10 @@ static int rectangle(const render_state *s,const world_object *flat,bounds b)
     }
     if (b.xmax<xmin || b.xmin>xmax) return 1;
     if (ymin<cv) {
-        if (b.y<ymax-16) return 1;
+        if (b.y<r_sub(ymax,16)) return 1;
         return b.ymin>cv && r_sub(b.ymin,cv)>r_sub(cv,ymax);
     }
-    if (b.y>ymin+16) return 1;
+    if (b.y>r_add(ymin,16)) return 1;
     return b.ymax<cv && r_sub(cv,b.ymax)>r_sub(ymin,cv);
 }
 
@@ -105,19 +105,19 @@ int r_before(const world *w,render_state *s,unsigned a,unsigned b)
         box.xmax=r_max(other->corner_x[0],other->corner_x[1]);
         box.ymin=r_min(other->corner_y[0],other->corner_y[1]);
         box.ymax=r_max(other->corner_y[0],other->corner_y[1]);
-        if (other->x>flat->x-flat->radius && other->x<flat->x+flat->radius &&
-            other->y>flat->y-flat->height && other->y<flat->y+flat->height) {
+        if (other->x>r_sub(flat->x,flat->radius) && other->x<r_add(flat->x,flat->radius) &&
+            other->y>r_sub(flat->y,flat->height) && other->y<r_add(flat->y,flat->height)) {
             if (r_sub(other->z,other->height)>=flat->z) return result^(s->camera.z<flat->z);
             if (r_add(other->z,other->height)<=flat->z) return result^(s->camera.z>flat->z);
         }
     } else {
         box.xmin=r_sub(other->x,other->radius);box.xmax=r_add(other->x,other->radius);
         box.ymin=r_sub(other->y,other->radius);box.ymax=r_add(other->y,other->radius);
-        if (other->x>=flat->x-flat->radius && other->x<=flat->x+flat->radius &&
-            other->y>=flat->y-flat->height && other->y<=flat->y+flat->height)
+        if (other->x>=r_sub(flat->x,flat->radius) && other->x<=r_add(flat->x,flat->radius) &&
+            other->y>=r_sub(flat->y,flat->height) && other->y<=r_add(flat->y,flat->height))
             return result^((other->floor_z>=flat->z) ? flat->z>s->camera.z:flat->z<s->camera.z);
-        if (box.xmin<=flat->x+flat->radius && box.xmax>=flat->x-flat->radius &&
-            box.ymin<=flat->y+flat->height && box.ymax>=flat->y-flat->height) {
+        if (box.xmin<=r_add(flat->x,flat->radius) && box.xmax>=r_sub(flat->x,flat->radius) &&
+            box.ymin<=r_add(flat->y,flat->height) && box.ymax>=r_sub(flat->y,flat->height)) {
             if (other->floor_z>=flat->z) return result^(s->camera.z<flat->z);
             if (r_add(r_add(other->floor_z,other->z),other->height)<flat->z)
                 return result^(s->camera.z>flat->z);

@@ -1,4 +1,5 @@
 #include "world.h"
+#include "../src/world/world_internal.h"
 #include <assert.h>
 #include <inttypes.h>
 #include <stdio.h>
@@ -6,6 +7,24 @@
 #include <string.h>
 
 static world w;
+
+static void bad_placement(unsigned section,unsigned type_offset,unsigned field)
+{
+    uint8_t record[60]={1},empty[30]={0};
+    world_span old=w.scene_sections[section],old_fxo=w.scene_sections[2];
+    unsigned i,count=cm_u32(old.data);
+    for(i=1;i<=count;++i)
+        if((int16_t)cm_u16(old.data+i*30+type_offset)>0) break;
+    assert(i<=count);
+    memcpy(record+30,old.data+i*30,30);
+    record[30+field]=0;record[31+field]=255;record[32+field]=255;record[33+field]=127;
+    w.scene_sections[section].data=record;w.scene_sections[section].size=sizeof record;
+    if(section==1) {
+        w.scene_sections[2].data=empty;w.scene_sections[2].size=sizeof empty;
+    }
+    assert(world_load_placements(&w) == -1);
+    w.scene_sections[section]=old;w.scene_sections[2]=old_fxo;
+}
 
 static void chains(void)
 {
@@ -55,9 +74,41 @@ int main(int argc, char **argv)
                 const world_texture *icon;
                 unsigned object = w.player_object, type = (unsigned)w.persons[0].type;
                 assert(world_set_person(&w,0,type,99,0x50000,0x60000,0,0x20000,0x1234) == 0);
+                bad_placement(2,24,0);
+                bad_placement(2,24,8);
+                bad_placement(2,24,16);
+                bad_placement(1,20,0);
+                bad_placement(1,20,16);
+                {
+                    uint8_t monsters[109*276];
+                    world_span old=w.monster_definitions;
+                    assert(old.size<=sizeof monsters);
+                    memcpy(monsters,old.data,old.size);
+                    monsters[type*276+0x17]=monsters[type*276+0x18]=255;
+                    w.monster_definitions.data=monsters;
+                    assert(world_set_person(&w,0,type,99,0x50000,0x60000,0,0x20000,0) == -1);
+                    w.monster_definitions=old;
+                }
+                {
+                    uint8_t bad[351]={1};
+                    unsigned n;
+                    assert(world_section_records((world_span){bad,sizeof bad},351,
+                                                 "SCENE.RSC/PERSON",123,&n) == -1);
+                }
+                {
+                    uint8_t bad[702]={1};
+                    world_span old=w.scene_sections[3];
+                    memcpy(bad+351,old.data+351,351);
+                    bad[351+319]=0;bad[351+320]=255;bad[351+321]=255;bad[351+322]=127;
+                    w.scene_sections[3]=(world_span){bad,sizeof bad};
+                    assert(world_load_persons(&w) == -1);
+                    w.scene_sections[3]=old;
+                }
                 assert(w.persons[0].state == 2 && w.persons[0].unk_001E == 10);
                 assert(w.persons[0].unk_00BC == 1 && w.objects[object].heading == 0x1234);
                 assert(w.objects[object].person == 0 && w.objects[object].active == 1);
+                assert(world_set_person(&w,0,type,99,0x7FFFFF00,0x60000,0,0x20000,0) == -1);
+                assert(world_set_person(&w,0,type,99,0x50000,0x60000,0,0x20000,0x1234) == 0);
                 assert(world_prop_frame(&w,12,31,&icon) == 0);
                 assert(icon->resource == 12 && icon->frame == 15 && icon->rotations == 32);
                 {
@@ -183,6 +234,9 @@ int main(int argc, char **argv)
     w.object_count = 2;
     w.objects[1].active = 1;
     w.objects[1].y = -1;
+    assert(world_make_omap(&w) == -1);
+    w.objects[1].y = 0x58000;
+    w.objects[1].x = 0x7FFFFF00;
     assert(world_make_omap(&w) == -1);
     w.cells[1][7].floor = 1; /* original downward test skips intervening floors */
     assert(world_tile_sight(&w,7,2,0,0,8,0) == 0);

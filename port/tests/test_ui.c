@@ -135,6 +135,7 @@ int main(int argc, char **argv)
     assert(press(1) == UI_NONE && ui.screen == UI_PAUSE);
     assert(press(28) == UI_RESUME && ui.screen == UI_GAME);
     ui_open(&ui,UI_DEATH);
+    ui.restart_game=10;
     assert(ui.selected == 3);
     assert(press(1) == UI_NONE && ui.screen == UI_DEATH);
     assert(press(72) == UI_NONE && ui.selected == 3);
@@ -229,6 +230,17 @@ int main(int argc, char **argv)
         encoded[0x6DC]=1;encoded[0x6DD]=encoded[0x6DE]=encoded[0x6DF]=0;
         assert(ui_save_overlay(&save,&w,encoded,original.size) == -1);
         assert(ui_save_overlay(&save,&w,original.data,original.size) == 0);
+        {
+            static const unsigned arrays[4]={0x4C87,0x78EF,0xA557,0xD1BF};
+            unsigned field;
+            for(field=0;field<4;++field) {
+                unsigned at=arrays[field]+w.player_object*4;
+                memcpy(encoded,original.data,original.size);
+                encoded[at]=0;encoded[at+1]=255;encoded[at+2]=255;encoded[at+3]=127;
+                assert(ui_save_overlay(&save,&w,encoded,original.size) == -1);
+                assert(ui_save_overlay(&save,&w,original.data,original.size) == 0);
+            }
+        }
     }
     {
         cm_input input = {0};

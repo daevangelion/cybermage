@@ -25,6 +25,16 @@ int main(void)
     render_state *state=render_get_state();
     unsigned x,y,i;
     uint32_t hash;
+    {
+        int before;
+        map.objects[1].x=INT32_MAX;map.objects[1].y=0x50000;
+        map.objects[1].radius=map.objects[1].height=64;
+        map.objects[2].x=INT32_MAX;map.objects[2].y=0x50000;
+        state->object_kind[1]=1;state->object_kind[2]=2;
+        before=r_before(&map,state,1,2);
+        assert(before==0 || before==1);
+        memset(map.objects,0,sizeof map.objects);
+    }
     memset(&s, 0, sizeof s);
     s.shade_bias = 6;
     s.shade_shift = 14;

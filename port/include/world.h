@@ -2,6 +2,7 @@
 #define CM_WORLD_H
 
 #include "rsc.h"
+#include <limits.h>
 
 #define CM_MAP_SIDE 32
 #define CM_MAP_CELLS 1024
@@ -11,6 +12,37 @@
 #define CM_PANEL_MAX 1536 /* Xox+A623C - Xox+A4A3C, pointer slots. */
 #define CM_TRIG_SIZE 2048
 #define CM_WORLD_PATH_MAX 1024
+#define CM_WORLD_XY_MAX (CM_MAP_SIDE * 65536)
+/* Retail FXO z spans -98304..294912; scene11 PROP floor reaches -8192.
+ * Preserve off-map art while excluding hostile int32 extremes. */
+#define CM_WORLD_Z_MIN (-CM_MAP_LEVELS * 65536)
+#define CM_WORLD_Z_MAX (2 * CM_MAP_LEVELS * 65536)
+
+static inline int world_xy_valid(int32_t value)
+{
+    return value>=0 && value<CM_WORLD_XY_MAX;
+}
+static inline int world_z_valid(int32_t value)
+{
+    return value>=CM_WORLD_Z_MIN && value<=CM_WORLD_Z_MAX;
+}
+
+static inline int32_t world_wrap32(uint32_t v)
+{
+    return v<=INT32_MAX?(int32_t)v:-1-(int32_t)(UINT32_MAX-v);
+}
+static inline int32_t world_add32(int32_t a, int32_t b)
+{
+    return world_wrap32((uint32_t)a+(uint32_t)b);
+}
+static inline int32_t world_sub32(int32_t a, int32_t b)
+{
+    return world_wrap32((uint32_t)a-(uint32_t)b);
+}
+static inline int32_t world_mul32(int32_t a, int32_t b)
+{
+    return world_wrap32((uint32_t)a*(uint32_t)b);
+}
 
 /* Offsets in comments are original Xox offsets, not native struct offsets. */
 typedef struct {
@@ -141,6 +173,7 @@ typedef struct world {
     world_gsx gsx[55]; /* SCENE entry99: 55 records of 58 bytes. */
     uint16_t fxo_objects[2048], fxo_textures[2048], prop_objects[2048];
     int16_t fxo_types[2048], prop_types[2048];
+    uint32_t prop_placements[2048]; /* disk record index before skipped PROP records */
     world_trig trig;
     world_rng rng;
     rsc scenes, fxo, props, animations;

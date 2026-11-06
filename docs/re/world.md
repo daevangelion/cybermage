@@ -151,3 +151,23 @@ state, temporary object contents, rendered pixels or every scene are identical.
 all11 scene loads and original math/ray vectors. The wave integrator owns the
 combined application/check gate. Expected negative tests print explicit errors
 for a bad map length, off-map object and monitor bitmap length mismatch.
+
+## Coordinate and diagnostic boundaries
+
+FXO/PROP/PERSON loading and save overlays reject x/y outside `[0,32<<16)`.
+Spatial insertion no longer masks an invalid x back into a different map cell.
+Vertical validation deliberately includes off-map art: all eleven retail scenes
+contain FXO z values from-98304 through294912, and scene11 PROP record104 has
+floor_z=-8192. The approved envelope is therefore `-(4<<16)..(8<<16)`,
+inclusive, not a clamp to the visible four levels. Limits are named in world.h.
+FXO radius must be nonnegative and at most the map width.
+
+Record header failures now identify their SCENE section and actual archive
+offset. Negative monster GSX references report the monster definition's file
+offset instead of returning an unexplained failure. Tests cover mutated FXO
+positions/radii, prop positions, PERSON x=0x7FFFFF00, malformed section length,
+negative GSX and invalid spatial insertion; all11 unmodified retail scenes
+continue to load with the object/person/panel counts above.
+Renderer rectangle ordering uses the existing `r_add`/`r_sub` wrapping
+operators for edge biases and flat extents; an INT32_MAX extent vector passes
+the focused renderer check under nonrecovering UBSan.
