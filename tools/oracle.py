@@ -214,6 +214,7 @@ def main():
                 env["CM_FRAME_SNAPSHOT"] = str(destination / "scene-start")
             if args.actor_trace:
                 env["CM_ACTOR_TRACE"] = str(destination / "actors.csv")
+                env["CM_ACTOR_CLOCK_TRACE"] = str(destination / "actor-clocks.csv")
             if args.rng_trace:
                 env["CM_RNG_TRACE"] = str(destination / "rng.csv")
             if args.event_trace:
@@ -255,6 +256,7 @@ def main():
                 "frame_trace": "frames.csv" if args.frame_trace else None,
                 "trace_ranges": args.trace_range,
                 "actor_trace": "actors.csv" if args.actor_trace else None,
+                "actor_clock_trace": "actor-clocks.csv" if args.actor_trace else None,
                 "seed_trace": "seed.csv" if args.frame_trace else None,
                 "rng_trace": "rng.csv" if args.rng_trace else None,
                 "event_trace": "events-input.csv" if args.event_trace else None,

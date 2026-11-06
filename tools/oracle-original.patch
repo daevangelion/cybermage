@@ -1,139 +1,22 @@
-diff --git a/crates/game/src/machine.rs b/crates/game/src/machine.rs
-index 5118211..a7b3ee4 100644
---- a/crates/game/src/machine.rs
-+++ b/crates/game/src/machine.rs
-@@ -742,7 +742,7 @@ impl Machine {
-             0x25 => {
-                 let n = r.al();
-                 self.pm_vec[n as usize] = (r.ds, r.edx);
--                if n == 9 {
-+                if n == 9 && std::env::var_os("CM_ORIGINAL").is_none() {
-                     // On real hardware the release of the Enter key used to start the
-                     // game arrives after CM_ISR9 is installed; it primes the ISR's
-                     // key-state latch (otherwise the first key press is swallowed).
-@@ -813,7 +813,9 @@ impl Machine {
-                 };
-                 match res {
-                     Some(mut f) => {
--                        let patch = if mode == 0 { crate::rebrand::title_patch(&name, &mut f) } else { None };
-+                        let patch = if mode == 0 && std::env::var_os("CM_ORIGINAL").is_none() {
-+                            crate::rebrand::title_patch(&name, &mut f)
-+                        } else { None };
-                         let h = self.alloc_handle(DosFile { f, name: name.clone(), patch });
-                         if self.trace_ints {
-                             eprintln!("[dos] open {} -> {}", name, h);
-diff --git a/crates/game/src/main.rs b/crates/game/src/main.rs
-index e9094e3..48ab7bd 100644
---- a/crates/game/src/main.rs
-+++ b/crates/game/src/main.rs
-@@ -14,6 +14,7 @@ mod desktop;
- mod display;
- mod gamepad;
- mod frontend;
-+mod frame_trace;
- mod tgv;
- mod verify;
- mod input;
-@@ -70,6 +71,7 @@ pub struct Emu {
-     pub vehicle_anywhere: Option<u32>,
-     /// Includes time spent presenting/sleeping between realtime slices.
-     pub realtime_last: Option<std::time::Instant>,
-+    frame_trace: Option<frame_trace::FrameTrace>,
- }
- 
- impl Emu {
-@@ -87,8 +89,17 @@ impl Emu {
-         if let Some(vulkan) = cfg.renderer { m.display.vulkan = vulkan; }
-         if m.verifier.is_some() { m.display.mode = 0; }
-         let exe = std::fs::read(game.join("CM_HI.EXE")).expect("CM_HI.EXE not found");
--        m.load_program(&mut cpu, &exe, "").expect("load");
--        native::install(&mut m, &mut cpu);
-+        m.load_program(&mut cpu, &exe, if std::env::var_os("CM_ORIGINAL").is_some() { "-x" } else { "" }).expect("load");
-+        if std::env::var_os("CM_ORIGINAL").is_some() {
-+            assert!(m.verifier.is_none(), "original mode forbids verification hooks");
-+            assert!(cfg.headless && !cfg.realtime && cfg.pads.is_empty() && cfg.desktop.is_empty());
-+            assert!(std::env::var_os("CM_SCENE").is_none());
-+            assert!(std::env::var_os("CM_VEHICLE").is_none());
-+            assert!(m.hooks.is_empty());
-+            eprintln!("ORACLE original-x86: native::install bypassed; hooks=0; asset patches=off; raw VGA");
-+        } else {
-+            native::install(&mut m, &mut cpu);
-+        }
-         let watches = std::env::var("CM_WATCH")
-             .map(|v| {
-                 v.split(',')
-@@ -102,7 +113,8 @@ impl Emu {
-         let profile_start = std::env::var("CM_PROFILE_START").ok().and_then(|v| v.parse().ok()).unwrap_or(0.0);
-         let scene_override = std::env::var("CM_SCENE").ok().and_then(|v| v.parse().ok());
-         let vehicle_anywhere = std::env::var("CM_VEHICLE").ok().and_then(|v| v.parse().ok());
--        Emu { cpu, m, ips: cfg.ips, cfg_trace: cfg.trace, watches, profile, counter, profile_start, scene_override, vehicle_anywhere, realtime_last: None }
-+        let frame_trace = frame_trace::FrameTrace::open();
-+        Emu { cpu, m, ips: cfg.ips, cfg_trace: cfg.trace, watches, profile, counter, profile_start, scene_override, vehicle_anywhere, realtime_last: None, frame_trace }
-     }
- 
-     fn debug_overrides(&mut self) {
-@@ -140,6 +152,7 @@ impl Emu {
-             let start_ic = self.cpu.icount;
-             let mut res = Ok(());
-             for _ in 0..n {
-+                if let Some(trace) = &mut self.frame_trace { trace.observe(&self.cpu, self.m.time); }
-                 if let Err(e) = self.cpu.step(&mut self.m) {
-                     res = Err(e);
-                     break;
-@@ -286,7 +299,10 @@ impl Emu {
- 
-     pub fn screenshot(&mut self, path: &std::path::Path) {
-         let mut buf = Vec::new();
--        let (w, h) = display::render(&mut self.m, &self.cpu, &mut buf);
-+        let (w, h) = if std::env::var_os("CM_ORIGINAL").is_some() {
-+            assert!(self.m.hooks.is_empty(), "native hook installed during original run");
-+            self.m.vga.render(&self.cpu, &mut buf)
-+        } else { display::render(&mut self.m, &self.cpu, &mut buf) };
-         write_bmp(path, w, h, &buf);
-     }
- }
-@@ -472,11 +488,17 @@ fn headless(cfg: &Config) {
-             }
-             previous_pad = p;
-         }
--        gamepad::controller_input(&emu.m,&mut emu.cpu);
-+        if std::env::var_os("CM_ORIGINAL").is_some() {
-+            assert!(cfg.pads.is_empty() && cfg.desktop.is_empty());
-+            assert!(emu.m.hooks.is_empty(), "original headless input has native hooks");
-+        } else {
-+            gamepad::controller_input(&emu.m,&mut emu.cpu);
-+        }
-         keys.retain(|&(kt, sc)| {
-             if kt <= t {
-                 let was_open = emu.m.display.options_open;
--                if !display::settings_key(&mut emu.m.display,sc) {
-+                if std::env::var_os("CM_ORIGINAL").is_some() ||
-+                    !display::settings_key(&mut emu.m.display,sc) {
-                     emu.m.kbd_queue.push_back(sc);
-                     emu.m.kbd_queue.push_back(sc | 0x80);
-                 }
-diff --git a/crates/game/src/vga.rs b/crates/game/src/vga.rs
-index cfdf063..d8fbaf4 100644
---- a/crates/game/src/vga.rs
-+++ b/crates/game/src/vga.rs
-@@ -204,9 +204,10 @@ impl Vga {
-     /// A full-screen native world only needs the DOS pixels marked as HUD.
-     /// An empty/wrong-size mask retains ordinary full-frame conversion.
-     pub fn render_masked(&mut self, cpu: &Cpu, out: &mut Vec<u32>, mask: &[bool]) -> (usize, usize) {
-+        let original = std::env::var_os("CM_ORIGINAL").is_some();
-         let pal: [u32;256] = std::array::from_fn(|i| {
-             let c = self.dac[i];
--            let e = |x: u8| ((x as u32) << 2) | ((x as u32) >> 4);
-+            let e = |x: u8| ((x as u32) << 2) | if original { 0 } else { (x as u32) >> 4 };
-             (e(c[0]) << 16) | (e(c[1]) << 8) | e(c[2])
-         });
-         if self.mode == 3 {
+diff --git a/crates/game/src/display.rs b/crates/game/src/display.rs
+index fc1ccc6..8ae8265 100644
+--- a/crates/game/src/display.rs
++++ b/crates/game/src/display.rs
+@@ -1263,7 +1263,7 @@ mod tests {
+         m.gamepad.connected = true;
+         let mut emu = Emu { cpu: c, m, ips: 100_000_000.0, cfg_trace: false,
+             watches: Vec::new(), profile: None, counter: None, profile_start: 0.0,
+-            scene_override: None, vehicle_anywhere: None, realtime_last: None };
++            scene_override: None, vehicle_anywhere: None, realtime_last: None, frame_trace: None };
+         for frame in 0..280 {
+             if frame == 180 {gamepad::tap(&mut emu.m.kbd_queue,0x1C,false);}
+             gamepad::controller_input(&emu.m,&mut emu.cpu);
 diff --git a/crates/game/src/frame_trace.rs b/crates/game/src/frame_trace.rs
 new file mode 100644
-index 0000000..e146713
+index 0000000..4e11e9e
 --- /dev/null
 +++ b/crates/game/src/frame_trace.rs
-@@ -0,0 +1,289 @@
+@@ -0,0 +1,310 @@
 +use std::io::{BufWriter, Write};
 +use x86::{Cpu, EAX, EBX, ECX, EDX, ESI, ESP};
 +use crate::le::rt;
@@ -157,6 +40,7 @@ index 0000000..e146713
 +    file: BufWriter<std::fs::File>, ranges: Vec<Range>,
 +    pending: Option<Pending>, frame: u32, this: u32,
 +    actors: Option<BufWriter<std::fs::File>>,
++    actor_clocks: Option<BufWriter<std::fs::File>>, actor_fast_tick: Option<(u32, u32)>,
 +    seed: BufWriter<std::fs::File>,
 +    rng: Option<BufWriter<std::fs::File>>, rng_calls: u64,
 +    steering: Option<BufWriter<std::fs::File>>, steering_calls: u64,
@@ -198,6 +82,11 @@ index 0000000..e146713
 +            writeln!(out,"frame,ticks,rng0,rng1,rng2,person,object,x,y,z,heading,state,status,hp,target,animation,cursor,active").expect("actor header");
 +            out
 +        });
++        let actor_clocks = std::env::var_os("CM_ACTOR_CLOCK_TRACE").map(|path| {
++            let mut out = BufWriter::new(std::fs::File::create(path).expect("create actor clock trace"));
++            writeln!(out,"frame,fast_ticks,normal_ticks").expect("actor clock header");
++            out
++        });
 +        let rng = std::env::var_os("CM_RNG_TRACE").map(|path| {
 +            let mut out = BufWriter::new(std::fs::File::create(path).expect("create RNG trace"));
 +            writeln!(out,"sequence,frame,operation,caller,bound,rng0,rng1,rng2,ticks,normal_deadline,fast_deadline").expect("RNG header");
@@ -219,7 +108,8 @@ index 0000000..e146713
 +            out
 +        });
 +        let collision_object = std::env::var("CM_COLLISION_OBJECT").unwrap_or_default().parse().unwrap_or(0);
-+        Some(Self { file, ranges, pending: None, frame: 0, this: 0, actors, seed, rng, rng_calls: 0,
++        Some(Self { file, ranges, pending: None, frame: 0, this: 0, actors, actor_clocks,
++                    actor_fast_tick: None, seed, rng, rng_calls: 0,
 +                    steering, steering_calls: 0, events, collision, collision_object, collision_calls: 0 })
 +    }
 +
@@ -242,6 +132,19 @@ index 0000000..e146713
 +
 +    pub fn observe(&mut self, c: &Cpu, time: f64) {
 +        match c.eip {
++            p if p == rt(0x348D0) && self.actor_clocks.is_some() => {
++                let frame = self.frame.checked_sub(1).expect("UpdateObjects before first frame");
++                assert!(self.actor_fast_tick.is_none(), "unpaired actor clock sample");
++                self.actor_fast_tick = Some((frame, c.rd32(rt(0x207473))));
++            }
++            p if p == rt(0x348F7) => {
++                if let Some(out) = &mut self.actor_clocks {
++                    let (frame, fast) = self.actor_fast_tick.take().expect("missing fast actor clock");
++                    assert!(frame == self.frame - 1, "actor clock samples cross frames");
++                    writeln!(out,"{},{},{}",frame,fast,c.rd32(rt(0x207473))).expect("write actor clocks");
++                    out.flush().expect("flush actor clocks");
++                }
++            }
 +            p if p == rt(0x435EC) && c.r[EDX] == self.collision_object => {
 +                if let Some(out) = &mut self.collision {
 +                    let x = c.r[EAX]; let obj = c.r[EDX];
@@ -417,9 +320,380 @@ index 0000000..e146713
 +impl Drop for FrameTrace {
 +    fn drop(&mut self) {
 +        self.flush_pending();
++        if let Some(out) = &mut self.actor_clocks { out.flush().expect("flush actor clocks"); }
 +        if let Some(out) = &mut self.rng { out.flush().expect("flush RNG trace"); }
 +        if let Some(out) = &mut self.steering { out.flush().expect("flush steering trace"); }
 +        if let Some(out) = &mut self.collision { out.flush().expect("flush collision trace"); }
 +        if let Some(out) = &mut self.events { out.flush().expect("flush event input trace"); }
 +    }
 +}
+diff --git a/crates/game/src/frontend.rs b/crates/game/src/frontend.rs
+index b28668a..4e25654 100644
+--- a/crates/game/src/frontend.rs
++++ b/crates/game/src/frontend.rs
+@@ -532,7 +532,7 @@ mod tests {
+             crate::native::install(&mut m,&mut cpu);
+             m.gamepad.connected = true;
+             let mut emu = Emu { cpu, m, ips: 100_000_000.0, cfg_trace: false, watches: Vec::new(),
+-                profile: None, counter: None, profile_start: 0.0, scene_override: None, vehicle_anywhere: None, realtime_last: None };
++                profile: None, counter: None, profile_start: 0.0, scene_override: None, vehicle_anywhere: None, realtime_last: None, frame_trace: None };
+             for frame in 0..280 {
+                 if in_game && frame == 180 { gamepad::tap(&mut emu.m.kbd_queue,0x1C,false); }
+                 advance(&mut emu);
+diff --git a/crates/game/src/machine.rs b/crates/game/src/machine.rs
+index 5118211..901cd2d 100644
+--- a/crates/game/src/machine.rs
++++ b/crates/game/src/machine.rs
+@@ -24,6 +24,11 @@ pub const SEL_DATA: u16 = 0x10;
+ pub const SEL_PSP: u16 = 0x18;
+ pub const SEL_ENV: u16 = 0x20;
+ const FIRST_DYN_SEL: usize = 8;
++const BIOS_KB_HEAD: u32 = 0x41A;
++const BIOS_KB_TAIL: u32 = 0x41C;
++const BIOS_KB_START: u32 = 0x480;
++const BIOS_KB_END: u32 = 0x482;
++const BIOS_DATA: u32 = 0x400;
+ 
+ // ---- HLE trap ids ----------------------------------------------------------
+ /// Default handler for interrupt vector n: id = n (stub ends with IRET).
+@@ -107,7 +112,7 @@ pub struct Machine {
+     pub pit_chan0_write_lo: Option<u8>,
+     pub kbd_queue: VecDeque<u8>,
+     pub port60: u8,
+-    pub kbd_bios: VecDeque<u16>,
++    dos_key_pending: Option<u8>,
+     pub mouse: Mouse,
+     pub hooks: Vec<Hook>,
+     pub exit_code: Option<i32>,
+@@ -151,7 +156,7 @@ impl Machine {
+             pit_chan0_write_lo: None,
+             kbd_queue: VecDeque::new(),
+             port60: 0,
+-            kbd_bios: VecDeque::new(),
++            dos_key_pending: None,
+             mouse: Mouse {
+                 x: 320,
+                 y: 240,
+@@ -254,6 +259,11 @@ impl Machine {
+         cpu.wr8(0x449, 3);
+         cpu.wr16(0x44A, 80);
+         cpu.wr8(0x484, 24);
++        cpu.wr16(BIOS_KB_START, 0x1E);
++        cpu.wr16(BIOS_KB_END, 0x3E);
++        cpu.wr16(BIOS_KB_HEAD, 0x1E);
++        cpu.wr16(BIOS_KB_TAIL, 0x1E);
++        self.dos_key_pending = None;
+         // interrupt stubs: for each vector n, `0F FF n 00 ; IRET`
+         for n in 0..256u32 {
+             let a = STUB_BASE + n * 8;
+@@ -356,13 +366,55 @@ impl Machine {
+                 let sc = self.port60;
+                 if sc & 0x80 == 0 && sc != 0xE0 {
+                     let ascii = crate::input::scancode_ascii(sc);
+-                    self.kbd_bios.push_back(((sc as u16) << 8) | ascii as u16);
++                    Self::bios_key_put(cpu, ((sc as u16) << 8) | ascii as u16);
+                 }
+             }
+             _ => {}
+         }
+     }
+ 
++    fn bios_key_ring(cpu: &Cpu) -> Option<(u16, u16, u16, u16)> {
++        let start = cpu.rd16(BIOS_KB_START);
++        let end = cpu.rd16(BIOS_KB_END);
++        let head = cpu.rd16(BIOS_KB_HEAD);
++        let tail = cpu.rd16(BIOS_KB_TAIL);
++        if start & 1 != 0 || end & 1 != 0 || end.checked_sub(start)? < 4 ||
++            head < start || head >= end || tail < start || tail >= end ||
++            head & 1 != 0 || tail & 1 != 0 {
++            return None;
++        }
++        Some((start, end, head, tail))
++    }
++
++    fn bios_key_put(cpu: &mut Cpu, key: u16) {
++        let Some((start, end, head, tail)) = Self::bios_key_ring(cpu) else { return; };
++        let next = if tail + 2 == end { start } else { tail + 2 };
++        if next == head { return; } // Full BIOS ring retains unread keys.
++        cpu.wr16(BIOS_DATA + tail as u32, key);
++        cpu.wr16(BIOS_KB_TAIL, next);
++    }
++
++    fn bios_key_peek(cpu: &Cpu) -> Option<u16> {
++        let (_, _, head, tail) = Self::bios_key_ring(cpu)?;
++        if head == tail { None } else { Some(cpu.rd16(BIOS_DATA + head as u32)) }
++    }
++
++    fn bios_key_get(cpu: &mut Cpu) -> Option<u16> {
++        let (start, end, head, tail) = Self::bios_key_ring(cpu)?;
++        if head == tail { return None; }
++        let key = cpu.rd16(BIOS_DATA + head as u32);
++        cpu.wr16(BIOS_KB_HEAD, if head + 2 == end { start } else { head + 2 });
++        Some(key)
++    }
++
++    fn dos_key_get(&mut self, cpu: &mut Cpu) -> Option<u8> {
++        if let Some(scan) = self.dos_key_pending.take() { return Some(scan); }
++        let key = Self::bios_key_get(cpu)?;
++        let ascii = key as u8;
++        if ascii == 0 { self.dos_key_pending = Some((key >> 8) as u8); }
++        Some(ascii)
++    }
++
+     pub fn pit_hz(&self) -> f64 {
+         1193182.0 / self.pit_div as f64
+     }
+@@ -701,8 +753,8 @@ impl Machine {
+             }
+             0x06 => {
+                 if r.dx() as u8 == 0xFF {
+-                    if let Some(k) = self.kbd_bios.pop_front() {
+-                        r.set_al(k as u8);
++                    if let Some(k) = self.dos_key_get(cpu) {
++                        r.set_al(k);
+                         r.zf(false);
+                     } else {
+                         r.set_al(0);
+@@ -714,8 +766,8 @@ impl Machine {
+                 }
+             }
+             0x07 | 0x08 => {
+-                let k = self.kbd_bios.pop_front().unwrap_or(0x1C0D);
+-                r.set_al(k as u8);
++                if let Some(k) = self.dos_key_get(cpu) { r.set_al(k); }
++                else { cpu.eip = cpu.cur_eip; } // Wait for IRQ1; never invent Enter.
+             }
+             0x09 => {
+                 let mut a = r.ds_dx(cpu);
+@@ -730,7 +782,7 @@ impl Machine {
+                 }
+                 self.print(&s);
+             }
+-            0x0B => r.set_al(if self.kbd_bios.is_empty() { 0 } else { 0xFF }),
++            0x0B => r.set_al(if self.dos_key_pending.is_some() || Self::bios_key_peek(cpu).is_some() { 0xFF } else { 0 }),
+             0x0E => r.set_al(26),
+             0x19 => r.set_al(2), // C:
+             0x1A => self.dta = r.ds_dx(cpu),
+@@ -742,7 +794,7 @@ impl Machine {
+             0x25 => {
+                 let n = r.al();
+                 self.pm_vec[n as usize] = (r.ds, r.edx);
+-                if n == 9 {
++                if n == 9 && std::env::var_os("CM_ORIGINAL").is_none() {
+                     // On real hardware the release of the Enter key used to start the
+                     // game arrives after CM_ISR9 is installed; it primes the ISR's
+                     // key-state latch (otherwise the first key press is swallowed).
+@@ -813,7 +865,9 @@ impl Machine {
+                 };
+                 match res {
+                     Some(mut f) => {
+-                        let patch = if mode == 0 { crate::rebrand::title_patch(&name, &mut f) } else { None };
++                        let patch = if mode == 0 && std::env::var_os("CM_ORIGINAL").is_none() {
++                            crate::rebrand::title_patch(&name, &mut f)
++                        } else { None };
+                         let h = self.alloc_handle(DosFile { f, name: name.clone(), patch });
+                         if self.trace_ints {
+                             eprintln!("[dos] open {} -> {}", name, h);
+@@ -1360,11 +1414,11 @@ impl Machine {
+             0x10 => self.int10(cpu, r),
+             0x16 => match r.ah() {
+                 0x00 | 0x10 => {
+-                    let k = self.kbd_bios.pop_front().unwrap_or(0);
+-                    r.set_ax(k);
++                    if let Some(k) = Self::bios_key_get(cpu) { r.set_ax(k); }
++                    else { cpu.eip = cpu.cur_eip; }
+                 }
+-                0x01 | 0x11 => match self.kbd_bios.front() {
+-                    Some(&k) => {
++                0x01 | 0x11 => match Self::bios_key_peek(cpu) {
++                    Some(k) => {
+                         r.set_ax(k);
+                         r.zf(false);
+                     }
+@@ -1640,3 +1694,62 @@ impl Machine {
+         }
+     }
+ }
++
++#[cfg(test)]
++mod bios_keyboard_tests {
++    use super::*;
++
++    fn call(m: &mut Machine, cpu: &mut Cpu, vector: u8, ax: u16) -> Regs {
++        let mut r = Regs::from_cpu(cpu);
++        r.set_ax(ax);
++        if vector == 0x21 { m.int21(cpu, &mut r).unwrap(); }
++        else { m.bios_int(cpu, vector, &mut r); }
++        r
++    }
++
++    #[test]
++    fn bios_keyboard_ring_services_follow_guest_memory() {
++        let root = std::env::temp_dir().join(format!("cm-bios-keys-{}", std::process::id()));
++        let mut m = Machine::new(Vfs::new(root.join("iso"), root.join("run")));
++        let mut cpu = Cpu::new();
++        cpu.wr16(0x480, 0x1e); cpu.wr16(0x482, 0x3e);
++        cpu.wr16(0x41a, 0x1e); cpu.wr16(0x41c, 0x1e);
++        m.port60 = 0x1e; m.default_irq(&mut cpu, 1);
++        assert_eq!(cpu.rd16(0x41e), 0x1e61);
++        assert_eq!(cpu.rd16(0x41c), 0x20);
++        let r = call(&mut m, &mut cpu, 0x16, 0x0100);
++        assert_eq!(r.ax(), 0x1e61); assert_eq!(r.flags & ZF, 0);
++        assert_eq!(cpu.rd16(0x41a), 0x1e);
++        assert_eq!(call(&mut m, &mut cpu, 0x16, 0).ax(), 0x1e61);
++        m.port60 = 0x30; m.default_irq(&mut cpu, 1);
++        /* The original CM_ISR8 clears these guest BDA words itself. */
++        cpu.wr16(0x41a, cpu.rd16(0x480)); cpu.wr16(0x41c, cpu.rd16(0x480));
++        assert_eq!(call(&mut m, &mut cpu, 0x21, 0x0b00).al(), 0);
++
++        cpu.wr16(0x480, 0x90); cpu.wr16(0x482, 0x98);
++        cpu.wr16(0x41a, 0x90); cpu.wr16(0x41c, 0x90);
++        for scan in [0x1e, 0x30, 0x2e, 0x20] {
++            m.port60 = scan; m.default_irq(&mut cpu, 1);
++        }
++        for expected in [0x1e61, 0x3062, 0x2e63] {
++            assert_eq!(call(&mut m, &mut cpu, 0x16, 0x1000).ax(), expected);
++        }
++        assert_ne!(call(&mut m, &mut cpu, 0x16, 0x1100).flags & ZF, 0);
++        m.port60 = 0x4b; m.default_irq(&mut cpu, 1);
++        assert_eq!(call(&mut m, &mut cpu, 0x21, 0x0b00).al(), 0xff);
++        assert_eq!(call(&mut m, &mut cpu, 0x21, 0x0800).al(), 0);
++        assert_eq!(call(&mut m, &mut cpu, 0x21, 0x0b00).al(), 0xff);
++        assert_eq!(call(&mut m, &mut cpu, 0x21, 0x0800).al(), 0x4b);
++        assert_eq!(call(&mut m, &mut cpu, 0x21, 0x0b00).al(), 0);
++        m.port60 = 0x9e; m.default_irq(&mut cpu, 1);
++        assert_eq!(call(&mut m, &mut cpu, 0x21, 0x0b00).al(), 0);
++        cpu.cur_eip = 0x1234; cpu.eip = 0x1236;
++        assert_eq!(call(&mut m, &mut cpu, 0x21, 0x0800).ax(), 0x0800);
++        assert_eq!(cpu.eip, cpu.cur_eip);
++        cpu.wr16(0x41c, 0x91);
++        m.port60 = 0x1e; m.default_irq(&mut cpu, 1);
++        assert_eq!(cpu.rd16(0x41c), 0x91);
++        assert_eq!(call(&mut m, &mut cpu, 0x21, 0x0b00).al(), 0);
++        std::fs::remove_dir_all(root).unwrap();
++    }
++}
+diff --git a/crates/game/src/main.rs b/crates/game/src/main.rs
+index e9094e3..eda66ea 100644
+--- a/crates/game/src/main.rs
++++ b/crates/game/src/main.rs
+@@ -14,6 +14,7 @@ mod desktop;
+ mod display;
+ mod gamepad;
+ mod frontend;
++mod frame_trace;
+ mod tgv;
+ mod verify;
+ mod input;
+@@ -70,6 +71,7 @@ pub struct Emu {
+     pub vehicle_anywhere: Option<u32>,
+     /// Includes time spent presenting/sleeping between realtime slices.
+     pub realtime_last: Option<std::time::Instant>,
++    frame_trace: Option<frame_trace::FrameTrace>,
+ }
+ 
+ impl Emu {
+@@ -87,8 +89,17 @@ impl Emu {
+         if let Some(vulkan) = cfg.renderer { m.display.vulkan = vulkan; }
+         if m.verifier.is_some() { m.display.mode = 0; }
+         let exe = std::fs::read(game.join("CM_HI.EXE")).expect("CM_HI.EXE not found");
+-        m.load_program(&mut cpu, &exe, "").expect("load");
+-        native::install(&mut m, &mut cpu);
++        m.load_program(&mut cpu, &exe, if std::env::var_os("CM_ORIGINAL").is_some() { "-x" } else { "" }).expect("load");
++        if std::env::var_os("CM_ORIGINAL").is_some() {
++            assert!(m.verifier.is_none(), "original mode forbids verification hooks");
++            assert!(cfg.headless && !cfg.realtime && cfg.pads.is_empty() && cfg.desktop.is_empty());
++            assert!(std::env::var_os("CM_SCENE").is_none());
++            assert!(std::env::var_os("CM_VEHICLE").is_none());
++            assert!(m.hooks.is_empty());
++            eprintln!("ORACLE original-x86: native::install bypassed; hooks=0; asset patches=off; raw VGA");
++        } else {
++            native::install(&mut m, &mut cpu);
++        }
+         let watches = std::env::var("CM_WATCH")
+             .map(|v| {
+                 v.split(',')
+@@ -102,7 +113,8 @@ impl Emu {
+         let profile_start = std::env::var("CM_PROFILE_START").ok().and_then(|v| v.parse().ok()).unwrap_or(0.0);
+         let scene_override = std::env::var("CM_SCENE").ok().and_then(|v| v.parse().ok());
+         let vehicle_anywhere = std::env::var("CM_VEHICLE").ok().and_then(|v| v.parse().ok());
+-        Emu { cpu, m, ips: cfg.ips, cfg_trace: cfg.trace, watches, profile, counter, profile_start, scene_override, vehicle_anywhere, realtime_last: None }
++        let frame_trace = frame_trace::FrameTrace::open();
++        Emu { cpu, m, ips: cfg.ips, cfg_trace: cfg.trace, watches, profile, counter, profile_start, scene_override, vehicle_anywhere, realtime_last: None, frame_trace }
+     }
+ 
+     fn debug_overrides(&mut self) {
+@@ -140,6 +152,7 @@ impl Emu {
+             let start_ic = self.cpu.icount;
+             let mut res = Ok(());
+             for _ in 0..n {
++                if let Some(trace) = &mut self.frame_trace { trace.observe(&self.cpu, self.m.time); }
+                 if let Err(e) = self.cpu.step(&mut self.m) {
+                     res = Err(e);
+                     break;
+@@ -286,7 +299,10 @@ impl Emu {
+ 
+     pub fn screenshot(&mut self, path: &std::path::Path) {
+         let mut buf = Vec::new();
+-        let (w, h) = display::render(&mut self.m, &self.cpu, &mut buf);
++        let (w, h) = if std::env::var_os("CM_ORIGINAL").is_some() {
++            assert!(self.m.hooks.is_empty(), "native hook installed during original run");
++            self.m.vga.render(&self.cpu, &mut buf)
++        } else { display::render(&mut self.m, &self.cpu, &mut buf) };
+         write_bmp(path, w, h, &buf);
+     }
+ }
+@@ -472,11 +488,17 @@ fn headless(cfg: &Config) {
+             }
+             previous_pad = p;
+         }
+-        gamepad::controller_input(&emu.m,&mut emu.cpu);
++        if std::env::var_os("CM_ORIGINAL").is_some() {
++            assert!(cfg.pads.is_empty() && cfg.desktop.is_empty());
++            assert!(emu.m.hooks.is_empty(), "original headless input has native hooks");
++        } else {
++            gamepad::controller_input(&emu.m,&mut emu.cpu);
++        }
+         keys.retain(|&(kt, sc)| {
+             if kt <= t {
+                 let was_open = emu.m.display.options_open;
+-                if !display::settings_key(&mut emu.m.display,sc) {
++                if std::env::var_os("CM_ORIGINAL").is_some() ||
++                    !display::settings_key(&mut emu.m.display,sc) {
+                     emu.m.kbd_queue.push_back(sc);
+                     emu.m.kbd_queue.push_back(sc | 0x80);
+                 }
+@@ -704,7 +726,7 @@ mod timing_tests {
+         let mut emu = Emu {
+             cpu: Cpu::new(), m: Machine::new(vfs::Vfs::new(path.clone(),path)),
+             ips: 1_000_000.0, cfg_trace: false, watches: Vec::new(), profile: None,
+-            counter: None, profile_start: 0.0, scene_override: None, vehicle_anywhere: None, realtime_last: None,
++            counter: None, profile_start: 0.0, scene_override: None, vehicle_anywhere: None, realtime_last: None, frame_trace: None,
+         };
+         emu.cpu.r[x86::ESP] = 0x30000;
+         // call flip; jmp back to call. A frame slice must not start a second flip.
+@@ -726,7 +748,7 @@ mod timing_tests {
+         let mut emu = Emu {
+             cpu: Cpu::new(), m: Machine::new(vfs::Vfs::new(path.clone(),path)),
+             ips: 1_000_000.0, cfg_trace: false, watches: Vec::new(), profile: None,
+-            counter: None, profile_start: 0.0, scene_override: None, vehicle_anywhere: None, realtime_last: None,
++            counter: None, profile_start: 0.0, scene_override: None, vehicle_anywhere: None, realtime_last: None, frame_trace: None,
+         };
+         // A halted CPU is sufficient: the game clock must still advance.
+         emu.cpu.wr8(0,0xF4);
+diff --git a/crates/game/src/vga.rs b/crates/game/src/vga.rs
+index cfdf063..d8fbaf4 100644
+--- a/crates/game/src/vga.rs
++++ b/crates/game/src/vga.rs
+@@ -204,9 +204,10 @@ impl Vga {
+     /// A full-screen native world only needs the DOS pixels marked as HUD.
+     /// An empty/wrong-size mask retains ordinary full-frame conversion.
+     pub fn render_masked(&mut self, cpu: &Cpu, out: &mut Vec<u32>, mask: &[bool]) -> (usize, usize) {
++        let original = std::env::var_os("CM_ORIGINAL").is_some();
+         let pal: [u32;256] = std::array::from_fn(|i| {
+             let c = self.dac[i];
+-            let e = |x: u8| ((x as u32) << 2) | ((x as u32) >> 4);
++            let e = |x: u8| ((x as u32) << 2) | if original { 0 } else { (x as u32) >> 4 };
+             (e(c[0]) << 16) | (e(c[1]) << 8) | e(c[2])
+         });
+         if self.mode == 3 {
