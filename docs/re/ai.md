@@ -180,3 +180,24 @@ the earlier actor trace above has no damaged NPCs and must not be presented as
 projectile verification. For frame-trace firefights include Xox135ECC:576
 (12 missile records), object position/shape arrays and PERSON HP/armor/RNG,
 with genuine fire press/hold/release input and the unchanged original assets.
+
+## Player input / hand checkpoint
+
+`pc_fire.c` now supplies real `ai_pc_input` (before world/NPC updates) and
+`ai_pc_hand2hand` (after NPC updates), plus the supplied-EXE PC table loader and
+ResetAim. It implements the original weapon0..9, spell0..15 and vehicle launch
+dispatch, ammo/item/energy costs, semi-auto release latch, cooldown/aim/muzzle
+state, scene3 linking spell, automatic sword sequences, swing matrices, blocking,
+melee damage and attached impact missiles. Functions and fields are detailed in
+`pc_fire.md`; all numeric arrays come from the user's executable. The current
+shared tree linked cleanly with strict C99 through `make -C port B=build/Port`.
+
+This is a compile-clean integration checkpoint, not a parity/completion claim.
+Remaining validation/work owned by Port: compare the newly captured
+`captures/pc-fire/frames.csv` (194 original frames) against native hand/weapon and
+missile state; verify punch/sword transitions against original execution; finish
+the original render-side visual counter advance as a separate post-presentation
+state step; wire underwater and vehicle spread state producers. The original
+fire trace has a genuine Space press/hold/release and one spell launch: energy
+40→35, held latch suppressing repeats until release. Do not claim full combat
+parity from the clean link or substitute recorded state for native state.

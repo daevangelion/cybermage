@@ -89,6 +89,7 @@ typedef struct {
     int32_t tank_udoffset, tank_ud, tank_fall, tank_falloffset;
     int32_t grenade_aim_center; /* CM_HI.EXE0x93CB4 = CenterAimY[10]. */
     unsigned hand_type; /* Xox+144A40, CenterAim table index */
+    int32_t render_x, render_y; /* Xox+144AD8/+144ADC visual offsets */
 } ai_pc_aim;
 
 typedef struct {
@@ -108,6 +109,7 @@ typedef struct {
     int32_t muzzle_frame, muzzle_mode, muzzle_count; /* +144A5C/60/64 */
     int32_t underwater, shot_count, loop_sound; /* +144A24/2C/28 */
     int32_t glow_set, glow_frame; /* +1444F8/+1444F4 */
+    int32_t unk_1444EC;
     int32_t magic_link_ticks; /* +144AE4 */
     int32_t key_hand_x, key_hand_y;
     int32_t auto_s_flag, auto_swinging, auto_s_reset, reset_pos, auto_s_mode;
@@ -115,6 +117,7 @@ typedef struct {
     uint32_t auto_s_time, spell_timer, tank_timer;
     int32_t last_mode, last_weapon;
     unsigned kb_fire, kb_fire_bit;
+    int32_t air_car_spread; /* ACarSpreadAngle, original signed16 */
 } ai_pc_state;
 
 typedef struct ai_state {
@@ -152,6 +155,8 @@ typedef struct ai_state {
 } ai_state;
 
 int ai_init(ai_state *a, world *w);
+void ai_start_clock(ai_state *a, uint32_t timer_ticks);
+int ai_set_difficulty(ai_state *a, world *w, unsigned difficulty);
 int ai_init_pc(struct events_state *e, sim_state *s, world_rng *rng,
                 const cm_exe *exe, unsigned start_scene, uint32_t timer_ticks);
 void ai_save_pc_info(struct events_state *e, const world *w);
