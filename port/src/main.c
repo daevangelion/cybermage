@@ -17,9 +17,10 @@
 #include <string.h>
 
 #define PATH_BYTES 1024
-#define STATE_TEXT_BYTES 512
+#define STATE_TEXT_BYTES 2048
 
 static uint8_t pixels[CM_WIDTH * CM_HEIGHT], palette[768];
+static uint8_t base_palette[768];
 static uint8_t save_data[UI_SAVE_MAX];
 static uint8_t auto_data[UI_SAVE_MAX];
 static uint8_t death_background[CM_WIDTH * CM_HEIGHT];
@@ -102,7 +103,8 @@ static int load_scene(const char *data, unsigned scene)
     memset(&actors, 0, sizeof actors);
     simulation.ai = &actors;
     simulation.events = &events;
-    if (world_load_scene(&game, data, scene) || ai_init(&actors, &game)) return -1;
+    if (world_load_scene(&game, data, scene) || ai_init(&actors, &game) ||
+        ai_set_difficulty(&actors, &game, (unsigned)ui.options[8])) return -1;
     ai_restore_pc_info(&events, &game);
     if (ai_load_tables(&actors, data) ||
         world_finalize_scene(&game) || sim_start_scene(&simulation, &game) ||
@@ -135,14 +137,19 @@ static int new_game(const char *data, unsigned scene, uint32_t ticks)
 
 static int encode_save(uint32_t *size)
 {
+    unsigned difficulty = (unsigned)actors.difficulty;
+    int result;
+    if (ai_set_difficulty(&actors, &game, 1)) return -1;
     sim_save_export(&simulation, save.unk_6D4);
     save.FireCheck = (uint32_t)simulation.fire_check;
     save.FireDamage = (uint32_t)simulation.fire_damage;
     save.FireTilePanel = (uint32_t)simulation.fire_tile_panel;
     save.FireTileArt = (uint32_t)simulation.fire_tile_art;
     ai_save_export(&actors, &save);
-    return events_save_export(&events, &save) ||
-        ui_save_game(&save, &game, save_data, sizeof save_data, size) ? -1 : 0;
+    result = events_save_export(&events, &save) ||
+        ui_save_game(&save, &game, save_data, sizeof save_data, size);
+    if (ai_set_difficulty(&actors, &game, difficulty)) return -1;
+    return result ? -1 : 0;
 }
 
 static int save_game(const char *user, unsigned slot)
@@ -167,6 +174,7 @@ static int load_game(const char *data, const char *user, unsigned slot, uint32_t
     char name[24];
     cm_file file = {0};
     int result;
+    unsigned scene;
     if (slot > UI_SAVE_SLOTS) return cm_fail("LoadGame", slot, "invalid save slot");
     auto_save = slot == UI_SAVE_SLOTS ? ui.restart_auto : ui.auto_ptr[slot];
     if (auto_save < -1 || auto_save >= EVENTS_AUTO_MAX)
@@ -174,32 +182,30 @@ static int load_game(const char *data, const char *user, unsigned slot, uint32_t
     snprintf(name, sizeof name, "SAVE%03u.DAT", slot);
     if (make_path(save_path, sizeof save_path, user, name) ||
         platform_file_read(&file, save_path)) return -1;
-    render_unload();
-    result = ui_load_game(&save, &game, file.data, file.size, data);
+    if (ui_save_scene(file.data, file.size, &scene)) {
+        platform_file_release(&file);
+        return -1;
+    }
+    sim_init(&simulation, ticks);
+    result = load_scene(data, scene) ||
+        ui_save_overlay(&save, &game, file.data, file.size);
     platform_file_release(&file);
     if (result) return -1;
-    sim_init(&simulation, ticks);
-    simulation.ai = &actors;
-    simulation.events = &events;
     if (sim_save_import(&simulation, save.unk_6D4)) return -1;
     simulation.fire_check = (int32_t)save.FireCheck;
     simulation.fire_damage = (int32_t)save.FireDamage;
     simulation.fire_tile_panel = (int32_t)save.FireTilePanel;
     simulation.fire_tile_art = (int32_t)save.FireTileArt;
-    memset(&actors, 0, sizeof actors);
-    actors.pc_sound = actors.pc_learn_spell = -1;
     actors.difficulty = 1;
     events.ticks = ticks;
-    if (ai_load_scene_definitions(&actors, &game) || ai_load_tables(&actors, data) ||
-        ai_save_import(&actors, &game, &save) ||
-        events_init(&events, &game) || events_load_tables(&events, data) ||
-        events_save_import(&events, &save) || render_load(&game, &hipak) ||
-        snd_scene(&game)) return -1;
+    if (ai_save_import(&actors, &game, &save) || events_save_import(&events, &save))
+        return -1;
     actors.events = &events;
     ai_start_clock(&actors, ticks);
     events.actors = &actors;
     memcpy(events.auto_ptr, ui.auto_ptr, sizeof events.auto_ptr);
     memcpy(events.auto_slot, ui.auto_slot, sizeof events.auto_slot);
+    if (ai_set_difficulty(&actors, &game, (unsigned)ui.options[8])) return -1;
     ai_save_pc_info(&events, &game);
     ui.shop_kind = 0;
     death_phase = 0;
@@ -217,12 +223,37 @@ static int save_auto(const char *user, unsigned slot)
     return platform_file_write(save_path, auto_data, length);
 }
 
+/* AutoLoad 051EA0..051F61: scene9 return keys use subtype overrides. */
+static int auto_return(unsigned previous, unsigned restored)
+{
+    static const unsigned keys[5][2] = {
+        {26, 100}, {8, 101}, {104, 0}, {10, 103}, {27, 102}
+    };
+    unsigned i, count;
+    if (restored != 9 || (previous != 4 && previous != 5)) return 0;
+    if (events.event_count < (previous == 4 ? 263u : 313u))
+        return cm_fail("AutoLoad", 9, "missing return-scene events");
+    if (previous == 4) {
+        events.events[238].enabled = events.events[263].enabled = 1;
+        count = 3;
+    } else {
+        events.events[274].enabled = events.events[276].enabled = 1;
+        events.events[264].enabled = events.events[249].enabled = 0;
+        events.events[266].enabled = 0;
+        events.events[149].enabled = events.events[313].enabled = 1;
+        count = 5;
+    }
+    for (i = 0; i < count; ++i)
+        if (events_give_key(&events, keys[i][0], (int32_t)keys[i][1]) < 0) return -1;
+    return 0;
+}
+
 static int load_auto(const char *data, const char *user, unsigned slot)
 {
     char name[24];
     cm_file file = {0};
     uint32_t size;
-    unsigned i, scene;
+    unsigned i, scene, previous = game.scene;
     int result = -1;
     snprintf(name, sizeof name, "AUTO%03u.DAT", slot);
     if (make_path(save_path, sizeof save_path, user, name) ||
@@ -235,6 +266,8 @@ static int load_auto(const char *data, const char *user, unsigned slot)
         sim_auto_unpack(save_data, size, file.data, file.size) ||
         ui_save_overlay(&save, &game, save_data, size) ||
         events_save_import(&events, &save)) goto out;
+    actors.difficulty = 1;
+    if (ai_set_difficulty(&actors, &game, (unsigned)ui.options[8])) goto out;
     ai_restore_pc_info(&events, &game);
     for (i = 0; i < AI_MISSILE_MAX; ++i) {
         actors.missiles[i].active = 0;
@@ -248,6 +281,7 @@ static int load_auto(const char *data, const char *user, unsigned slot)
     simulation.fire_damage = (int32_t)save.FireDamage;
     simulation.fire_tile_panel = (int32_t)save.FireTilePanel;
     simulation.fire_tile_art = (int32_t)save.FireTileArt;
+    if (auto_return(previous, scene)) goto out;
     result = 0;
 out:
     platform_file_release(&file);
@@ -326,6 +360,8 @@ static int state_dump(const char *directory, unsigned frame)
 {
     char text[STATE_TEXT_BYTES];
     const world_object *o = &game.objects[game.player_object];
+    const world_person *pc = &game.persons[game.player_person];
+    unsigned i;
     int n = snprintf(text, sizeof text,
         "frame=%u ticks=%" PRIu32 " delta=%" PRId32 " x=%" PRId32 " y=%" PRId32
         " z=%" PRId32 " heading=%u pitch=%" PRId32
@@ -341,6 +377,44 @@ static int state_dump(const char *directory, unsigned frame)
         simulation.unk_144b28, simulation.unk_144b2c, simulation.unk_144b34,
         simulation.unk_144b38);
     if (n < 0 || (size_t)n >= sizeof text) return cm_fail("state", frame, "state text overflow");
+    {
+        int add = snprintf(text+n, sizeof text-(size_t)n,
+            "pc_a48=%" PRId32 " pc_ab0=%" PRId32 " pc_ab4=%" PRId32 " pc_ab8=%" PRId32
+            " energy=%" PRId32 " pc_ax=%" PRId32 " pc_ay=%" PRId32
+            " pc_hx=%" PRId32 " pc_hy=%" PRId32 " sword_frame=%" PRId32
+            " p_3c=%" PRIu32 " p_40=%" PRIu32 " p_44=%" PRIu32 " p_48=%" PRIu32
+            " auto_mode=%" PRId32 " auto_swing=%" PRId32 " auto_reset=%" PRId32
+            " auto_pos=%" PRId32 " auto_time=%" PRIu32 " spell_timer=%" PRIu32 "\n",
+            actors.pc_aim.weapon_aim_step, actors.pc.fire, actors.pc.cooldown, actors.pc.latch,
+            events.energy, actors.pc_aim.aim_x, actors.pc_aim.aim_y,
+            actors.pc.hand_x, actors.pc.hand_y, actors.pc.sword_frame,
+            (uint32_t)pc->unk_003C, (uint32_t)pc->unk_0040,
+            (uint32_t)pc->unk_0044, (uint32_t)pc->unk_0048,
+            actors.pc.auto_s_mode, actors.pc.auto_swinging, actors.pc.auto_s_reset,
+            actors.pc.reset_pos, actors.pc.auto_s_time, actors.pc.spell_timer);
+        if (add < 0 || (size_t)add >= sizeof text-(size_t)n)
+            return cm_fail("state", frame, "combat state text overflow");
+        n += add;
+    }
+    for (i = 0; i < 4; ++i) {
+        const ai_missile *m = &actors.missiles[i];
+        const world_object *missile;
+        int add;
+        if (m->object < 0 || (unsigned)m->object >= game.object_count)
+            return cm_fail("state/missile", i, "invalid player missile object");
+        missile = &game.objects[m->object];
+        add = snprintf(text+n, sizeof text-(size_t)n,
+            "m%u_active=%" PRId32 " m%u_type=%" PRId32 " m%u_frame=%" PRId32
+            " m%u_ticks=%" PRId32 " m%u_vertical=%" PRId32 " m%u_speed=%" PRId32
+            " m%u_target=%" PRId32 " m%u_x=%" PRId32 " m%u_y=%" PRId32
+            " m%u_z=%" PRId32 " m%u_heading=%u\n",
+            i, m->active, i, m->type, i, m->frame, i, m->ticks, i, m->vertical,
+            i, m->speed, i, m->target, i, missile->x, i, missile->y,
+            i, missile->floor_z, i, (unsigned)missile->heading);
+        if (add < 0 || (size_t)add >= sizeof text-(size_t)n)
+            return cm_fail("state", frame, "missile state text overflow");
+        n += add;
+    }
     return platform_state_dump(directory, frame, text, (size_t)n);
 }
 
@@ -359,6 +433,7 @@ int main(int argc, char **argv)
     uint32_t audio_ticks = 0;
     int headless = 0, status = 1, playing = 0, divergence = 0, seed_explicit = 0, i;
     int modern = 0;
+    int applied_settings[5], settings_applied = 0;
     for (i = 1; i < argc; ++i) {
         if (!strcmp(argv[i], "--headless")) headless = 1;
         else if ((!strcmp(argv[i], "--data") || !strcmp(argv[i], "--dump") ||
@@ -420,6 +495,7 @@ int main(int argc, char **argv)
         gfx_palette(palette, pal_data, pal_size, resource_path) ||
         ui_init(&ui, &hipak, &strings) || ui_load_hand_tables(&ui, data) ||
         snd_open(data) || game_names_read(user)) goto out;
+    memcpy(base_palette, palette, sizeof base_palette);
     if (trace) snd_enable(0, 0); /* The original oracle runs its -x option. */
     if (keys && platform_keys(keys)) goto out;
     if (trace && replay_open(&replay, trace)) goto out;
@@ -446,6 +522,7 @@ int main(int argc, char **argv)
             if (result < 0) goto out;
             if (!result) {
                 if (gfx_palette(palette, pal_data, pal_size, resource_path)) goto out;
+                settings_applied = 0;
                 ui_open(&ui, UI_TITLE);
             }
             goto audio_output;
@@ -485,6 +562,7 @@ int main(int argc, char **argv)
                     if (!(simulation.kb_scan_status[key] & 10)) input.pressed[key] = 0;
         }
         ui.ticks = ticks;
+        events.ticks = ticks;
         if (playing && !death_phase &&
             (game.persons[game.player_person].status == 2 || events.pc_dead_man)) {
             events.pc_dead_man = 0;
@@ -497,7 +575,20 @@ int main(int argc, char **argv)
         }
         action = trace || shop_modal || death_phase == 1 || death_phase == 2 ?
             UI_NONE : ui_input(&ui, &input, ticks);
+        if (playing && actors.difficulty != ui.options[8] &&
+            ai_set_difficulty(&actors, &game, (unsigned)ui.options[8])) goto out;
+        if (!settings_applied ||
+            memcmp(applied_settings, ui.options + 3, sizeof applied_settings)) {
+            if (ui_apply_settings(&ui, palette, base_palette)) goto out;
+            memcpy(applied_settings, ui.options + 3, sizeof applied_settings);
+            settings_applied = 1;
+        }
         if (action == UI_QUIT) break;
+        if (action == UI_CREDITS) {
+            if (snd_movie_begin(data, SND_MOVIE_CREDITS, 0, ticks)) goto out;
+            playing = 0;
+            goto audio_output;
+        }
         if (action == UI_SPEECH_REPLAY && snd_log_replay(&game, ui.slot)) goto out;
         if (action == UI_NEW_GAME || action == UI_TRAINING) {
             if (new_game(data, 1, ticks) || save_game(user, UI_SAVE_SLOTS)) goto out;
@@ -514,10 +605,13 @@ int main(int argc, char **argv)
             ui_open(&ui, UI_GAME);
         }
         if (playing) {
+            ui_view view;
             if (death_phase == 1 || death_phase == 2) {
                 sim_input(&simulation, &input);
                 simulation.previous_ticks = simulation.bp_limit_time = ticks;
                 ai_start_clock(&actors, ticks);
+                if (ui_game_view(&ui, simulation.pc_mode, simulation.vehicle_type, &view) ||
+                    render_set_view(view.x, view.y, view.width, view.height)) goto out;
                 if (death_step(&input, ticks, trace != NULL)) goto out;
                 goto audio_output;
             }
@@ -545,11 +639,25 @@ int main(int argc, char **argv)
                 simulation.previous_ticks = simulation.bp_limit_time = ticks;
                 ai_start_clock(&actors, ticks);
             }
+            if (ui.screen == UI_GAME) {
+                if (ui_game_view(&ui, simulation.pc_mode, simulation.vehicle_type, &view))
+                    goto out;
+            } else {
+                view.x = view.y = 0;
+                view.width = CM_WIDTH;
+                view.height = CM_HEIGHT;
+            }
+            if (render_set_view(view.x, view.y, view.width, view.height)) goto out;
             if (ui.screen != UI_GAME) memset(pixels, 0, sizeof pixels);
             if (render_draw(&game, &game.camera, pixels)) goto out;
             if (ui.screen == UI_GAME && !shop_modal) {
                 ui_hud hud = {0};
-                ui_view view = {120, 90, 400, 300};
+                if (ui_draw_backdrop(&ui, pixels, simulation.pc_mode,
+                                     simulation.vehicle_type, view)) goto out;
+                if (simulation.pc_mode == 7 &&
+                    ui_draw_vehicle(&ui, &game, pixels, simulation.vehicle_type,
+                                    simulation.flight_unk_144B48, simulation.unk_131418))
+                    goto out;
                 if ((simulation.pc_mode == 1 || simulation.pc_mode == 2 || simulation.pc_mode == 5) &&
                     ui_draw_live_hand(&ui, &game, pixels, simulation.pc_mode,
                                       &events, &actors, view)) goto out;

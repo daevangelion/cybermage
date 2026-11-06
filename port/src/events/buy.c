@@ -38,6 +38,21 @@ int events_inventory_add(events_state *e, unsigned type, int32_t amount)
     return 1;
 }
 
+/* GiveKey 041E04..041F34 always takes a fresh slot; arg2 is subtype. */
+int events_give_key(events_state *e, unsigned type, int32_t subtype)
+{
+    unsigned i;
+    if (!e || !type || type > e->definition_count)
+        return cm_fail("GiveKey", type, "invalid item definition");
+    for (i = 0; i < EVENTS_ITEM_MAX; ++i) {
+        if (e->items[i].type > 0) continue;
+        store(e, i, type, 0);
+        if (subtype != -1) e->items[i].subtype = (uint8_t)subtype;
+        return 1;
+    }
+    return cm_fail("GiveKey", type, "inventory is full");
+}
+
 int events_inventory_remove(events_state *e, unsigned slot, int32_t amount)
 {
     events_item *v;

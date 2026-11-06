@@ -134,11 +134,51 @@ destination coordinates/heading, and clears all missile/SoulFire active flags.
 
 ## Remaining integration limits
 
-Mouse/joystick action translation is not complete. Monster boundary steering is owned by AI's `ai_monster_blocked`;
+Monster boundary steering is owned by AI's `ai_monster_blocked`;
 Sim provides the path/rectangle/FX/radius clipping and collision flags it reads.
 The player shape/body height is initialized by `sim_start_scene` from the
 LoadScene rule; no snapshot value is fitted into the port.
 
-`main.c` integrates UI, audio, events, actors, rendering and original-frame replay.
-Its remaining main-loop integration work is InitPC/restore ordering, modal shop
-and death hooks, and scene transitions.
+`main.c` now calls InitPC at boot and new game after source BIOS seeding;
+ordinary scene changes save/restore player HP without clearing inventory.
+StartClock initializes both actor animation deadlines. Save load imports live
+Sim/Events/AI state and refreshes the player transition stash, rather than
+overwriting loaded HP with an older stash. UI shops pause simulation, retain key
+releases, and render their modal after the world. Live hand rendering consumes
+Port's animation/aim state. Countdown expiry and player death route through the
+60-tick world-only wait, HIPAK1 melt and UI_DEATH menu; endings use the real TGV
+decoder. Automatic transition snapshots use their reduced AUTO byte format,
+and ordinary/new-scene checkpoints write hidden SAVE010 plus GAMENAME.USR.
+
+`--controls modern` is opt-in, reads optional `controls.cfg` from `--user`,
+translates a persistent physical input struct into per-frame actions, and
+keeps menu/shop/vehicle contexts separate. Original traces reject modern mode.
+Classic keyboard/input/movement remains the default. The enhanced map reads
+real world topology; it is not a claim of DOS AutoMap artwork parity.
+
+Saves normalize living NPC HP to difficulty1 and restore the selected difficulty;
+loads apply the current menu difficulty after overlays. AutoLoad's scene9-from4/5
+event adjustments and GiveKey subtype overrides are wired without treating those
+subtypes as quantities. Normal load constructs the complete scene/AI reserved
+pools **before** applying saved objects and PERSONs. The lifecycle regression
+caught the former data-only restore's 1088-versus1113 object-count mismatch:
+saved missile objects were outside the incomplete freshly loaded pool.
+
+Remaining fidelity limits include mouse/joystick **classic** translation.
+Neither a synthetic CollFire sweep nor
+the movement trace establishes full combat, shop, death or multi-scene parity.
+
+## Integrated verification (Integrator)
+
+The strict full `make -C port B=build/Integrator`, followed by
+`make -C port B=build/Integrator check`, passed. The gate includes actual
+main-loop InitPC/HP/inventory initialization, normal save/load, difficulty
+normalization, ordinary and AUTO scene roundtrips, death wait/melt/menu, and
+GiveKey fresh-slot/full-inventory tests. It also runs the six modern control
+tests, 120 original CollFire sweeps, media/resource bounds and all eleven scene
+loads plus original math/sight vectors. Negative-fixture ERROR lines are expected;
+the command exits zero.
+
+The newly linked executable then completed all 106 movement trace records with
+`player_state=MATCH`, writing computed combat/player state beneath
+`captures/movement/Integrator-state`. No recorded position/RNG/HP was installed.

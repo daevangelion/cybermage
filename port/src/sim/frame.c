@@ -285,7 +285,8 @@ int sim_frame(sim_state *s, world *w, const cm_input *input, uint32_t timer_tick
     if (!jump) s->unk_144b20 = 0;
     can_jump = !s->flight_mode && !s->unk_144b20 && !s->unk_144b1c && !s->unk_144b30 &&
                !s->unk_144b50 && s->unk_144b3c != -1;
-    running = can_jump && s->movement_request > RUN_THRESHOLD;
+    running = can_jump && (input->modern ?
+        input->run && s->movement_request > 0 : s->movement_request > RUN_THRESHOLD);
     acceleration(s, running ? RUN_ACCEL_MAX : WALK_ACCEL_MAX);
     s->flight_action = 0;
     if (s->flight_mode) {
