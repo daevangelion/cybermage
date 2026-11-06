@@ -364,6 +364,7 @@ int sim_frame(sim_state *s, world *w, const cm_input *input, uint32_t timer_tick
     running = can_jump && !(s->pc_mode == 2 && s->primary_fire) && (input->modern ?
         input->run && s->movement_request > 0 : s->movement_request > RUN_THRESHOLD);
     s->running = running;
+    if (running) s->unk_144b3c = 1; /* ProcessInputEvents01485D. */
     s->flight_action=0;
     if (s->ai && s->ai->tables_loaded && s->ai->events &&
         ai_pc_prepare_input(s->ai, s, w)) return -1;

@@ -511,3 +511,7 @@ then player101. Original `ProcessInputEvents01485D` sets standing request
 14540,15768 and19452, then contacts the ceiling again at frame99 and consumes
 the actual `047AD6` sound draw. This is a distinct missing stance producer,
 not grounds to add an artificial RNG call.
+`sim_frame` now makes that standing request immediately after computing
+eligible running, before the input preparation phase. The named822f903
+regression fails before the producer is restored (assert134); its held-primary
+melee control verifies that an ineligible run does not force standing.

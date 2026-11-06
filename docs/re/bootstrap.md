@@ -206,10 +206,12 @@ with patch `962e4411bd2d1c549db75a1241b7f876b674015ef34e44e4c0029af947166e4b`:
   records and 921 ordered polls show position `(819200,1753088,131072)` →
   `(769376,1589249,131072)`, heading 49152 → 47488, and a real jump peaking at
   Z=152320. One left press count and one right press count are observed.
-- Normal gameplay polls return through `057F38` during drawing, **after** that
-  frame's movement. For example poll frame 16 has mickeys `(140,70)`; pre-frame
-  17 still has the old pose, and pre-frame 18 contains the resulting turn/move.
-  Do not apply that draw poll to frame 16's earlier input phase.
+- Normal gameplay polls return through `057F38` in `Aui::Animate`, **before**
+  its next virtual `HandleNextFrame` callback (`057F5B`). The observer still
+  labels the preceding frame: poll frame 16 has mickeys `(140,70)`; pre-frame
+  17 has the old pose, and pre-frame 18 contains the resulting turn/move.
+  Do not apply that poll to frame 16, or synthesize another outer-loop poll
+  for a nested Save `Image1::Render` draw.
 
 The required default title/new-game/movement/door-event recaptures are recorded
 in `captures/raw-mouse/comparison.json`: all four are unchanged against the
@@ -227,8 +229,7 @@ tools/run_capped.sh .venv/bin/python tools/test_oracle.py
 The fourteen Python scenario/save/config/baseline/trust unit tests pass. The
 joint producer's three Rust mouse tests cover bounded script arguments,
 INT 33h consumable counters/mickeys, guest warps and programmed driver bounds.
-These are hardware and transport observations, not a claim that the native
-mouse replay comparison has passed.
+These unit tests are distinct from the native retail replay evidence below.
 
 The final producer additionally canonicalizes a scripted `-0.0` timestamp to
 `0.0`, so equal-time make/release events retain their declaration order under
@@ -241,6 +242,30 @@ patch:
 `ad772577b40a93d3bc9b5b5cd3eaead6b5cbe9ae3d4bdd7bc169698c801fe4ea`.
 `captures/Controls-mouse-producer/profile.json` records every source-member hash.
 The earlier `48bd…/962e…` captures above retain their own producer identities.
+
+Native mouse parity has two explicitly different initialization scopes:
+
+- Saved-start `coast-load-mouse` matches all 41 player records and 6,000 actor
+  checkpoints across 40 completed frames, including RNG. `coast-early-fire`
+  matches all 99 player records and 14,700 actor checkpoints across 98 completed
+  frames, including the guardian kill and RNG. Both load the genuine COAST save
+  and original-written Mouse config, **without** an undefined-memory adapter
+  (`artifact://3393`).
+- Unadapted NewGame `mouse-movement` matches all 154 player records but first
+  differs in RNG at frame 2 and NPC 23's X at frame 8 (`artifact://3352`).
+  With the approved, explicit `--import-undefined scene-start.persons` BOOT-only
+  adapter, it matches all 154 player records and 23,256 actor checkpoints across
+  153 completed frames, including RNG. That adapter imports only initially
+  undefined `PERSON+0x24` for 152 actors, logs its use, and is prohibited on
+  saved-start replays. It does not install positions, RNG or routing fields.
+  The preserved actual output is
+  `captures/Standing-original-bee11c5/original/mouse-movement/Port-undefined/comparison.log`.
+
+The read-only `mouse-movement-rng` recapture adds actual RNG callers. Its frame,
+actor, actor-clock, seed, event, draw-clock, UI-action and mouse-poll files are
+all byte-identical to `mouse-movement`; hashes are recorded in
+`captures/mouse-movement-rng/comparison.json`. No second snapshot capture was
+needed: the standing recapture batch supplies the measured BOOT snapshot.
 
 ## Frame traces
 
