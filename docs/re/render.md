@@ -29,9 +29,12 @@ geometry and private scratch rather than the reference host's guest-memory ABI.
 
 ## Interfaces and ownership
 
-`render_visibility(w,c,out)` builds the same ordered scene lists and projects
+`render_visibility(w,c,out)` builds the ordered renderer scene lists and projects
 props without a framebuffer. `render_view(w,c,fb)` paints those lists. Neither
-writes world state. AI owns centre-column target collection: original packed
+writes world state. This is not the gameplay target pass: independent
+`target_query(out,w,c,view)` uses world extents/trig and explicit original view
+coordinates, with no renderer state or loaded pixels. AI owns centre-column
+target collection: original packed
 prop drawers append only after x/y clipping succeeds, targetable byte7D028 is1,
 and clipped x0+left<=320<=x0+right. Mask props never append.
 
@@ -116,3 +119,7 @@ opaque0/255 and sampled/shaded world pixels without GPU readback.
 `tests/render_gl.mk` provides pure mesh/coverage/decoder tests and a real
 offscreen scene executable. Its comparison uses the same loaded world and
 camera for GL and SW, not imported oracle geometry or fitted pixels.
+SDL's offscreen/EGL driver ran both desktop and ES3 shader versions on Mesa
+Intel UHD630. Their640x480 outputs matched at0/307200 pixels. Real GL overlay
+tests compare every resolved pixel at640x480 and1920x1080 against indexed
+replace/shade/source-copy operators, including opaque0/255 and aspect scaling.

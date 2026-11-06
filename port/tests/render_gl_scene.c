@@ -1,5 +1,6 @@
 #include "gfx.h"
 #include "render_gl.h"
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -10,6 +11,45 @@ static world map;
 static rsc hipak;
 static uint8_t rgba[TEST_W*TEST_H*4],ppm[TEST_W*TEST_H*3+64];
 static uint8_t software[CM_WIDTH*CM_HEIGHT],palette[768];
+static uint8_t indexed[TEST_W*TEST_H];
+static cm_overlay overlay;
+
+static int overlay_test(unsigned width,unsigned height)
+{
+    uint8_t map_lut[256];
+    unsigned x,y,i;
+    float scale=fminf((float)width/CM_WIDTH,(float)height/CM_HEIGHT);
+    float left=((float)width-CM_WIDTH*scale)/2,top=((float)height-CM_HEIGHT*scale)/2;
+    if (render_gl_readback(indexed,sizeof indexed,width)) return -1;
+    memset(software,17,sizeof software);
+    for (i=0;i<256;++i) map_lut[i]=(uint8_t)(i^128);
+    if (gfx_overlay_begin(&overlay,software)) return -1;
+    gfx_store(software+10*640+10,0);gfx_store(software+10*640+11,255);
+    for (y=100;y<120;++y) for (x=100;x<120;++x) gfx_map_pixel(software+y*640+x,map_lut);
+    gfx_copy(software+121*640+100,software+100*640+100,20);
+    if (gfx_overlay_end() || render_gl_present(&overlay) || render_gl_read_rgba(rgba,sizeof rgba)) return -1;
+    for (y=0;y<height;++y) for (x=0;x<width;++x) {
+        uint8_t index=indexed[(height-1-y)*width+x];
+        float lx=((float)x+0.5f-left)/scale,ly=((float)y+0.5f-top)/scale;
+        if (lx>=0 && lx<640 && ly>=0 && ly<480) {
+            unsigned qx=(unsigned)lx,qy=(unsigned)ly,op=overlay.coverage[qy*640+qx];
+            if (op==1) index=software[qy*640+qx];
+            else if (op>=2) {
+                unsigned src=overlay.source[qy*640+qx],sx=src%640,sy=src/640;
+                int px=(int)((float)x+0.5f+((float)sx-qx)*scale);
+                int py=(int)((float)height-y-0.5f+((float)qy-sy)*scale);
+                if (px<0) px=0;
+                if (py<0) py=0;
+                if ((unsigned)px>=width) px=(int)width-1;
+                if ((unsigned)py>=height) py=(int)height-1;
+                index=overlay.maps[op-2][indexed[(unsigned)py*width+(unsigned)px]];
+            }
+        }
+        if (memcmp(rgba+((height-1-y)*width+x)*4,palette+index*3,3))
+            return cm_fail("GL overlay test",y*width+x,"resolved pixel differs from exact indexed operators");
+    }
+    return 0;
+}
 
 int main(int argc,char **argv)
 {
@@ -27,7 +67,7 @@ int main(int argc,char **argv)
         gfx_palette(palette,pal,size,path) || world_load_scene(&map,argv[1],1) ||
         world_finalize_scene(&map) || render_load(&map,&hipak) ||
         render_gl_open(1,width,height) || render_gl_load(&map,render_get_state(),palette) ||
-        render_gl_draw(&map,&camera) || render_gl_present(NULL) ||
+        render_gl_draw(&map,&camera) || overlay_test(width,height) || render_gl_present(NULL) ||
         render_gl_read_rgba(rgba,sizeof rgba) || platform_directory(argv[2])) goto out;
     n=snprintf((char *)ppm,64,"P6\n%u %u\n255\n",width,height);
     if (n<0 || n>=64) goto out;
@@ -40,6 +80,7 @@ int main(int argc,char **argv)
     if (n<0 || (size_t)n>=sizeof path) goto out;
     if (platform_file_write(path,ppm,(uint32_t)header+(uint32_t)(width*height*3))) goto out;
     if (width==CM_WIDTH && height==CM_HEIGHT) {
+        memset(software,0,sizeof software);
         if (render_set_view(0,0,CM_WIDTH,CM_HEIGHT) || render_draw(&map,&camera,software) ||
             platform_dump(argv[2],1,software,palette)) goto out;
     }

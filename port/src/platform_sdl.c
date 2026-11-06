@@ -954,8 +954,10 @@ int platform_gl_open(int headless,unsigned width,unsigned height,int *gles)
     surface=converted=NULL;
     if (window) SDL_DestroyWindow(window);
     window=NULL;
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || defined(CM_OPENGL_ES)
     es=1;
+#endif
+#ifdef __ANDROID__
     flags|=SDL_WINDOW_FULLSCREEN_DESKTOP;
 #else
     flags|=headless ? SDL_WINDOW_HIDDEN:SDL_WINDOW_RESIZABLE;
