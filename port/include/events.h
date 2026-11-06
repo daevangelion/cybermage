@@ -96,7 +96,7 @@ typedef struct events_state {
     int32_t autoDestruct, autoLFlag, autoMSlot, autoMSound, pc_dead_man;
     uint32_t autoDTime, autoDMsgTimer;
     uint32_t DrakMangTime;
-    int32_t unk_1444E8, unk_1444EC, unk_144B58;
+    int32_t unk_144B58;
     uint32_t unk_144B5C;
     int32_t waterNdx[12], waterFlag, miscFlag, candleflicker;
     uint32_t waterTimer, miscTimer;

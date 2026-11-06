@@ -70,7 +70,9 @@ static void remaining_events(void)
     assert(events_step(&e,&s,&a,&w)==0 && v->state==1);
     v=event_setup(46);v->value[2]=0;v->value[6]=0x18000;
     v->value[5]=0x28000;v->value[4]=0x10000;w.objects[2].active=1;
+    w.objects[1].active=1;
     assert(events_step(&e,&s,&a,&w)==0 && w.objects[2].x==0x18000);
+    assert(a.pc.unk_1444EC==3);
     v=event_setup(49);v->value[8]=1;v->value[9]=1;v->value[2]=0;
     w.fxo_count=1;w.fxo_objects[0]=2;e.switches[1].fxo=0;
     assert(events_step(&e,&s,&a,&w)==0 && e.switches[1].state==1);
@@ -99,6 +101,8 @@ static void remaining_events(void)
     assert(events_step(&e,&s,&a,&w)==0);
 }
 
+static void prime_drain(void);
+
 static void cosmetics(void)
 {
     static const uint8_t panel_bytes[3]={11,22,33};
@@ -115,6 +119,45 @@ static void cosmetics(void)
     w.scene=7;w.prop_count=1;w.prop_objects[0]=2;w.prop_types[0]=160;
     e.prop_base_texture[0]=12;e.waterTimer=100;w.texture_count=20;
     assert(events_step(&e,&s,&a,&w)==0 && w.objects[2].texture==13);
+    w.scene=10;w.prop_types[0]=173;w.objects[2].active=1;
+    e.miscTimer=100;a.gem_count_down=1;a.gem_count_down_timer=15;s.timer_ticks=9;
+    world_rng_init(&w.rng,123);prime_drain();
+    assert(events_step(&e,&s,&a,&w)==0);
+    assert(a.gem_count_down && w.objects[2].active && a.pc.unk_1444EC>=1 && a.pc.unk_1444EC<=5);
+    s.timer_ticks=16;
+    assert(events_step(&e,&s,&a,&w)==0);
+    assert(!a.gem_count_down && !w.objects[2].active && a.pc.unk_1444EC==2);
+}
+
+static void prime_drain(void)
+{
+    unsigned i;
+    world_rng probe;
+    for(i=0;i<32;++i) {
+        probe=w.rng;
+        if(world_rnd(&probe,2)) return;
+        (void)world_rnd(&w.rng,2);
+    }
+    assert(0 && "unable to select draining branch");
+}
+
+static void draining_feedback(void)
+{
+    events_event *v=event_setup(87);
+    v->value[3]=0;w.prop_count=1;w.prop_objects[0]=2;w.objects[2].x=0x10000;
+    s.bp_limit_flag=1;s.timer_ticks=10;e.energy=40;
+    w.persons[0].unk_0038=100<<16|100;
+    world_rng_init(&w.rng,123);prime_drain();
+    assert(events_step(&e,&s,&a,&w)==0 && a.pc_flash==2);
+    a.pc_flash=4;s.timer_ticks=100;prime_drain();
+    assert(events_step(&e,&s,&a,&w)==0 && a.pc_flash==4);
+    v=event_setup(87);v->value[3]=0;v->value[0]=2;v->value[8]=1;
+    w.prop_count=1;w.prop_objects[0]=2;w.objects[2].active=1;
+    s.bp_limit_flag=1;s.timer_ticks=10;e.energy=40;
+    w.persons[0].unk_0038=100<<16|100;a.pc_flash=4;
+    world_rng_init(&w.rng,123);prime_drain();
+    assert(events_step(&e,&s,&a,&w)==0);
+    assert(a.pc_flash==0 && a.pc.unk_1444EC>=1 && a.pc.unk_1444EC<=5);
 }
 
 static void retail_cosmetics(const char *data)
@@ -270,6 +313,7 @@ int main(int argc, char **argv)
     assert(events_rescale_prop(&w,0,100)<0);
     remaining_events();
     cosmetics();
+    draining_feedback();
     event_setup(0);snd_enable(0,0);e.autoDestruct=4;e.autoDTime=16800;e.autoMSlot=-1;
     e.ticks=2400;
     assert(events_countdown(&e,&s,&a,&w)==0 && e.autoDestruct==4);

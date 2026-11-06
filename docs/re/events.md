@@ -220,6 +220,14 @@ The zero-auxiliary regression failed with the reported CollItem0 error before
 the fix and asserts unchanged object activity, inventory, notification and RNG.
 All11 retail scene loads check cached auxiliary words against source records.
 
+Player feedback at Xox+1444E8/+1444EC is AI-owned: event46 teleport, event87
+drain and scene10 gem effects use the shared `ai.h` flash/effect-state accessors.
+The duplicate Events fields are removed. Far drain sets flash2 only when clear;
+near drain clears flash and replaces the effect state with RND(5)+1. These
+transient fields are absent from the explicit SAVE codec, so no save bytes change.
+Fixtures assert teleport feedback, both far-flash cases, near feedback and both
+gem flicker/expiry paths against the state actually consumed by player effects.
+
 Integration contracts: `events_init` now resets scene metadata, **preserving**
 player inventory/status. AI's `ai_init_pc` owns original boot/new-game
 initialization and its RNG calls. `events_load_tables` reads numeric monitor

@@ -707,7 +707,7 @@ static int dispatch(events_state *e, sim_state *s, ai_state *a, world *w, unsign
             if(object<0) return cm_fail("MoveWorld",index,"invalid teleport actor");
             if(tile_index(&w->objects[object],INT32_MIN)!=p[2] || !w->objects[object].active) continue;
             if(move_actor(w,object,p[6],p[5],p[4],w->objects[object].heading)) return -1;
-            if((unsigned)object==w->player_object) e->unk_1444EC=3;
+            if((unsigned)object==w->player_object) ai_pc_set_shake(a,3);
             if(p[13]) (void)snd_object(w,(unsigned)p[13],(unsigned)object,0x60000,32767,0);
         }
         break;
@@ -1149,14 +1149,14 @@ static int dispatch(events_state *e, sim_state *s, ai_state *a, world *w, unsign
             if(ai_damage_person(a,w,w->player_person,n,0,0)) return -1;
             e->energy=(int16_t)(uint16_t)world_sub32(e->energy,n);
             if(e->energy<0) e->energy=0;
-            if(!near) { if(!e->unk_1444E8) e->unk_1444E8=2;break; }
+            if(!near) { ai_pc_set_flash(a,2,1);break; }
             if(!world_rnd(&w->rng,4)) {
                 if(w->person_count<2) return cm_fail("MoveWorld",index,"missing affected actor");
                 if(w->persons[1].status!=2 && (w->persons[1].state==0 || w->persons[1].state==1)) {
                     w->persons[1].state=6;w->persons[1].unk_001E=2;
                 }
             }
-            e->unk_1444E8=0;e->unk_1444EC=world_rnd(&w->rng,5)+1;
+            ai_pc_set_flash(a,0,0);ai_pc_set_shake(a,world_rnd(&w->rng,5)+1);
             p[7]=world_sub32(p[7],n);
             if(p[7]<=0) {
                 if(p[8]<0 || (unsigned)p[8]>=w->person_count)
