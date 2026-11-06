@@ -1,6 +1,7 @@
 # Enhanced controls (opt-in)
 
-`--controls modern` selects the action layer. `--controls classic` is the default.
+`--controls modern` selects the action layer. `--controls classic` is the desktop
+default; Android defaults to modern for touchscreen play.
 Original frame replays use classic input; combining `--replay` and modern
 controls is rejected. The modern layer does not feed WASD through the DOS IRQ latch.
 
@@ -111,8 +112,9 @@ pause menu rather than a separate pause screen.
 ## Android touch
 
 Launch the exported `DataActivity` with the optional intent string extra
-`controls=modern`; it forwards the choice to the private `GameActivity`.
-Without it Android stays classic. The virtual left stick and six outlined
+`controls=classic` to select Original keyboard semantics; it forwards the choice
+to the private `GameActivity`. Without it Android uses modern controls.
+The virtual left stick and six outlined
 buttons use the black bars outside the 4:3 game area where space permits.
 Otherwise they occupy lower corners. **F/J/U/W/M/A** mean fire, jump, use,
 next weapon/category entry, menu and hold aim. A right-side swipe looks.

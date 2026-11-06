@@ -41,4 +41,9 @@ typedef struct {
 int vis_prepare(const world *w, const world_camera *camera,
                    const vis_view *view, vis_state *scratch);
 int vis_build_lists(const world *w, vis_state *scratch);
+int vis_project(const vis_state *s,int32_t x,int32_t y,int32_t h,
+                int32_t *sx,int32_t *sy,int32_t near);
+int vis_new_point(const world *w,const vis_state *s,int32_t x,int32_t y,
+                  uint16_t angle,int32_t h,int32_t *sx,int32_t *sy);
+int vis_prop_texture(const world_camera *camera,const world_object *object);
 #endif

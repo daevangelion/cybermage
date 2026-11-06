@@ -10,7 +10,32 @@ static world map;
 static uint8_t framebuffer[CM_RENDER_WIDTH*CM_RENDER_HEIGHT];
 static uint8_t texture[128*128], shades[64*256], fixed[10*256], fog[21*256];
 static uint8_t floor_texture[128*128],ceiling_texture[128*128];
-static render_visibility_list visible;
+typedef struct { uint16_t object; int32_t left,right; int targetable; } visible_prop;
+static struct { unsigned count; visible_prop props[CM_OBJECT_MAX]; } visible;
+
+/* Inspect the real paint command stream, not a second production target API. */
+static int prepare_props(void)
+{
+    render_state *s=render_get_state();
+    unsigned i;
+    visible.count=0;
+    if (r_prepare(&map,&map.camera,s) || vis_build_lists(&map,&s->scene) || r_scene(&map,s)) return -1;
+    for (i=0;i<s->command_count;++i) {
+        const render_command *c=&s->commands[i];
+        const render_quad *q=&c->quad;
+        const world_object *o=&map.objects[c->object];
+        int left,right,y0,y1;
+        visible_prop *p;
+        if (c->kind!=RENDER_PROP) continue;
+        left=r_min(q->x[0],q->x[1]);right=r_max(q->x[0],q->x[1]);
+        y0=s->horizon-q->y[3];y1=s->horizon-q->y[0];
+        if (right<0 || left>=s->width || y0>=s->height || y1<0 || y1<y0) continue;
+        p=&visible.props[visible.count++];
+        p->object=c->object;p->left=s->x+r_max(left,0);p->right=s->x+r_min(right,s->width-1);
+        p->targetable=o->targetable==1 && (o->flags&R_PACKED);
+    }
+    return 0;
+}
 
 static uint32_t world_hash(void)
 {
@@ -28,7 +53,7 @@ static unsigned compare_targets(void)
     render_state *state = render_get_state();
     unsigned i, count = 0, texture_count = map.texture_count;
     uint32_t hash;
-    assert(render_visibility(&map, &map.camera, &visible) == 0);
+    assert(prepare_props() == 0);
     /* The primitive fixture installs pixel/extents directly in render state.
      * Supply the same extents to the independent, pixel-free consumer. */
     for (i = 0; i < 16; ++i) {
@@ -43,7 +68,7 @@ static unsigned compare_targets(void)
     assert(hash == world_hash());
     map.texture_count = texture_count;
     for (i = 0; i < visible.count; ++i) {
-        const render_visible_prop *p = &visible.props[i];
+        const visible_prop *p = &visible.props[i];
         if (p->targetable && p->left <= 320 && p->right >= 320) {
             assert(count < targets.count && p->object == targets.objects[count]);
             ++count;
@@ -108,7 +133,7 @@ int main(void)
         assert(framebuffer[y*CM_RENDER_WIDTH+x]==
                (x>=120 && x<520 && y>=90 && y<390 ? 7:111));
     }
-    assert(render_visibility(&map,&map.camera,&visible)==0);
+    assert(prepare_props()==0);
     assert(visible.count==0 && hash==world_hash());
     for (i=1;i<4;++i) {
         map.camera.angle=(uint16_t)(i*16384);
@@ -127,13 +152,13 @@ int main(void)
     state->textures[2].frame_half_w=8192;
     state->textures[2].frame_base=32768;
     hash=world_hash();
-    assert(render_visibility(&map,&map.camera,&visible)==0);
+    assert(prepare_props()==0);
     assert(hash==world_hash() && visible.count==1);
     assert(visible.props[0].object==1 && visible.props[0].targetable);
     assert(visible.props[0].left<=320 && visible.props[0].right>=320);
     compare_targets();
     map.objects[1].flags&=~R_PACKED;
-    assert(render_visibility(&map,&map.camera,&visible)==0);
+    assert(prepare_props()==0);
     assert(visible.count==1 && !visible.props[0].targetable);
     compare_targets();
     map.objects[1].flags|=R_PACKED;
@@ -154,10 +179,10 @@ int main(void)
         int32_t sx, sy;
         unsigned angle=(uint16_t)(map.camera.angle+16384)>>5;
         int32_t wc=r_mul16(8192,map.trig.cos[angle]),ws=r_mul16(8192,map.trig.sin[angle]);
-        assert(render_visibility(&map,&map.camera,&visible)==0);
-        assert(r_project(&map,state,map.objects[1].x+wc,map.objects[1].y+ws,0,&sx,&sy,R_NEAR)==1);
-        assert(r_project(&map,state,map.objects[1].x-wc,map.objects[1].y-ws,0,&sx,&sy,R_NEAR)==0);
-        assert(r_new_point(&map,state,map.objects[1].x-wc,map.objects[1].y-ws,map.camera.angle,0,&sx,&sy)==0);
+        assert(prepare_props()==0);
+        assert(vis_project(&state->scene,map.objects[1].x+wc,map.objects[1].y+ws,0,&sx,&sy,R_NEAR)==1);
+        assert(vis_project(&state->scene,map.objects[1].x-wc,map.objects[1].y-ws,0,&sx,&sy,R_NEAR)==0);
+        assert(vis_new_point(&map,&state->scene,map.objects[1].x-wc,map.objects[1].y-ws,map.camera.angle,0,&sx,&sy)==0);
     }
     assert(compare_targets() == 0); /* One endpoint crosses1024; fallback rejects. */
     map.camera.angle=0;
@@ -168,17 +193,17 @@ int main(void)
         state->textures[i].frame_half_w=0;
     }
     map.objects[1].rotations=8;
-    assert(render_prop_texture(&map.camera,&map.objects[1])==6);
+    assert(vis_prop_texture(&map.camera,&map.objects[1])==6);
     state->textures[6].frame_half_w=8192;
     assert(compare_targets() == 1);
     state->textures[6].frame_half_w=0;
     map.objects[1].rotations=-3;
-    assert(render_prop_texture(&map.camera,&map.objects[1])==3);
+    assert(vis_prop_texture(&map.camera,&map.objects[1])==3);
     state->textures[3].frame_half_w=8192;
     assert(compare_targets() == 1);
     state->textures[3].frame_half_w=0;
     map.objects[1].rotations=-9;
-    assert(render_prop_texture(&map.camera,&map.objects[1])==7);
+    assert(vis_prop_texture(&map.camera,&map.objects[1])==7);
     state->textures[7].frame_half_w=8192;
     assert(compare_targets() == 1);
     {
@@ -229,7 +254,7 @@ int main(void)
     assert(framebuffer[380*640+320]==5);
     map.shade_override.bias=7;map.shade_override.shift=13;map.shade_override.scale=2;
     map.shade_override.revision=1;map.fog_on=1;
-    assert(render_visibility(&map,&map.camera,&visible)==0);
+    assert(prepare_props()==0);
     assert(state->shade_bias==7 && state->shade_shift==13 && state->shade_scale==2 && state->fog_on==1);
     {
         const uint8_t raw[]={1,2,3,4};

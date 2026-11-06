@@ -40,7 +40,6 @@ X(void,Uniform2i,(GLint,GLint,GLint)) \
 X(void,Uniform2f,(GLint,GLfloat,GLfloat)) \
 X(void,Uniform2iv,(GLint,GLsizei,const GLint *)) \
 X(void,Uniform3f,(GLint,GLfloat,GLfloat,GLfloat)) \
-X(void,Uniform4f,(GLint,GLfloat,GLfloat,GLfloat,GLfloat)) \
 X(void,Uniform4iv,(GLint,GLsizei,const GLint *)) \
 X(void,Uniform3iv,(GLint,GLsizei,const GLint *)) \
 X(void,GenBuffers,(GLsizei,GLuint *)) \
@@ -74,7 +73,6 @@ X(void,DrawArrays,(GLenum,GLint,GLsizei)) \
 X(void,DrawElements,(GLenum,GLsizei,GLenum,const void *)) \
 X(void,ReadPixels,(GLint,GLint,GLsizei,GLsizei,GLenum,GLenum,void *)) \
 X(void,ReadBuffer,(GLenum)) \
-X(void,ColorMask,(GLboolean,GLboolean,GLboolean,GLboolean)) \
 X(void,DepthMask,(GLboolean)) \
 X(void,DepthFunc,(GLenum)) \
 X(void,BlitFramebuffer,(GLint,GLint,GLint,GLint,GLint,GLint,GLint,GLint,GLbitfield,GLenum))

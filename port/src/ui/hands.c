@@ -51,9 +51,7 @@ static int player_hand(const cm_ui *ui, world *w, uint8_t *dst,
     hand.x_pos_off = ui->Glv_xPosOff[glove][frame];
     hand.view_x = view.x; hand.view_y = view.y;
     hand.view_width = view.width; hand.view_height = view.height;
-    hand.aim_x = ui->CenterAimX[glove];
-    hand.aim_y = ui->CenterAimY[glove];
-    if (a) {
+    {
         /* CM_HI.EXE18ADE..18B1B: wrap visual offsets, then clamp live aim. */
         int32_t x = world_add32(a->pc_aim.aim_x,a->pc_aim.render_x);
         int32_t y = world_add32(a->pc_aim.aim_y,a->pc_aim.render_y);
@@ -77,20 +75,14 @@ static int player_hand(const cm_ui *ui, world *w, uint8_t *dst,
         hand.y_off = hand.x_pos_off = hand.aim_x = hand.aim_y = 0;
     }
     if (mode == 5 && !muzzle) {
-        int glow, glow_frame = a ? a->pc.glow_frame : 0;
+        int glow = a->pc.glow_set, glow_frame = a->pc.glow_frame;
         if (weapon < 0 || weapon >= 16 ||
-            (glow = a ? a->pc.glow_set : ui->GlowSet[weapon]) < 0 ||
+            glow < 0 ||
             glow >= 6 || glow_frame < 0 || glow_frame >= 4)
             return cm_fail("hand graphics", (uint32_t)weapon, "invalid spell glow selector");
         return ui_draw_xscale_aim(dst, &hand, ui->SpellGlow+glow*12+glow_frame*3);
     }
     return ui_draw_xscale_aim(dst, &hand, NULL);
-}
-
-int ui_draw_player_hand(const cm_ui *ui, world *w, uint8_t *dst,
-                        int mode, int weapon, unsigned frame, ui_view view)
-{
-    return player_hand(ui,w,dst,mode,weapon,frame,view,NULL,0);
 }
 
 int ui_draw_live_hand(const cm_ui *ui, world *w, uint8_t *dst,

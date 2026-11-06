@@ -190,7 +190,9 @@ int main(int argc, char **argv)
     assert(platform_file_read(&original, "orig/retail/SAVE010.DAT") == 0);
     assert(ui_save_scene(original.data, original.size, &scene) == 0 && scene == 1);
     assert(ui_save_scene(original.data, original.size-1, &scene) == -1);
-    assert(ui_load_game(&save, &w, original.data, original.size, "orig/retail") == 0);
+    world_close(&w);
+    assert(world_load_scene(&w, "orig/retail", scene) == 0);
+    assert(ui_save_overlay(&save, &w, original.data, original.size) == 0);
     assert(w.player_object == 936 && w.person_count == 152);
     {
         const world *draw=&w;
@@ -429,9 +431,6 @@ int main(int argc, char **argv)
         ui_hud hud = {0};
         unsigned phase, i;
         assert(rsc_entry(&hipak, 1, &background, &size) == 0 && size == 320*240);
-        background_view(background,NULL,view);
-        assert(ui_draw_player_hand(&ui, &w, screen, 5, 0, 4, view) == 0);
-        memcpy(encoded,screen,sizeof screen);
         actors.pc_aim.aim_x = ui.CenterAimX[1];
         actors.pc_aim.aim_y = ui.CenterAimY[1];
         actors.pc_aim.w_max_leftaimx = actors.pc_aim.w_max_botaimy = -1024;
@@ -441,7 +440,6 @@ int main(int argc, char **argv)
         events.spell = 0;
         background_view(background,NULL,view);
         assert(ui_draw_live_hand(&ui,&w,screen,5,&events,&actors,view) == 0);
-        assert(memcmp(encoded,screen,sizeof screen) == 0);
         actors.pc_aim.weapon_aim_step = 18;
         assert(ui_draw_live_hand(&ui,&w,screen,5,&events,&actors,view) == -1);
         actors.pc_aim.weapon_aim_step = 4;
@@ -510,7 +508,7 @@ int main(int argc, char **argv)
             assert(platform_file_read(&rendered, argv[2]) == 0);
             assert(rendered.size == sizeof screen);
             background_view(background,&rendered,view);
-            assert(ui_draw_player_hand(&ui,&w,screen,5,0,4,view) == 0);
+            assert(ui_draw_live_hand(&ui,&w,screen,5,&events,&actors,view) == 0);
             assert(ui_render_bells_and_whistles(&ui, screen, &hud, &draw_clock) == 0);
             assert(platform_dump(argv[1],3,screen,palette) == 0);
             background_view(background,&rendered,view);

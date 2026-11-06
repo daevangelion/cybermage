@@ -60,11 +60,14 @@ static void radial(void)
     assert(ai_freeze_monster(&a,&s,&w,2,2,12) == 0 && !w.persons[1].unk_0058);
     a.monsters[0].resistance[4] = 0;
     assert(ai_freeze_monster(&a,&s,&w,2,2,12) == 0 && w.persons[1].unk_0058 >= 72);
-    assert(ai_pc_zone_radius(&w,3,8*32+8) == 1);
-    assert(ai_pc_zone_radius(&w,3,20*32+20) == 0);
     a.pc_learn_spell = 3;
     damage = ai_pc_radial_damage(&a,&s,&w,3,0,0,0,100,100);
     assert(damage >= 14 && damage <= 56 && (e.spells[0] & 8));
+    w.objects[w.player_object].x=w.objects[w.player_object].y=20*65536;
+    assert(!world_make_omap(&w));
+    health=(int16_t)w.persons[0].unk_0038;
+    assert(!ai_pc_radial_damage(&a,&s,&w,3,0,0,0,100,100));
+    assert((int16_t)w.persons[0].unk_0038==health);
 }
 
 static void launches(void)

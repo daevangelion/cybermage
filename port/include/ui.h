@@ -176,9 +176,6 @@ int ui_text_message(cm_ui *ui, const world *w, uint8_t *dst,
 
 int ui_draw_xscale_aim(uint8_t *dst, const ui_hand *hand,
                        const uint8_t *glow);
-int ui_draw_player_hand(const cm_ui *ui, world *w, uint8_t *dst,
-                        int mode, int weapon, unsigned frame,
-                        ui_view view);
 struct ai_state;
 /* after_hand0: transient tint;1: damage flash. State advances in AI, not here. */
 int ui_draw_pc_tint(const cm_ui *ui, uint8_t *dst, const struct ai_state *a,
@@ -232,8 +229,6 @@ struct events_state;
 int ui_hud_from_world(ui_hud *hud, const world *w,
                       const struct events_state *events, unsigned phase,
                       int hand_mode);
-int ui_load_game(ui_save_state *save, world *w, const uint8_t *data,
-                 uint32_t size, const char *asset_dir);
 int ui_save_overlay(ui_save_state *save, world *w, const uint8_t *data,
                       uint32_t size);
 int ui_save_game(ui_save_state *save, const world *w, uint8_t *data,

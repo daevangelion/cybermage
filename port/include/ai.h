@@ -252,7 +252,6 @@ int ai_freeze_monster(ai_state *a, sim_state *s, world *w, unsigned object,
 int ai_radial_damage(ai_state *a, sim_state *s, world *w, unsigned source,
                       unsigned radius_zone, int32_t shooter, unsigned dice_row,
                       unsigned resistance, int32_t force);
-int ai_pc_zone_radius(const world *w, unsigned source, unsigned tile);
 int ai_pc_radial_damage(ai_state *a, sim_state *s, world *w, unsigned source,
                          unsigned radius_zone, unsigned dice_row, int double_hit,
                          int32_t armor, int32_t erosion);

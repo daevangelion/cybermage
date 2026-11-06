@@ -19,33 +19,6 @@ int32_t r_yslope(int32_t x1,int32_t y1,int32_t x2,int32_t y2)
     return dx ? (int32_t)((int64_t)r_sub(y1,y2)*R_FIXED_ONE/dx) : 0;
 }
 
-/* RWCPlot 62C28: the screen-x multiply is 32-bit, unlike FixedRotate. */
-int r_project(const world *w,const render_state *s,int32_t x,int32_t y,int32_t h,int32_t *sx,int32_t *sy,int32_t near)
-{
-    int32_t dx=r_sub(x,s->camera.u),dy=r_sub(y,s->camera.v),rx,ry;
-    (void)w;
-    rx=r_sub(r_mul16(s->camera_cos,dx),r_mul16(s->camera_sin,dy));
-    ry=r_add(r_mul16(s->camera_sin,dx),r_mul16(s->camera_cos,dy));
-    if (rx<=near) return 0;
-    *sx=r_sub(s->width/2,r_mul(ry,s->focal)/rx);
-    *sy=h/rx;
-    return 1;
-}
-
-int r_new_point(const world *w,const render_state *s,int32_t x,int32_t y,uint16_t angle,int32_t h,int32_t *sx,int32_t *sy)
-{
-    uint16_t ba=(uint16_t)(s->camera.angle-angle);
-    unsigned q=(ba&16383)>>3;
-    int32_t rx,t;
-    cm_fixed_rotate(&w->trig,&x,&y,s->camera.u,s->camera.v,(uint16_t)-angle);
-    rx=r_sub(x,s->camera.u);
-    t=w->trig.tan[(ba&16384) ? q : 2047-q];
-    y=(ba&16384) ? r_add(r_mul16(rx,t),s->camera.v) : r_sub(s->camera.v,r_mul16(rx,t));
-    y=r_add(y,ba<32768 ? 2048 : -2048);
-    cm_fixed_rotate(&w->trig,&x,&y,s->camera.u,s->camera.v,angle);
-    return r_project(w,s,x,y,h,sx,sy,256);
-}
-
 /* FindPoint 64B4C clips against the fixed DOS plane at row479, even
  * for a smaller view. Preserve quadrant tie breaks and fixed-point products. */
 int r_find_point(const world *w,const render_state *s,int32_t xa,int32_t ya,int32_t xb,int32_t h,int32_t *sx,int32_t *sy)
@@ -68,7 +41,7 @@ int r_find_point(const world *w,const render_state *s,int32_t xa,int32_t ya,int3
         if (cy<ya) {ry=r_add(cy,dn);rx=r_add(cx,k);}
         else {ry=r_sub(cy,dn);rx=r_sub(cx,k);}
     }
-    return r_project(w,s,rx,ry,h,sx,sy,0);
+    return vis_project(&s->scene,rx,ry,h,sx,sy,0);
 }
 
 static int chain(const world *w,const render_state *s,const render_quad *q,

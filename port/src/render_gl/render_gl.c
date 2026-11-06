@@ -379,7 +379,7 @@ static int object_mesh(const world *w,unsigned id)
             cache->rotations==o->rotations && cache->prop_kind==o->prop_kind &&
             cache->frame_u==s.camera.u && cache->frame_v==s.camera.v) frame=(int)(cache->texture/2);
         else {
-            frame=render_prop_texture(&s.camera,o);
+            frame=vis_prop_texture(&s.camera,o);
             cache->base_texture=o->texture;cache->heading=o->heading;
             cache->rotations=o->rotations;cache->prop_kind=o->prop_kind;
             cache->frame_u=s.camera.u;cache->frame_v=s.camera.v;

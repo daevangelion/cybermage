@@ -6,8 +6,6 @@
 #define R_FIXED_ONE INT32_C(65536)
 #define R_FIXED_HALF INT32_C(32768)
 #define R_NEAR 1024
-#define R_RAY_MAX 18
-#define R_MAX_COORD INT32_C(2080768)
 #define R_WALL UINT32_C(0x04000000)
 #define R_FXO UINT32_C(0x08000000)
 #define R_PROP UINT32_C(0x20000000)
@@ -41,10 +39,8 @@ static inline int r_fail(render_state *s,const char *message,unsigned offset) {
 }
 int r_prepare(const world *w,const world_camera *c,render_state *s);
 int r_sync_textures(const world *w,render_state *s);
-int r_scene(const world *w,render_state *s,render_visibility_list *out);
+int r_scene(const world *w,render_state *s);
 int r_paint(const world *w,render_state *s);
-int r_project(const world *w,const render_state *s,int32_t x,int32_t y,int32_t h,int32_t *sx,int32_t *sy,int32_t near);
-int r_new_point(const world *w,const render_state *s,int32_t x,int32_t y,uint16_t angle,int32_t h,int32_t *sx,int32_t *sy);
 int r_find_point(const world *w,const render_state *s,int32_t xa,int32_t ya,int32_t xb,int32_t h,int32_t *sx,int32_t *sy);
 int r_connect(const world *w,const render_state *s,render_quad *q,const int32_t wx[4],const int32_t wy[4],int32_t h,render_edge *l,render_edge *r,int32_t *top,int32_t *x0);
 int r_draw_wall(const world *w,render_state *s,const world_object *o,const render_quad *q,unsigned light);

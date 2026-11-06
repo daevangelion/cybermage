@@ -43,17 +43,6 @@ static int cells_for(const world *w, unsigned source, unsigned cells[4], unsigne
     return (int)count;
 }
 
-int ai_pc_zone_radius(const world *w, unsigned source, unsigned tile)
-{
-    unsigned cells[4], level, i;
-    int count;
-    if (tile >= CM_MAP_CELLS) return cm_fail("PCZoneRadius", tile, "invalid target tile");
-    count = cells_for(w, source, cells, &level);
-    if (count < 0) return -1;
-    for (i = 0; i < (unsigned)count; ++i) if (cells[i] == tile) return 1;
-    return 0;
-}
-
 static unsigned tier_for(const ai_state *a, const world_object *source,
                           const world_object *target, unsigned zone)
 {

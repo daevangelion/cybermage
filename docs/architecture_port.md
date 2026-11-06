@@ -23,6 +23,11 @@ assets and palette before drawing. The runtime test destroys/recreates a real GL
 context and checks the same scene pixel after reset.
 
 `vis` owns the pixel-free original ray traversal and ordered scene lists.
+`vis_project`, `vis_new_point` and `vis_prop_texture` are also the single
+original projection/near-plane/frame-selection implementations consumed by the
+software renderer, pixel-free target query and GL sprite frame selection.
+The renderer has no separate target-visibility API. Tests inspect its actual
+paint command stream; save and hand tests call the live overlay/hand paths.
 Dependency direction is `render_sw → vis ← target → world`; neither `vis` nor
 `target` includes a renderer header or owns pixels. Targeting reads explicit
 original-view coordinates and world sprite extents. The game collects the
@@ -40,6 +45,40 @@ consumes them, regardless of the chosen presentation backend.
 | SetAutoTarget 0x2F150 | target_query + ai_set_auto_target |
 | RayCast 0x5CBF8; CheckTile 0x5C5C8; CheckObjects | vis_build_lists |
 | CameraInit 0x597EC; MakeRayAngles 0x58E94 | vis_prepare |
+
+## Enhanced deviations
+
+Desktop defaults to `--renderer sw --controls classic`. Android deliberately
+defaults to software rendering **and modern controls**, because a touchscreen
+cannot drive the DOS keyboard layout. Renderer and input choices are independent;
+neither changes the simulation RNG, collision, combat rules or target-query view.
+Original replay requires classic controls. Enhanced visuals are not DOS pixel
+parity evidence.
+
+| Deviation | Activation / flag | Original-mode equivalent |
+|---|---|---|
+| GPU renderer | `--renderer gl`; Android `--es renderer gl` | `--renderer sw` (default), indexed 640×480 software rasterization. GL uses indexed textures/maps but different raster coverage/depth. |
+| Hor+ widescreen and arbitrary output resolution | `--renderer gl`, desktop `--width N --height N`; Android uses drawable size | Software keeps a centred 4:3 canvas. GL extends horizontal world coverage at the original vertical focal length; HUD/menu layout stays 4:3. Gameplay targeting remains the original projection. |
+| True pitch | `--renderer gl` (including classic look keys) | Software shifts the horizon; GL rotates the view in 3D. Both consume the same bounded simulation pitch. |
+| Modern controls and free look | `--controls modern`; optional controls.cfg under `--user DIR` | `--controls classic` uses CMDATA scan/mask pairs, IRQ9 make/break/first-key semantics and the configured DOS mouse/joystick reducer. Modern mode instead supplies WASD, relative look, analog/gamepad input, dedicated grounded jump, held aim, crouch/land actions and per-context bindings. |
+| Android default / touch controls | Default Android launcher; opt out with `--es controls classic` | The desktop default remains classic. Android modern mode adds virtual sticks/buttons, multi-touch look and literal modal taps; classic is available for a hardware keyboard. |
+| Selectors and direct cycling | `--controls modern` | Classic glove-hotspot/IRQ selector navigation and shortcuts. Modern mode adds wheel/shoulder/category/number actions and direct tile-rectangle tap confirmation without the DOS glove hotspot transform. |
+| Automap live-topology overlay | `--controls modern`, Map action (Tab/M or controller Back) | DOS AutoMap has its own artwork/reveal rules; this overlay is not that artwork. Classic retains the CMDATA AutoMap state toggle/save word, not this Enhanced overlay. Modern Map never emits the vehicle-exit key. |
+| SAF import / app-private storage | Android launcher **Import folder** | Desktop `--data DIR` reads an already installed retail folder; Android may likewise receive files through adb. SAF copies only chosen top-level files, with transactional synced replacement and no bundled assets or broad-storage permission. |
+
+Platform-only adaptations are always enabled: checked atomic user-file replacement
+rather than DOS in-place writes; lifecycle-safe GL reload and paused suspend clocks;
+SDL window scaling/letterboxing, device hotplug/focus release, OS audio and app user
+directories (`--user DIR` overrides storage). Their DOS equivalents are persistent
+devices, one running process/clock and its writable install directory. There is no
+flag to reintroduce torn saves, stale GL handles or time spent suspended.
+
+Verification controls (`--headless`, `--keys`, `--frames`, `--dump`,
+`--state-dump`, `--bios-seed`, `--replay`, `--replay-load-slot`,
+`--import-undefined`) are explicit test inputs/outputs, not Enhanced gameplay modes.
+They never install expected player/actor outputs. The unavoidable original
+undefined-memory choices below apply to both presentations; no normal-play switch
+claims to emulate allocator or uninitialized-stack history.
 
 ## Deliberate original undefined-memory deviation
 

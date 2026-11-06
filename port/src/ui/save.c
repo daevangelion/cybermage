@@ -246,16 +246,6 @@ static void person(save_io *io, const world_person *p, world_person *out)
 #undef I32
 }
 
-int ui_load_game(ui_save_state *save, world *w, const uint8_t *data,
-                 uint32_t size, const char *asset_dir)
-{
-    unsigned scene;
-    if (ui_save_scene(data, size, &scene)) return -1;
-    world_close(w);
-    if (world_load_scene(w, asset_dir, scene)) return -1;
-    return ui_save_overlay(save, w, data, size);
-}
-
 int ui_save_overlay(ui_save_state *save, world *w, const uint8_t *data,
                       uint32_t size)
 {

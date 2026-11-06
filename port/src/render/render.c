@@ -76,7 +76,6 @@ int r_prepare(const world *w,const world_camera *c,render_state *s)
     }
     s->horizon=s->scene.horizon;
     f=c->angle>>5; l=(uint16_t)(c->angle+16384)>>5; r=(uint16_t)(c->angle-16384)>>5;
-    s->camera_cos=s->scene.camera_cos;s->camera_sin=s->scene.camera_sin;
     s->u_cos=w->trig.cos[f]; s->v_cos=w->trig.sin[f];
     s->u_sin=w->trig.cos[l]; s->v_sin=w->trig.sin[l];
     s->u_step=w->trig.cos[r]; s->v_step=w->trig.sin[r];
@@ -84,15 +83,6 @@ int r_prepare(const world *w,const world_camera *c,render_state *s)
     s->visible_world=NULL;
     s->error=0;
     return 0;
-}
-
-int render_visibility(const world *w,const world_camera *c,render_visibility_list *out)
-{
-    if (!w || !c || !out) return cm_fail("render_sw",0,"null visibility input");
-    out->count=0;
-    if (r_prepare(w,c,&state) || vis_build_lists(w,&state.scene)) return -1;
-    state.framebuffer=NULL;
-    return r_scene(w,&state,out);
 }
 
 static void fill_rows(render_state *s,int first,int last,uint8_t color)
@@ -147,7 +137,7 @@ static int background(const world *w,render_state *s)
 int render_draw(const world *w,const world_camera *c,uint8_t *fb)
 {
     if (!w || !c || !fb) return cm_fail("render_sw",0,"null render input");
-    if (r_prepare(w,c,&state) || vis_build_lists(w,&state.scene) || r_scene(w,&state,NULL)) return -1;
+    if (r_prepare(w,c,&state) || vis_build_lists(w,&state.scene) || r_scene(w,&state)) return -1;
     return render_paint(w,fb);
 }
 
@@ -161,7 +151,3 @@ int render_paint(const world *w,uint8_t *fb)
     return r_paint(w,&state);
 }
 
-void render_view(const world *w,const world_camera *c,uint8_t *fb)
-{
-    (void)render_draw(w,c,fb);
-}

@@ -118,6 +118,9 @@ void controls_frame(cm_controls *c, controls_context context,
     if (EDGE(ITEMS)) c->selection_kind = 3;
     output->select_kind = (uint8_t)c->selection_kind;
     output->select_open = (uint8_t)(EDGE(WEAPONS) || EDGE(POWERS) || EDGE(ITEMS));
+    for (i = CM_CONTROL_SLOT1; i <= CM_CONTROL_SLOT0; ++i)
+        if (edges & (UINT64_C(1) << i))
+            output->select_slot = (uint8_t)(1 + i - CM_CONTROL_SLOT1);
     if (gameplay) {
         output_key(output,53,keys[53]); /* Original keyHELP962B8, not F1. */
         if (EDGE(MAP)) c->map_visible = !c->map_visible;
@@ -149,8 +152,6 @@ void controls_frame(cm_controls *c, controls_context context,
         output->run = (uint8_t)HELD(RUN);
         output->fly = (int8_t)((int)HELD(FLY_UP) - HELD(FLY_DOWN));
         output->cycle = (int8_t)((int)EDGE(NEXT) - EDGE(PREV));
-        for (i = CM_CONTROL_SLOT1; i <= CM_CONTROL_SLOT0; ++i)
-            if (edges & (UINT64_C(1) << i)) output->select_slot = (uint8_t)(1 + i - CM_CONTROL_SLOT1);
         output_key(output, 0x39, HELD(FIRE));
         output_key(output, 0x1c, EDGE(USE));
         output_key(output, 0x52, EDGE(CROUCH));
@@ -167,9 +168,6 @@ void controls_frame(cm_controls *c, controls_context context,
         output_key(output, 0x4d, HELD(RIGHT) || lx > 0.5 || in->mouse_wheel < 0);
         output_key(output, 0x1c, EDGE(USE) || EDGE(JUMP));
         output_key(output, 1, EDGE(AIM) || EDGE(CROUCH));
-        for (i = CM_CONTROL_SLOT1; i <= CM_CONTROL_SLOT0; ++i)
-            if (edges & (UINT64_C(1) << i))
-                output->select_slot = (uint8_t)(1 + i - CM_CONTROL_SLOT1);
         for (i = 0; i < 8; ++i) if (mouse[i]) output->mouse_buttons |= 1u << i;
         if (HELD(FIRE)) output->mouse_buttons |= 1;
         if (HELD(AIM)) output->mouse_buttons |= 4;

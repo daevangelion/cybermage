@@ -1,8 +1,6 @@
 #include "combat_internal.h"
 #include "audio.h"
 
-extern int ai_reset_aim(ai_state *a, const sim_state *s);
-
 static int32_t multiply(int32_t a, int32_t b) { return ai_scale32(a,b,1); }
 static int32_t absolute(int32_t n) { return n < 0 ? ai_sub32(0,n) : n; }
 static int32_t sine(const world *w, uint16_t angle, int32_t distance)

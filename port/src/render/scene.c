@@ -8,40 +8,19 @@ static int project_quad(const world *w,const render_state *s,render_quad *q,
     for (pair=0;pair<4;pair+=2) {
         unsigned i=pair,j=pair+1;
         int32_t h=pair ? top:bottom;
-        int a=r_project(w,s,px[i],py[i],h,&q->x[i],&q->y[i],R_NEAR);
-        int b=r_project(w,s,px[j],py[j],h,&q->x[j],&q->y[j],R_NEAR);
-        if (b && !a) a=r_new_point(w,s,px[i],py[i],angle,h,&q->x[i],&q->y[i]);
-        if (a && !b) b=r_new_point(w,s,px[j],py[j],angle,h,&q->x[j],&q->y[j]);
+        int a=vis_project(&s->scene,px[i],py[i],h,&q->x[i],&q->y[i],R_NEAR);
+        int b=vis_project(&s->scene,px[j],py[j],h,&q->x[j],&q->y[j],R_NEAR);
+        if (b && !a) a=vis_new_point(w,&s->scene,px[i],py[i],angle,h,&q->x[i],&q->y[i]);
+        if (a && !b) b=vis_new_point(w,&s->scene,px[j],py[j],angle,h,&q->x[j],&q->y[j]);
         if (!a || !b) return 0;
     }
     return 1;
 }
 
-int render_prop_texture(const world_camera *camera,const world_object *o)
-{
-    int texture=o->texture,rotations=o->rotations;
-    uint16_t relative;
-    unsigned e;
-    if (rotations<=1 && rotations!=-3 && rotations!=-9) return texture;
-    relative=(uint16_t)(cm_atan64k(o->x,o->y,camera->u,camera->v)-o->heading);
-    if (rotations>1) {
-        relative=(uint16_t)(relative+32768/rotations);
-        texture+=relative/(65536/rotations);
-    } else if (rotations==-3) {
-        e=(uint16_t)(relative+4096)>>13;
-        if (e) texture+=e<5 ? 1:(o->prop_kind==3 ? 2:7);
-    } else {
-        e=(uint16_t)(relative+2048)>>12;
-        if (e) texture+=(e>4 && e<14) ? 5:(e>13 ? e-8:e);
-    }
-    return texture;
-}
-
-static int prop(const world *w,render_state *s,unsigned object,unsigned light,
-                render_visibility_list *out)
+static int prop(const world *w,render_state *s,unsigned object,unsigned light)
 {
     const world_object *o=r_object(w,s,object);
-    int texture=render_prop_texture(&s->camera,o),i;
+    int texture=vis_prop_texture(&s->camera,o);
     unsigned ang=(uint16_t)(s->camera.angle+16384)>>5;
     int32_t wc,ws,dc,ds,px[4],py[4],base,bottom,top;
     const render_texture *t;
@@ -60,18 +39,6 @@ static int prop(const world *w,render_state *s,unsigned object,unsigned light,
     bottom=r_mul(r_sub(r_sub(base,t->frame_base),t->frame_height),s->focal);
     top=r_mul(r_sub((o->flags&UINT32_C(0x00001000)) ? base:r_add(base,t->frame_base),t->frame_height),s->focal);
     if (!project_quad(w,s,q,px,py,s->camera.angle,bottom,top)) return 0;
-    if (out) {
-        int left=r_min(q->x[0],q->x[1]),right=r_max(q->x[0],q->x[1]);
-        int y0=s->horizon-q->y[3],y1=s->horizon-q->y[0];
-        if (!(right<0 || left>=s->width || y0>=s->height || y1<0 || y1<y0)) {
-            if (out->count>=CM_OBJECT_MAX) return r_fail(s,"visible prop list full",object);
-            i=(int)out->count++;
-            out->props[i].object=(uint16_t)object;
-            out->props[i].left=s->x+r_max(left,0);
-            out->props[i].right=s->x+r_min(right,s->width-1);
-            out->props[i].targetable=(uint8_t)(o->targetable==1 && (o->flags&R_PACKED));
-        }
-    }
     command->object=(uint16_t)object;command->texture=(uint16_t)texture;
     command->kind=RENDER_PROP;command->light=(uint8_t)light;command->horizon=s->horizon;
     ++s->command_count;
@@ -107,7 +74,7 @@ static int flat(const world *w,render_state *s,unsigned object,int top,unsigned 
     if (top) s->horizon=s->height/2+r_mul(s->camera.pitch,s->height/2)/240;
     wx[0]=wx[3]=r_sub(o->x,o->radius);wx[1]=wx[2]=r_add(o->x,o->radius);
     wy[0]=wy[1]=r_sub(o->y,o->height);wy[2]=wy[3]=r_add(o->y,o->height);
-    for (i=0;i<4;++i) q->visible[i]=(uint8_t)r_project(w,s,wx[i],wy[i],h,&q->x[i],&q->y[i],R_NEAR);
+    for (i=0;i<4;++i) q->visible[i]=(uint8_t)vis_project(&s->scene,wx[i],wy[i],h,&q->x[i],&q->y[i],R_NEAR);
     command->object=(uint16_t)object;command->kind=RENDER_FLAT;command->top=(uint8_t)top;
     command->height=h;command->horizon=s->horizon;command->light=(uint8_t)light;
     ++s->command_count;
@@ -115,7 +82,7 @@ static int flat(const world *w,render_state *s,unsigned object,int top,unsigned 
     return 0;
 }
 
-int r_scene(const world *w,render_state *s,render_visibility_list *out)
+int r_scene(const world *w,render_state *s)
 {
     int cell=s->scene.cell_head;
     while (cell>=0) {
@@ -135,7 +102,7 @@ int r_scene(const world *w,render_state *s,render_visibility_list *out)
                         draw=1;s->scene.object_count[object]=0;
                     }
                 } else draw=--s->scene.object_count[object]==0;
-                if (draw && prop(w,s,object,light,out)) return -1;
+                if (draw && prop(w,s,object,light)) return -1;
                 draw=0;
             } else if (o->flags&R_FLAT) {
                 if (o->z<s->camera.z && (o->flags&R_FLOOR)) {if (flat(w,s,object,0,light)) return -1;}

@@ -3,50 +3,6 @@
 
 static vis_state state;
 
-/* RWCPlot 62C28: retain the original wrapping screen-x multiply. */
-static int project(const vis_state *s,int32_t x,int32_t y,int32_t h,
-                   int32_t *sx,int32_t *sy,int32_t near)
-{
-    int32_t dx=vis_sub(x,s->camera.u),dy=vis_sub(y,s->camera.v),rx,ry;
-    rx=vis_sub(vis_mul16(s->camera_cos,dx),vis_mul16(s->camera_sin,dy));
-    ry=vis_add(vis_mul16(s->camera_sin,dx),vis_mul16(s->camera_cos,dy));
-    if (rx<=near) return 0;
-    *sx=vis_sub(s->width/2,vis_mul(ry,s->focal)/rx);*sy=h/rx;
-    return 1;
-}
-
-static int new_point(const world *w,const vis_state *s,int32_t x,int32_t y,
-                     int32_t h,int32_t *sx,int32_t *sy)
-{
-    int32_t rx;
-    cm_fixed_rotate(&w->trig,&x,&y,s->camera.u,s->camera.v,(uint16_t)-s->camera.angle);
-    rx=vis_sub(x,s->camera.u);
-    y=vis_sub(s->camera.v,vis_mul16(rx,w->trig.tan[2047]));
-    y=vis_add(y,2048);
-    cm_fixed_rotate(&w->trig,&x,&y,s->camera.u,s->camera.v,s->camera.angle);
-    return project(s,x,y,h,sx,sy,256);
-}
-
-static int prop_texture(const world_camera *c,const world_object *o)
-{
-    int texture=o->texture,rotations=o->rotations;
-    uint16_t relative;
-    unsigned e;
-    if (rotations<=1 && rotations!=-3 && rotations!=-9) return texture;
-    relative=(uint16_t)(cm_atan64k(o->x,o->y,c->u,c->v)-o->heading);
-    if (rotations>1) {
-        relative=(uint16_t)(relative+32768/rotations);
-        texture+=relative/(65536/rotations);
-    } else if (rotations==-3) {
-        e=(uint16_t)(relative+4096)>>13;
-        if (e) texture+=e<5 ? 1:(o->prop_kind==3 ? 2:7);
-    } else {
-        e=(uint16_t)(relative+2048)>>12;
-        if (e) texture+=(e>4 && e<14) ? 5:(e>13 ? e-8:e);
-    }
-    return texture;
-}
-
 /* DrawPackProp/Invis/Aura append after projection and inclusive XY clipping;
  * DrawMaskProp never appends. Pixel coverage/occlusion is not consulted. */
 static int collect(const world *w,vis_state *s,unsigned object,target_list *out)
@@ -58,7 +14,7 @@ static int collect(const world *w,vis_state *s,unsigned object,target_list *out)
     int32_t wc,ws,dc,ds,px[4],py[4],qx[4],qy[4],base,bottom,top;
     int32_t left,right,y0,y1;
     if (o->targetable!=1 || !(o->flags&VIS_PACKED)) return 0;
-    texture=prop_texture(&s->camera,o);
+    texture=vis_prop_texture(&s->camera,o);
     if (texture<0 || (unsigned)texture>=w->texture_count)
         return vis_fail(s,"prop frame index",object);
     t=&w->textures[texture];
@@ -72,10 +28,10 @@ static int collect(const world *w,vis_state *s,unsigned object,target_list *out)
     for (pair=0;pair<4;pair+=2) {
         unsigned j=pair+1;
         int32_t h=pair ? top:bottom;
-        int a=project(s,px[pair],py[pair],h,&qx[pair],&qy[pair],VIS_NEAR);
-        int b=project(s,px[j],py[j],h,&qx[j],&qy[j],VIS_NEAR);
-        if (b && !a) a=new_point(w,s,px[pair],py[pair],h,&qx[pair],&qy[pair]);
-        if (a && !b) b=new_point(w,s,px[j],py[j],h,&qx[j],&qy[j]);
+        int a=vis_project(s,px[pair],py[pair],h,&qx[pair],&qy[pair],VIS_NEAR);
+        int b=vis_project(s,px[j],py[j],h,&qx[j],&qy[j],VIS_NEAR);
+        if (b && !a) a=vis_new_point(w,s,px[pair],py[pair],s->camera.angle,h,&qx[pair],&qy[pair]);
+        if (a && !b) b=vis_new_point(w,s,px[j],py[j],s->camera.angle,h,&qx[j],&qy[j]);
         if (!a || !b) return 0;
     }
     left=vis_min(qx[0],qx[1]);right=vis_max(qx[0],qx[1]);
