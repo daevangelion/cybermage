@@ -123,3 +123,31 @@ negative16-bit inputs),16 FixedRotate vectors and40 sight/missile vectors spanni
 all quadrants/axes and wall-flag classes. Native tests cover downward-floor quirks,
 zero-bound RND, BIOS middle-word-only seeding, SetPERSON state99, directional
 texture aliases and FXONEWS length validation.
+
+## Scene1 original checkpoint comparison
+
+```
+tools/run_capped.sh .venv/bin/python tools/world_compare.py \
+  port/build/world/test_world captures/newgame/scene-start.xox \
+  --persons captures/newgame/scene-start.persons
+```
+
+Observed **106,640 matched values, zero mismatches** at the original first
+HandleNextFrame entry. The native test independently loads retail resources;
+the snapshot is read only by the comparison tool, never used to initialize C.
+Coverage: all4096 cells/eight map attributes,256 map IDs,32 lights,16 curves,
+1024 texture dimension/geometry records, both complete12,392-node spatial pools,
+15 fields of1088 placed objects and eight identity/state/animation fields of
+152 PERSON records.
+
+Counts have explicit ownership differences: World has1088 placed objects versus
+1113 after the original's12 missile+10 soul+3 temporary slots; native integration
+adds those through AI initialization and world_finalize_scene. World has1024
+texture slots at this boundary versus1037 after original temporary hand/DOS-memory
+prop loading (UI's layer). This comparison does not claim all Xox bytes, AI combat
+state, temporary object contents, rendered pixels or every scene are identical.
+
+`make -C port check` invokes `tests/world.mk`; the focused check above exercised
+all11 scene loads and original math/ray vectors. The wave integrator owns the
+combined application/check gate. Expected negative tests print explicit errors
+for a bad map length, off-map object and monitor bitmap length mismatch.
