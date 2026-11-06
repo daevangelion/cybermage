@@ -58,7 +58,7 @@ const char *glr_world_fragment(void)
     "uint index=texelFetch(u_index,tc,0).r;"
     "if(((mode&1u)!=0u&&index==0u)||((mode&2u)!=0u&&texelFetch(u_alpha,tc,0).r==0u))discard;"
     "int d=int(dot(v_world.xy-u_camera.xy,u_yaw)*65536.0),row;"
-    "int light=int(v_material.x);ivec2 l=u_lights[light];ivec3 curve=light==0?u_default_curve:u_curves[light<16?light:0];"
+    "int light=int(v_material.x);ivec2 l=u_lights[light];ivec3 curve=(light!=0&&l.x==6)?u_curves[light]:u_default_curve;"
     "int parity=(pixel.x+pixel.y+u_frame+u_parity_origin)&1;"
     "if((mode&4u)!=0u){if(parity==0)discard;index=texelFetch(u_previous,pixel,0).r;row=min(shade(d,curve)+16,63);}"
     "else if((mode&8u)!=0u)row=parity!=0?73:0;"

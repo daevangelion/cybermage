@@ -4,11 +4,11 @@ CPPFLAGS += -Iinclude $(shell pkg-config --cflags sdl2)
 CFLAGS ?= -O2 -g
 CFLAGS += -std=c99 -pedantic -Wall -Wextra -Werror
 LDLIBS += $(shell pkg-config --libs sdl2) -lm
-SOURCES := $(wildcard src/render/*.c src/render_gl/*.c src/world/*.c src/controls/*.c) src/exe.c src/gfx.c src/rsc.c src/platform_sdl.c src/audio/mixer.c src/audio/music.c src/audio/synth.c src/audio/opl3.c
+SOURCES := $(filter-out src/main.c,$(wildcard src/*.c src/*/*.c))
 OBJECTS := $(patsubst src/%.c,$(B)/%.o,$(SOURCES))
 HEADERS := $(wildcard include/*.h src/render_gl/*.h)
 
-.PHONY: scene scene-es check
+.PHONY: scene scene-es check check-gl check-gl-es
 scene: $(B)/render_gl_scene
 scene-es: $(B)/render_gl_scene_es
 $(B)/%.o: src/%.c
@@ -20,6 +20,14 @@ $(B)/platform_sdl_es.o: src/platform_sdl.c $(HEADERS)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -DCM_OPENGL_ES -c -o $@ $<
 $(B)/render_gl_scene_es: tests/render_gl_scene.c $(filter-out $(B)/platform_sdl.o,$(OBJECTS)) $(B)/platform_sdl_es.o $(HEADERS)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ tests/render_gl_scene.c $(filter-out $(B)/platform_sdl.o,$(OBJECTS)) $(B)/platform_sdl_es.o $(LDLIBS)
+$(B)/test_render_gl_runtime: tests/test_render_gl_runtime.c $(OBJECTS) $(HEADERS)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ tests/test_render_gl_runtime.c $(OBJECTS) $(LDLIBS)
+$(B)/test_render_gl_runtime_es: tests/test_render_gl_runtime.c $(filter-out $(B)/platform_sdl.o,$(OBJECTS)) $(B)/platform_sdl_es.o $(HEADERS)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ tests/test_render_gl_runtime.c $(filter-out $(B)/platform_sdl.o,$(OBJECTS)) $(B)/platform_sdl_es.o $(LDLIBS)
+check-gl: $(B)/test_render_gl_runtime
+	$(B)/test_render_gl_runtime
+check-gl-es: $(B)/test_render_gl_runtime_es
+	$(B)/test_render_gl_runtime_es
 check: $(B)/test_render_gl
 	$(B)/test_render_gl
 $(B)/test_render_gl: tests/test_render_gl.c src/gfx.c src/render_gl/mesh.c src/render_gl/texture.c tests/media_error.c $(HEADERS)

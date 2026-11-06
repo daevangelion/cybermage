@@ -139,3 +139,7 @@ SDL's offscreen/EGL driver ran both desktop and ES3 shader versions on Mesa
 Intel UHD630. Their640x480 outputs matched at0/307200 pixels. Real GL overlay
 tests compare every resolved pixel at640x480 and1920x1080 against indexed
 replace/shade/source-copy operators, including opaque0/255 and aspect scaling.
+Optional `check-gl` / `check-gl-es` exercise real GPU packed/masked coverage,
+invisibility/aura parity, moving panel updates, shade/fixed/fog maps, raised
+floors/topflats and sky/fog modes. Both passed on Mesa26.2.5: desktop4.6 core
+and ES3.2 contexts executing the330/300 shader prefixes respectively.

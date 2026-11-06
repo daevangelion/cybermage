@@ -6,6 +6,7 @@
 
 /* Enhanced presentation only. Visibility/targeting always use render.h. */
 int render_gl_open(int headless,unsigned width,unsigned height);
+int render_gl_palette(const uint8_t palette[768]);
 int render_gl_load(const world *w,const render_state *assets,
                     const uint8_t palette[768]);
 int render_gl_resize(unsigned width,unsigned height);
