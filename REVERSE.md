@@ -96,7 +96,7 @@ known gaps are deliberate; implementation is not full-game parity.
 | target | Original combat order MATCH, conditional input scope below | `tools/compare_targets.py`:1298 completed checkpoints, all13 original nonempty, zero mismatches | Broader scenes/combat routes ([AI](docs/re/ai.md)) |
 | render_sw | Implemented; scoped complete newgame frame exact | Render gate and `tools/compare_frames.py`:completed newgame frame115 differs0/307200; renderer-only views exact outside hand footprints | Moving props, other scenes, painter ties/extreme pitch ([render](docs/re/render.md)) |
 | render_gl | Opt-in enhanced backend integrated | `tests/render_gl.mk check check-gl check-gl-es scene scene-es`; real640/1920 app replays MATCH; title/HUD exact against SW | Not DOS-raster-exact; broader scene/device acceptance ([render](docs/re/render.md)) |
-| classic input/Sim | Named138-scenario gate:138 actor/RNG MATCH,138 player MATCH | Both106-row movement traces,1299 combat,2033 water/127 wet, original mouse154 and real death/restart/load routes MATCH | No observed divergence in this cohort; legacy joystick and broader flight/multi-scene routes unverified ([Sim](docs/re/sim.md)) |
+| classic input/Sim | Named140-scenario gate:140 actor/RNG MATCH,140 player MATCH | Both106-row movement traces,1299 combat,2033 water/127 wet, original mouse154 and real death/restart/load routes MATCH | No observed divergence in this cohort; legacy joystick and broader flight/multi-scene routes unverified ([Sim](docs/re/sim.md)) |
 | modern controls | Desktop opt-in; Android default action/touch/controller layer | `make -C port -f tests/controls.mk B=build/Controls controls-check`; Android virtual-stick walking verified | Physical-controller/long-play usability ([controls](docs/re/controls.md)) |
 | save/load | Codec, live bridges and genuine saved-start replay integrated | Retail SAVE010246045 bytes/GAMENAME288 round-trip; `--replay-load-slot 0`:earned Training94 and water94 player records MATCH | Full original-save playthrough and demo format ([UI](docs/re/ui.md),[Sim](docs/re/sim.md)) |
 | Events/inventory/vehicles | All90 dispatches; genuine tank entry/exit reducer MATCH | `tests/events.mk`; saved-start `events_trace`:Training639 frames/22,009,716 event bytes/116 vehicle rows MATCH; water94/3,237,736 bytes | Reducer consumes measured Sim phase inputs; full vehicle/multi-scene gameplay not established ([Events](docs/re/events.md)) |
@@ -112,9 +112,11 @@ isolated `git archive` snapshot, strict build and complete `make -C port check`
 and separate five-group phase/six-target controls gates exit0. Receipt
 [gate-c2a3a0c.json](docs/re/gate-c2a3a0c.json) pins binary SHA256
 `999faea924a19e8f471f0b00d3f87bbf5b60863471758fd6164f1c6975e40429`
-and the full134-scenario gate plus four newly earned route segments:
-138/138 full actor/RNG MATCH,138/138 player MATCH,38,107 original state
-records and5,740,606 actor checkpoints. The archive includes Review2 through
+and the full134-scenario gate plus four newly earned route segments and two
+explicitly labeled save-before-death/failed-hop regressions:
+140/140 full actor/RNG MATCH,140/140 player MATCH,38,193 original state
+records and5,753,206 actor checkpoints. The latter two add no continuous-survival
+or decoder-acquisition claim. The archive includes Review2 through
 87e5f55 and Events2's deferred ordinary-pickup correction. All four originally
 reported divergences, type59 spawn heading, and weapon-room RNG71 are now
 fixed and re-gated. Original CollItem435AA..435C9 queues pickups;
