@@ -40,7 +40,7 @@ static void selector_key(unsigned scan)
 /* Run while main still owns the loaded resources; no duplicated scene loader. */
 void sim_loop_checks(void)
 {
-    frame_draw draw = {0, NULL};
+    frame_draw draw = {0};
     world_object position = game.objects[game.player_object];
     if(generic_hand) {
         assert(game.scene==1 && simulation.pc_mode==3 && !events.selector_kind);

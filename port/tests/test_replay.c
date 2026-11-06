@@ -3,14 +3,15 @@
 #include <stdio.h>
 #include <string.h>
 
-static char trace[4096], clocks[512], draw_data[2048], ui_data[512];
-static const char *clock_input, *draw_input, *ui_input;
+static char trace[4096], clocks[512], draw_data[2048], ui_data[512], mouse_data[4096];
+static const char *clock_input, *draw_input, *ui_input, *mouse_input;
 
 int platform_file_exists(const char *path)
 {
     if (strstr(path, "actor-clocks.csv")) return clock_input != NULL;
     if (strstr(path, "draw-clocks.csv")) return draw_input != NULL;
     if (strstr(path, "ui-actions.csv")) return ui_input != NULL;
+    if (strstr(path, "mouse-input.csv")) return mouse_input != NULL;
     return 0;
 }
 
@@ -31,6 +32,11 @@ int platform_file_read(cm_file *file, const char *path)
         memcpy(ui_data, ui_input, strlen(ui_input) + 1);
         file->data = (uint8_t *)ui_data;
         file->size = (uint32_t)strlen(ui_data);
+    } else if (strstr(path, "mouse-input.csv")) {
+        if (!mouse_input) return -1;
+        memcpy(mouse_data, mouse_input, strlen(mouse_input) + 1);
+        file->data = (uint8_t *)mouse_data;
+        file->size = (uint32_t)strlen(mouse_data);
     } else {
         file->data = (uint8_t *)trace;
         file->size = (uint32_t)strlen(trace);
@@ -43,7 +49,7 @@ static void fixture(void)
 {
     unsigned frame, column;
     size_t at;
-    draw_input = ui_input = NULL;
+    draw_input = ui_input = mouse_input = NULL;
     memset(trace, 0, sizeof trace);
     at = (size_t)snprintf(trace, sizeof trace,
         "CMTRACE1,0\nframe,ticks,previous,delta,limit_time,limit_flag,object,person,"
@@ -135,6 +141,58 @@ static void draw_controls(void)
     replay_close(&r);
 }
 
+static void mouse_controls(void)
+{
+    static const char header[] = "sequence,frame,ticks,caller,x,y,buttons,mickey_x,mickey_y,press_left,press_right,in_device,mouse_present,joystick_present\n";
+    cm_replay r;
+    cm_replay_frame frame;
+    cm_input input = {0};
+    fixture(); clock_input = NULL;
+    mouse_input = "sequence,frame,ticks,caller,x,y,buttons,mickey_x,mickey_y,press_left,press_right,in_device,mouse_present,joystick_present\n"
+        "0,-1,10,54196,320,100,1,0,0,1,0,0,0,1\n"
+        "1,0,11,4e1ef,180,50,0,-2,-3,0,0,2,0,65535\n"
+        "2,0,12,57f38,320,120,2,140,70,0,1,2,0,65535\n"
+        "3,1,13,57f38,200,110,1,-16,-8,2,0,0,0,0\n";
+    input.mouse_present = 77; input.joystick_present = 88;
+    assert(!replay_open(&r, "frames.csv") && replay_next(&r, &frame) == 1);
+    assert(!replay_mouse_input(&r, 0, 1, &input));
+    assert(input.mouse_x == 180 && input.mouse_y == 100);
+    assert(input.mouse_mickey_x == -2 && input.mouse_mickey_y == -3);
+    assert(!input.mouse_buttons && !input.mouse_press_count[0]); /* Not ORed UI clicks. */
+    assert(input.mouse_present == 77 && input.joystick_present == 88); /* Audits never installed. */
+    assert(!replay_mouse_poll(&r, 0, &input));
+    assert(input.mouse_x == 320 && input.mouse_y == 240 && input.mouse_buttons == 4);
+    assert(input.mouse_mickey_x == 140 && input.mouse_mickey_y == 70);
+    assert(input.mouse_press_count[1] == 1);
+    assert(replay_next(&r, &frame) == 1);
+    assert(!replay_mouse_input(&r, 1, 1, &input));
+    assert(input.mouse_mickey_x == 140 && input.mouse_mickey_y == 70); /* Previous draw's poll. */
+    assert(!replay_mouse_poll(&r, 1, &input));
+    assert(input.mouse_buttons == 1 && input.mouse_press_count[0] == 2);
+    assert(input.mouse_mickey_x == -16 && input.mouse_mickey_y == -8);
+    assert(replay_next(&r, &frame) == 1 && !replay_next(&r, &frame));
+    replay_close(&r);
+    fixture();
+    assert(!replay_open(&r, "frames.csv") && replay_next(&r, &frame) == 1);
+    assert(!replay_mouse_input(&r, 0, 0, &input));
+    assert(replay_mouse_input(&r, 0, 1, &input) == -1);
+    assert(!strcmp(cm_last_error()->file, "mouse-input.csv"));
+    replay_close(&r);
+    fixture();
+    mouse_input = header;
+    assert(!replay_open(&r, "frames.csv") && replay_next(&r, &frame) == 1);
+    assert(replay_mouse_input(&r, 0, 1, &input) == -1);
+    replay_close(&r);
+    fixture();
+    mouse_input = "sequence,frame,ticks,caller,x,y,buttons,mickey_x,mickey_y,press_left,press_right,in_device,mouse_present,joystick_present\n"
+        "0,-1,10,54196,320,100,0,32768,65535,0,0,1,1,0\n";
+    assert(!replay_open(&r, "frames.csv") && replay_next(&r, &frame) == 1);
+    assert(!replay_mouse_input(&r, 0, 1, &input));
+    assert(input.mouse_mickey_x == INT16_MIN && input.mouse_mickey_y == -1);
+    assert(replay_mouse_poll(&r, 0, &input) == -1);
+    replay_close(&r);
+}
+
 int main(void)
 {
     cm_replay r;
@@ -213,5 +271,6 @@ int main(void)
     replay_input(&s, &f);
     assert(s.bios_shift == 4);
     draw_controls();
+    mouse_controls();
     return 0;
 }

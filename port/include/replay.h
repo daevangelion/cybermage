@@ -15,15 +15,30 @@ typedef struct {
     uint8_t name[24];
 } cm_replay_ui;
 typedef struct {
-    cm_file file, actor_clocks, draw_clocks, ui_actions;
+    int32_t x, y, mickey_x, mickey_y;
+    uint16_t buttons, press_count[2];
+} cm_replay_mouse_value;
+typedef struct {
+    int64_t frame;
+    uint32_t ticks, caller;
+    cm_replay_mouse_value value;
+} cm_replay_mouse;
+typedef struct {
+    cm_file file, actor_clocks, draw_clocks, ui_actions, mouse_inputs;
     const char *path;
     char actor_clock_path[1024];
     char draw_clock_path[1024], ui_action_path[1024];
+    char mouse_input_path[1024];
     uint32_t next, frame;
     uint32_t actor_clock_next;
     uint32_t draw_clock_next, ui_action_next;
+    uint32_t mouse_input_next;
+    uint64_t mouse_sequence;
     cm_replay_draw draw_pending;
     cm_replay_ui ui_pending;
+    cm_replay_mouse mouse_pending;
+    cm_replay_mouse_value mouse_cached;
+    int has_mouse_pending, has_mouse_cached;
     uint32_t draw_frame, draw_index, draw_phase;
     int has_draw_pending, has_ui_pending, draw_active, has_draw_frame, draw_reads;
     unsigned range_count;
@@ -61,6 +76,10 @@ int replay_draw_clock(cm_replay *r, uint32_t site, uint32_t *ticks);
 int replay_draw_end(cm_replay *r);
 /* Completed menu inputs before this frame's simulation:1 row,0 none,-1 bad. */
 int replay_ui_next(cm_replay *r, uint32_t frame, cm_replay_ui *action);
+/* ReadStatus returns are cached until the next real poll, like DOS.
+ * required comes from actual CMDATA input-device selection, never audits. */
+int replay_mouse_input(cm_replay *r, uint32_t frame, int required, cm_input *input);
+int replay_mouse_poll(cm_replay *r, uint32_t frame, cm_input *input);
 void replay_input(sim_state *s, const cm_replay_frame *f);
 const char *replay_compare(const world *w, const cm_replay_frame *f,
                             int64_t *expected, int64_t *actual);

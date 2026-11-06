@@ -148,12 +148,13 @@ static int actor_clock_metadata(cm_replay *r)
     return 0;
 }
 
-static int draw_metadata(cm_replay *r, cm_file *file, char *path, size_t capacity,
-                         uint32_t *next, const char *name, const char *const header[5])
+static int trace_metadata(cm_replay *r, cm_file *file, char *path, size_t capacity,
+                          uint32_t *next, const char *name, const char *const *header,
+                          unsigned count)
 {
     const char *slash = strrchr(r->path, '/');
     size_t prefix = slash ? (size_t)(slash - r->path) + 1 : 0;
-    char *fields[5];
+    char *fields[14];
     unsigned i;
     int exists, n;
     if (prefix + strlen(name) + 1 > capacity)
@@ -163,11 +164,11 @@ static int draw_metadata(cm_replay *r, cm_file *file, char *path, size_t capacit
     exists = platform_file_exists(path);
     if (exists <= 0) return exists < 0 ? -1 : 0;
     if (platform_file_read(file, path)) return -1;
-    n = read_line(file, next, path, fields, 5);
+    n = read_line(file, next, path, fields, count);
     if (n < 0) return -1;
-    if (n != 5) return cm_fail(path, 0, "invalid draw metadata header");
-    for (i = 0; i < 5; ++i)
-        if (strcmp(fields[i], header[i])) return cm_fail(path, 0, "invalid draw metadata header");
+    if ((unsigned)n != count) return cm_fail(path, 0, "invalid input metadata header");
+    for (i = 0; i < count; ++i)
+        if (strcmp(fields[i], header[i])) return cm_fail(path, 0, "invalid input metadata header");
     return 0;
 }
 
@@ -290,10 +291,128 @@ int replay_ui_next(cm_replay *r, uint32_t frame, cm_replay_ui *action)
     return 1;
 }
 
+static int mouse_peek(cm_replay *r)
+{
+    char *fields[14];
+    int64_t word[14];
+    unsigned i;
+    int n;
+    if (r->has_mouse_pending) return 1;
+    n = read_line(&r->mouse_inputs, &r->mouse_input_next, r->mouse_input_path, fields, 14);
+    if (n <= 0) return n;
+    if (n != 14) goto bad;
+    for (i = 0; i < 14; ++i) {
+        int64_t minimum = i == 1 ? -1 : (i == 4 || i == 5 || i == 7 || i == 8) ?
+            INT32_MIN : 0;
+        int64_t maximum = i == 0 ? INT64_MAX : (i == 4 || i == 5 || i == 7 || i == 8) ?
+            INT32_MAX : UINT32_MAX;
+        if (integer(fields[i], i == 3 ? 16 : 10, minimum, maximum, &word[i])) goto bad;
+    }
+    if ((uint64_t)word[0] != r->mouse_sequence || word[4] < INT16_MIN ||
+        word[4] > INT16_MAX || word[5] < INT16_MIN || word[5] > INT16_MAX ||
+        word[6] > 7 || word[9] > UINT16_MAX || word[10] > UINT16_MAX) goto bad;
+    r->mouse_pending.frame = word[1];
+    r->mouse_pending.ticks = (uint32_t)word[2];
+    r->mouse_pending.caller = (uint32_t)word[3];
+    r->mouse_pending.value.x = (int32_t)word[4];
+    r->mouse_pending.value.y = (int32_t)word[5];
+    r->mouse_pending.value.buttons = (uint16_t)word[6];
+    r->mouse_pending.value.mickey_x = (int32_t)word[7];
+    r->mouse_pending.value.mickey_y = (int32_t)word[8];
+    r->mouse_pending.value.press_count[0] = (uint16_t)word[9];
+    r->mouse_pending.value.press_count[1] = (uint16_t)word[10];
+    /* Columns11..13 are original routing audits, not native state inputs. */
+    ++r->mouse_sequence;
+    r->has_mouse_pending = 1;
+    return 1;
+bad:
+    return cm_fail(r->mouse_input_path, r->mouse_input_next, "invalid hardware mouse input");
+}
+
+static int mouse_pre_caller(uint32_t caller)
+{
+    return caller == 0x4e1ef || caller == 0x54196 || caller == 0x1ed2d ||
+           caller == 0x1bb72 || caller == 0x1c16e;
+}
+
+static int16_t mouse_word(int32_t value)
+{
+    uint16_t bits = (uint16_t)(uint32_t)value;
+    return bits <= INT16_MAX ? (int16_t)bits : (int16_t)((int)bits - 65536);
+}
+
+static void mouse_consume(cm_replay *r)
+{
+    r->mouse_cached = r->mouse_pending.value;
+    r->has_mouse_cached = 1;
+    r->has_mouse_pending = 0;
+}
+
+static void mouse_apply(const cm_replay *r, cm_input *input)
+{
+    const cm_replay_mouse_value *value = &r->mouse_cached;
+    unsigned buttons;
+    if (!r->has_mouse_cached) return;
+    buttons = (value->buttons & 1u) | (value->buttons & 2u) << 1 |
+              (value->buttons & 4u) >> 1;
+    input->mouse_released = input->mouse_buttons & ~buttons;
+    input->mouse_x = value->x;
+    input->mouse_y = value->y * 2;
+    input->mouse_buttons = buttons;
+    input->mouse_pressed = (value->press_count[0] ? 1u : 0u) |
+                           (value->press_count[1] ? 4u : 0u);
+    input->mouse_press_count[0] = value->press_count[0];
+    input->mouse_press_count[1] = value->press_count[1];
+    input->mouse_mickey_x = mouse_word(value->mickey_x);
+    input->mouse_mickey_y = mouse_word(value->mickey_y);
+}
+
+static int mouse_failure(cm_replay *r, uint32_t frame, const char *reason)
+{
+    static char message[160];
+    snprintf(message, sizeof message, "frame=%u: %s", (unsigned)frame, reason);
+    return cm_fail(r->mouse_input_path, frame, message);
+}
+
+int replay_mouse_input(cm_replay *r, uint32_t frame, int required, cm_input *input)
+{
+    int n;
+    if (required && !r->mouse_inputs.data)
+        return mouse_failure(r, frame, "missing measured mouse input file");
+    while ((n = mouse_peek(r)) > 0) {
+        if (r->mouse_pending.frame > frame ||
+            (r->mouse_pending.frame == frame && r->mouse_pending.caller == 0x57f38)) break;
+        if ((r->mouse_pending.caller == 0x57f38 && r->mouse_pending.frame != -1) ||
+            (r->mouse_pending.caller != 0x57f38 &&
+             !mouse_pre_caller(r->mouse_pending.caller)))
+            return mouse_failure(r, frame, "missed or unsupported ReadStatus poll");
+        mouse_consume(r); /* Execute each UI/bootstrap poll; never OR counters. */
+    }
+    if (n < 0) return -1;
+    if (required && !r->has_mouse_cached)
+        return mouse_failure(r, frame, "missing initial ReadStatus input");
+    mouse_apply(r, input);
+    return 0;
+}
+
+int replay_mouse_poll(cm_replay *r, uint32_t frame, cm_input *input)
+{
+    int n = mouse_peek(r);
+    if (n < 0) return -1;
+    if (!n || r->mouse_pending.frame != frame || r->mouse_pending.caller != 0x57f38)
+        return mouse_failure(r, frame, "missing draw ReadStatus input");
+    mouse_consume(r);
+    mouse_apply(r, input);
+    return 0;
+}
+
 int replay_open(cm_replay *r, const char *path)
 {
     static const char *const draw_header[5] = {"frame","draw","phase","pc","ticks"};
     static const char *const ui_header[5] = {"frame","ticks","action","slot","name_hex24"};
+    static const char *const mouse_header[14] = {"sequence","frame","ticks","caller",
+        "x","y","buttons","mickey_x","mickey_y","press_left","press_right",
+        "in_device","mouse_present","joystick_present"};
     char *fields[TRACE_FIELDS_MAX];
     int64_t n, address, length;
     uint32_t total = 0;
@@ -321,10 +440,12 @@ int replay_open(cm_replay *r, const char *path)
         strcmp(fields[CM_TRACE_COLUMNS + 1], "input_keys") ||
         strcmp(fields[CM_TRACE_COLUMNS + 2], "ranges...")) goto bad;
     if (seed_metadata(r) || actor_clock_metadata(r) ||
-        draw_metadata(r, &r->draw_clocks, r->draw_clock_path, sizeof r->draw_clock_path,
-                      &r->draw_clock_next, "draw-clocks.csv", draw_header) ||
-        draw_metadata(r, &r->ui_actions, r->ui_action_path, sizeof r->ui_action_path,
-                      &r->ui_action_next, "ui-actions.csv", ui_header)) {
+        trace_metadata(r, &r->draw_clocks, r->draw_clock_path, sizeof r->draw_clock_path,
+                       &r->draw_clock_next, "draw-clocks.csv", draw_header, 5) ||
+        trace_metadata(r, &r->ui_actions, r->ui_action_path, sizeof r->ui_action_path,
+                       &r->ui_action_next, "ui-actions.csv", ui_header, 5) ||
+        trace_metadata(r, &r->mouse_inputs, r->mouse_input_path, sizeof r->mouse_input_path,
+                       &r->mouse_input_next, "mouse-input.csv", mouse_header, 14)) {
         replay_close(r);
         return -1;
     }
@@ -340,6 +461,7 @@ void replay_close(cm_replay *r)
     platform_file_release(&r->actor_clocks);
     platform_file_release(&r->draw_clocks);
     platform_file_release(&r->ui_actions);
+    platform_file_release(&r->mouse_inputs);
 }
 
 int replay_next(cm_replay *r, cm_replay_frame *frame)
@@ -361,6 +483,12 @@ int replay_next(cm_replay *r, cm_replay_frame *frame)
             if (!r->frame || r->ui_pending.frame != r->frame - 1)
                 return cm_fail(r->ui_action_path, r->ui_action_next, "extra or missed UI inputs");
             r->has_ui_pending = 0;
+        }
+        if (n < 0) return -1;
+        while ((n = mouse_peek(r)) > 0) {
+            if (!r->frame || r->mouse_pending.frame != r->frame - 1)
+                return mouse_failure(r, r->frame, "extra or missed mouse inputs");
+            r->has_mouse_pending = 0;
         }
         if (n < 0) return -1;
         return 0;

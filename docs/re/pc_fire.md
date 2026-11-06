@@ -140,7 +140,31 @@ slot11 record. The added pool-size control failed4!=12 before the cutover.
 
 This is not all-weapons/full-firefight parity. The direct hand fixtures have no NPC
 targets; genuine earned-weapon pickup/punch verification is separate. Legacy mouse/
-tank hand activity still needs its input bridge; bob and keyboard producers are live.
+tank activity uses the hardware input bridge below; bob and keyboard producers are live.
+
+### Physical mouse replay
+
+`mouse-input.csv` is a driver-input stream, not a replacement game-state snapshot.
+The canonical CMDATA input-device selection gates an available virtual INT33 driver;
+recorded inDevice/E3510/E3518 columns are audit-only. ReadStatus06BB24 return fields
+are cached in their original order, retaining individual press counters and signed16
+AX0B wrapping. Raw driver coordinates become native `(x,2*y)`; DOS right-button2
+becomes SDL right-button4. Enhanced raw SDL deltas keep their existing units.
+
+The ordinary poll is Aui::Animate057F33, return057F38, **before the next**
+HandleNextFrame. The port feeds its result to that next simulation step.
+SaveGame's nested Image1::Render does not execute this outer poll. Original menu,
+bootstrap and reload polls are processed individually; counters are never ORed
+or replaced by reconstructed absolute-coordinate deltas.
+
+With the genuine original-written Mouse CMDATA.CNF(a40f5572), `coast-load-mouse`
+matches41 player frames and6,000 actor checkpoints/40 completed frames, including
+RNG. `coast-early-fire` matches99 player frames and14,700 actor checkpoints/98
+completed frames, including RNG, actual mouse-fired damage and the save redraw.
+The separate154-frame `mouse-movement` replay matches all player position/heading/
+pitch checkpoints, but its actor/RNG gate first differs at original frame2
+(five extra native RANDOM steps), before the first scripted mouse motion16.
+That NewGame-only discrepancy is not declared fixed by the saved-start controls.
 
 The original-only `vehicle-powerblade` scenario loads the genuinely earned
 `captures/earned-water` slot0, follows the river, stands/vaults onto the dry

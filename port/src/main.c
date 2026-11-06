@@ -56,6 +56,7 @@ static int auto_save = -1;
 typedef struct {
     uint32_t frame;
     cm_replay *trace;
+    cm_input *input;
 } frame_draw;
 
 static int draw_time(void *context, uint32_t site, uint32_t *ticks)
@@ -244,6 +245,12 @@ static int game_draw(frame_draw *draw, unsigned phase)
     /* SpeechMessage019423/TextMessage01942A precedes DrawConsole01942F. */
     if (events_text_finish(&events, &game) ||
         events_countdown(&events, &simulation, &actors, &game)) return -1;
+    /* Outer Aui::Animate057F38 polls before the NEXT HandleNextFrame.
+     * SaveGame's nested Image1::Render does not run the outer poll loop. */
+    if (draw->trace && phase == CM_DRAW_NORMAL && simulation.mouse_present) {
+        if (!draw->input) return cm_fail("mouse replay", draw->frame, "missing physical input target");
+        if (replay_mouse_poll(draw->trace, draw->frame, draw->input)) return -1;
+    }
     return draw->trace ? replay_draw_end(draw->trace) : 0;
 }
 
@@ -864,7 +871,7 @@ int main(int argc, char **argv)
     if (ai_init_pc(&events, &simulation, &game.rng, &exe, 1, platform_ticks(0))) goto out;
     while (!input.quit && (!frames || frame < frames)) {
         uint32_t ticks = platform_ticks(frame);
-        frame_draw draw = {frame, trace ? &replay : NULL};
+        frame_draw draw = {frame, trace ? &replay : NULL, &input};
         ui_action action;
         int shop_modal = 0;
         int movie_canvas = 0, drawable = 1;
@@ -942,6 +949,12 @@ int main(int argc, char **argv)
             input.raw_count = 0;
             memset(input.pressed, 0, sizeof input.pressed);
             memset(input.released, 0, sizeof input.released);
+            /* Virtual INT33 is available; actual CMDATA selection still gates
+             * Sim's routing. No observed E3510/E3518 value is installed. */
+            input.mouse_present = 1;
+            input.joystick_present = 0;
+            if (replay_mouse_input(&replay, frame, simulation.input_device == 1, &input))
+                goto out;
             {
                 cm_replay_ui command;
                 int next;
