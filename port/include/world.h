@@ -23,6 +23,7 @@ typedef struct {
     uint16_t heading, target_angle; /* +7E65C, +7FC90 */
     uint16_t texture;               /* +81DDE */
     int16_t person;                 /* +7B9F4 */
+    int16_t unk_74AF0;              /* collision half-width */
     uint8_t active;                 /* +7DB42 */
     uint8_t targetable;             /* +7D028 */
     uint8_t target_mode;            /* +812C4 */
@@ -53,6 +54,8 @@ typedef struct {
     int16_t unk_00B4, water, unk_00B8, unk_00BA;
     uint8_t unk_00BC, unk_00BD;
     int16_t unk_00BE;
+    unsigned placement_index; /* scene PERSON disk record; not serialized in C0. */
+    unsigned monster_index; /* original compact runtime monster slot at +4 */
 } world_person;
 
 typedef struct {
@@ -73,6 +76,20 @@ typedef struct {
     uint32_t width, height;
     world_span pixels;
 } world_panel;
+enum { WORLD_TEX_PANEL, WORLD_TEX_FXO, WORLD_TEX_PROP, WORLD_TEX_ANIM };
+typedef struct {
+    unsigned kind, resource, frame;
+    int32_t width, height; /* original TEX_W/TEX_H half dimensions */
+    int32_t half_w, base, depth, frame_height;
+    uint8_t rotations;
+    uint8_t packed, rotate;
+    world_span pixels;
+} world_texture;
+typedef struct {
+    uint16_t textures[80];
+    uint8_t prop_kind[80];
+    uint8_t loaded;
+} world_gsx;
 typedef struct {
     int32_t min_x, max_x, min_y, max_y;
     uint8_t enabled;
@@ -85,9 +102,11 @@ typedef struct world {
     unsigned player_object, player_person;
     int32_t unk_5E7A8;
     int32_t top_level, sky_type;
-    uint16_t light_type[16];
+    uint16_t light_type[32];
     int16_t light_param[32];
     int32_t curve_base[16], curve_shift[16], curve_scale[16];
+    int backdrop_resource;
+    uint8_t sky_fill, sky_fog, fog_on;
     world_camera camera;
     world_object objects[CM_OBJECT_MAX];
     world_person persons[CM_OBJECT_MAX];
@@ -99,11 +118,18 @@ typedef struct world {
     world_chain omap, flatmap;
     world_aperture apertures[96];
     world_panel panels[CM_PANEL_MAX];
+    unsigned texture_count, prop_count, fxo_count;
+    world_texture textures[CM_PANEL_MAX];
+    world_gsx gsx[55]; /* SCENE entry99: 55 records of 58 bytes. */
+    uint16_t fxo_objects[2048], prop_objects[2048];
+    int16_t fxo_types[2048], prop_types[2048];
     world_trig trig;
     world_rng rng;
     rsc scenes, fxo, props, animations;
     cm_file panel_file;
     world_span scene_sections[9];
+    world_span monster_definitions, gsx_definitions, animation_definitions;
+    world_span fxo_definitions, prop_definitions;
     char paths[5][CM_WORLD_PATH_MAX];
 } world;
 
@@ -111,6 +137,10 @@ typedef struct world {
 int world_load_scene(world *w, const char *asset_dir, unsigned scene);
 void world_close(world *w);
 int world_load_map(world *w, const uint8_t *data, uint32_t size);
+int world_anim_frame(world *w, unsigned object, unsigned gsx, unsigned image);
+int world_load_gsx(world *w, unsigned id);
+int world_fxo_object(const world *w, unsigned index);
+int world_finalize_scene(world *w);
 void world_make_omap(world *w);
 void world_omap_insert(world *w, unsigned object);
 void world_omap_delete(world *w, unsigned object);
@@ -131,9 +161,15 @@ int32_t world_random(world_rng *r);
 int32_t world_rnd(world_rng *r, int32_t bound);
 int world_ray_sight(world *w, unsigned source, unsigned target, int32_t distance,
                     int32_t source_z, int32_t target_z, uint16_t angle);
+int world_tile_sight(const world *w, unsigned tile, int from_level, int to_level,
+                      unsigned side, unsigned target_tile, int target_level);
+int world_ray_missile_xyz(world *w, int32_t x, int32_t y, int32_t z,
+                          int32_t tx, int32_t ty, int32_t tz, uint16_t angle,
+                          int32_t distance, int32_t *hit_x, int32_t *hit_y,
+                          int32_t *hit_z, int32_t *hit_distance);
 int world_ray_missile(world *w, unsigned source, unsigned target,
                       int32_t distance, int32_t source_z, int32_t target_z,
                       uint16_t angle, int32_t *hit_x, int32_t *hit_y,
-                      int32_t *hit_z, int32_t *hit_object);
+                      int32_t *hit_z, int32_t *hit_distance);
 
 #endif
