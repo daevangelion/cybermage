@@ -21,7 +21,9 @@ int ui_load_hand_tables(cm_ui *ui, const char *asset_dir)
     if (cm_exe_init(&p, &f, path)) goto out;
     if (cm_exe_table(&p, 0x96008, ui->shop_stock[0], 16) ||
         cm_exe_table(&p, 0x96058, ui->shop_stock[1], 16) ||
-        cm_exe_table(&p, 0x960A8, ui->shop_stock[2], 3)) goto out;
+        cm_exe_table(&p, 0x960A8, ui->shop_stock[2], 3) ||
+        cm_exe_table(&p, 0x96180, ui->coder_x, 12) ||
+        cm_exe_table(&p, 0x961B0, ui->coder_y, 12)) goto out;
     if (cm_exe_table(&p, 0x93C4C, ui->CenterAimX, UI_GLOVE_COUNT) ||
         cm_exe_table(&p, 0x93C8C, ui->CenterAimY, UI_GLOVE_COUNT) ||
         cm_exe_table(&p, 0x92690, ui->spellPower, 16) ||
@@ -38,6 +40,16 @@ int ui_load_hand_tables(cm_ui *ui, const char *asset_dir)
     for (i = 0; i < 4; ++i)
         if (cm_exe_table(&p, 0x95948+i*UI_HAND_FRAMES*4, ui->Swd_xFrame[i], UI_HAND_FRAMES) ||
             cm_exe_table(&p, 0x935B0+i*UI_HAND_FRAMES*4, ui->SwordX[i], UI_HAND_FRAMES)) goto out;
+    for (i = 0; i < UI_GLOVE_COUNT; ++i) {
+        uint8_t x[54], y[54];
+        unsigned row, col;
+        if (cm_exe_bytes(&p,0x94D08+i*54,x,sizeof x) ||
+            cm_exe_bytes(&p,0x95068+i*54,y,sizeof y)) goto out;
+        for (row=0;row<9;++row) for (col=0;col<3;++col) {
+            ui->MuzzleX[i][row][col]=(int16_t)cm_u16(x+(row*3+col)*2);
+            ui->MuzzleY[i][row][col]=(int16_t)cm_u16(y+(row*3+col)*2);
+        }
+    }
     ui->hand_tables_loaded = 1;
     status = 0;
 out:

@@ -141,13 +141,18 @@ repeated (49838..49889,49D0D,4A034). Negative stock IDs/cost and insufficient
 cash are exercised without a debit. PRICE/OFFER/CASH use supplied localized
 labels through a checked single-decimal substitution, never an asset-controlled
 printf format string. Merchant props use DrawShopObject's unscaled dimensions.
-Arena/coder/slot requests still fail explicitly rather than becoming merchants;
-their rules and frontend remain unimplemented at this checkpoint.
+Coder kind3 now accepts A..D/1..4, clear, confirm and exit, with HIPAK24 widgets.
+Success4DEB6..4DEEE clears target-event state, XORs payload word1 bit0, and sets
+payload word11=-1. Tests enter AB12, confirm against Events' supplied code row,
+and verify all three target mutations. Arena/slot requests still fail explicitly
+rather than becoming merchants; their rules/frontend remain unimplemented.
 
 - HandleNextFrame0x1BF7D–0x1BFE2: ShopFlag1/5/6→LoadShopScreen(HIPAK4);
   2→arena(HIPAK5);3→coder(HIPAK6);4→slot machine(HIPAK50).
-- Widget banks:HIPAK19 shop,21 arena,22 coder,23 slots,24 vehicles; same84-byte
-  bank header as console graphics.
+- Widget banks:HIPAK19 shop,21 arena,24 coder,51 slots. These correct the earlier
+  unverified22/23 coder/slot claim: LoadCoderScreen4D4DB reads HIPAK offset
+  E53A8 (index24), LoadSlotMachine4BCDD reads E5414 (index51).
+  Slots have24 dimension entries and a100-byte header; the others use20/84.
 - SetShopItems0x48698: stock1 reads16 dwords0x96008; stock5 reads16 at0x96058;
   stock6 reads3 at0x960A8. Stock6 sell mode instead uses definitions107..109.
 - Buy0x4A0BA: require cash>=definition runtime+18 (`events_definition.unk_0018`),
@@ -182,8 +187,15 @@ PCDeath1554C waits on CheckSONG, not a PCM sample slot.
 UI raster writes now use gfx_store/map_pixel/cover for explicit GPU overlay
 coverage, preserving opaque index0/255. Focused tests exercise a transparent
 monitor texel, opaque255, packed opaque0 and malformed packed-row offsets.
-SCON's duplicated second scanline needs Render's framebuffer-copy operation
-rather than treating a translated source row as a new world-row lookup.
+SCON's duplicated second scanline uses Render's gfx_copy, preserving the source
+world-row coordinate and LUT operation rather than marking it opaque.
+
+`ui_draw_live_hand` reads Port's pc/pc_aim state: actual weapon/sword pose,
+bounded aim plus144AD8/DC render offsets, glow set/frame, and muzzle layers.
+MuzzleX/Y are read from original94D08/95068; glow addressing is six sets of
+four three-byte frames (29532..29554), not the former incorrect three-byte
+stride/limit4. The renderer does not advance animation state. Focused tests
+check the live power pose against the explicit pose4 and reject pose18.
 
 Commands run through `tools/run_capped.sh`; output directory `build/UI` is isolated.
 
@@ -212,15 +224,15 @@ Fresh RGB comparisons, each pixel differing in any channel counted once:
 | options,frame000001.ppm | captures/ui-options/frame000000.png | 0/307200 |
 | left HUD rectangle[10,436)–[216,470),frame000002.ppm | captures/ui-hud/frame000000.png | 0/7004 |
 | right HUD rectangle[424,436)–[630,470),frame000002.ppm | same | 0/7004 |
-| software-renderer world+UI backdrop+static power hand+HUD,frame000003.ppm | captures/newgame/frame000000.png | 7115/307200 |
+| software-renderer world+UI backdrop+power pose4+HUD,frame000003.ppm | captures/newgame/frame000000.png | 0/307200 |
 | world+pause boxes+PRP7 directional cursor,frame000004.ppm | captures/ui-pause/frame000000.png | 0/307200 |
 
 The HUD probe uses original SAVE010 health/armor/energy fields and exercises
 phases0..2; the independent original HUD checkpoint reports HPCount2. No HUD
 color/pixel constants came from the captures. The world-only input to composed
 frames is Render's **port-generated** indexed frame, not an oracle screenshot.
-The7115 gameplay differences lie inside the120000-pixel view(hand pose); pause
-now matches exactly with the corrected cursor resource, directional pose, and
+The former7115 gameplay differences were the wrong power pose; the traced pose4
+matches exactly. Pause now matches exactly with the corrected cursor resource, directional pose, and
 unpressed aim(63,133). Individual
 selector/message/death/weapon variants compile but lack oracle parity tests.
 

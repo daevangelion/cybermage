@@ -13,6 +13,7 @@
 #define UI_GLOVE_COUNT 16
 #define UI_HAND_FRAMES 18
 #define UI_SHOP_ITEMS 40
+#define UI_BITMAPS_MAX 24
 
 typedef enum {
     UI_GAME, UI_TITLE, UI_OPTIONS, UI_PAUSE, UI_SAVE, UI_LOAD, UI_HELP,
@@ -55,6 +56,7 @@ typedef struct {
     int32_t Glv_xFrame[UI_GLOVE_COUNT][22];
     int32_t Swd_xFrame[4][UI_HAND_FRAMES];
     int32_t SwordX[4][UI_HAND_FRAMES];
+    int16_t MuzzleX[UI_GLOVE_COUNT][9][3], MuzzleY[UI_GLOVE_COUNT][9][3];
     int32_t CenterAimX[UI_GLOVE_COUNT], CenterAimY[UI_GLOVE_COUNT];
     int32_t spellPower[16], spellScon[16];
     int32_t GlowSet[16];
@@ -66,13 +68,18 @@ typedef struct {
     uint8_t recorder_map[63];
     unsigned recorder_count;
     const uint8_t *shop_background[4];
-    ui_bitmap shop_gfx[4][20];
+    ui_bitmap shop_gfx[4][UI_BITMAPS_MAX];
     unsigned shop_gfx_count[4];
     int32_t shop_stock[3][16];
     int32_t shop_kind, shop_switch, shop_arg, shop_screen;
     unsigned shop_selected, shop_first, shop_count;
     int shop_selling;
     int32_t shop_items[UI_SHOP_ITEMS], shop_slots[UI_SHOP_ITEMS];
+    int32_t coder_x[12], coder_y[12];
+    char shop_code[5];
+    unsigned shop_button;
+    int shop_success;
+    uint32_t shop_button_until;
 } cm_ui;
 
 typedef struct {
@@ -84,8 +91,8 @@ typedef struct {
 
 /* Resource storage remains caller-owned and valid through the UI lifetime. */
 int ui_init(cm_ui *ui, rsc *hipak, const cm_file *strings);
-int ui_bitmap_bank(rsc *hipak, unsigned entry, ui_bitmap bitmaps[20],
-                    unsigned *count);
+int ui_bitmap_bank(rsc *hipak, unsigned entry, ui_bitmap *bitmaps,
+                    unsigned capacity, unsigned *count);
 int ui_load_hand_tables(cm_ui *ui, const char *asset_dir);
 void ui_open(cm_ui *ui, ui_screen screen);
 void ui_speech_recorder(cm_ui *ui, const uint8_t speech_log[63]);
@@ -115,7 +122,7 @@ typedef struct {
     int half_width, half_height;
     int view_x, view_y, view_width, view_height;
     int x_off, y_off, x_pos_off, aim_x, aim_y;
-    int sword, tank;
+    int sword, tank, muzzle;
 } ui_hand;
 typedef struct { int x, y, width, height; } ui_view;
 int ui_text_message(cm_ui *ui, const world *w, uint8_t *dst,
@@ -127,9 +134,14 @@ int ui_draw_xscale_aim(uint8_t *dst, const ui_hand *hand,
 int ui_draw_player_hand(const cm_ui *ui, world *w, uint8_t *dst,
                         int mode, int weapon, unsigned frame,
                         ui_view view);
+struct ai_state;
+int ui_draw_live_hand(const cm_ui *ui, world *w, uint8_t *dst,
+                       int mode, const struct events_state *events,
+                       const struct ai_state *actors, ui_view view);
 int ui_draw_menu_cursor(const cm_ui *ui, world *w, uint8_t *dst,
                          int aim_x, int aim_y, unsigned frame);
 unsigned ui_cursor_pose(int aim_x, int aim_y, int pressed);
+/* 1 sampled a completed melt column,0 none,-1 malformed column state. */
 int ui_pc_death(uint8_t *dst, const uint8_t *background,
                 unsigned columns[CM_WIDTH], world_rng *rng);
 int ui_game_names_read(cm_ui *ui, const uint8_t *data, uint32_t size);
@@ -171,6 +183,8 @@ int ui_hud_from_world(ui_hud *hud, const world *w,
                       int hand_mode);
 int ui_load_game(ui_save_state *save, world *w, const uint8_t *data,
                  uint32_t size, const char *asset_dir);
+int ui_save_overlay(ui_save_state *save, world *w, const uint8_t *data,
+                      uint32_t size);
 int ui_save_game(ui_save_state *save, const world *w, uint8_t *data,
                  uint32_t capacity, uint32_t *size);
 

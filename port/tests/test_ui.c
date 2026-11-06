@@ -1,5 +1,6 @@
 #include "ui.h"
 #include "events.h"
+#include "ai.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -9,6 +10,7 @@ static cm_ui ui;
 static world w;
 static ui_save_state save;
 static events_state events;
+static ai_state actors;
 static cm_overlay overlay;
 static uint8_t encoded[UI_SAVE_MAX], screen[CM_WIDTH * CM_HEIGHT], palette[768];
 
@@ -68,6 +70,14 @@ int main(int argc, char **argv)
         packed[0] = 15;
         assert(ui_draw_xscale_aim(screen,&hand,NULL) == -1);
         assert(gfx_overlay_end() == 0);
+    }
+    {
+        unsigned columns[CM_WIDTH], i;
+        world_rng rng = {0};
+        for (i=0;i<CM_WIDTH;++i) columns[i] = CM_HEIGHT+7u;
+        assert(ui_pc_death(screen,encoded,columns,&rng) == 1);
+        columns[0] = 0;
+        assert(ui_pc_death(screen,encoded,columns,&rng) == -1);
     }
     assert(ui_draw(&ui, screen) == 0);
     assert(platform_dump(argv[1], 0, screen, palette) == 0);
@@ -172,6 +182,29 @@ int main(int argc, char **argv)
         assert(ui_shop_step(&ui,&events,&w,&input,6) == -1);
         ui.shop_kind = 0; events.shop_requested.kind = 0;
         ui.shop_stock[0][0] = 5;
+        events.shop_requested.kind = 3;
+        events.shop_requested.screen = 1;
+        events.shop_requested.arg = 1;
+        memcpy(events.coderStr+8,"AB12",5);
+        assert(ui_shop_step(&ui,&events,&w,&input,7) == 1);
+        input.pressed[30] = 1;
+        assert(ui_shop_step(&ui,&events,&w,&input,8) == 1);
+        memset(&input,0,sizeof input); input.pressed[48] = 1;
+        assert(ui_shop_step(&ui,&events,&w,&input,9) == 1);
+        memset(&input,0,sizeof input); input.pressed[2] = 1;
+        assert(ui_shop_step(&ui,&events,&w,&input,10) == 1);
+        memset(&input,0,sizeof input); input.pressed[3] = 1;
+        assert(ui_shop_step(&ui,&events,&w,&input,11) == 1);
+        assert(strcmp(ui.shop_code,"AB12") == 0);
+        events.events[1].state = 1; events.events[1].value[1] = 0;
+        memset(&input,0,sizeof input); input.pressed[28] = 1;
+        assert(ui_shop_step(&ui,&events,&w,&input,12) == 1 && ui.shop_success);
+        assert(events.events[1].state == 0 && events.events[1].value[1] == 1 &&
+               events.events[1].value[11] == -1);
+        assert(ui_shop_draw(&ui,&events,&w,screen) == 0);
+        assert(platform_dump(argv[1],6,screen,palette) == 0);
+        memset(&input,0,sizeof input); input.pressed[1] = 1;
+        assert(ui_shop_step(&ui,&events,&w,&input,13) == 1 && !ui.shop_kind);
     }
     {
         const uint8_t *background;
@@ -181,6 +214,20 @@ int main(int argc, char **argv)
         assert(rsc_entry(&hipak, 1, &background, &size) == 0 && size == 320*240);
         background_view(background,NULL,view);
         assert(ui_draw_player_hand(&ui, &w, screen, 5, 0, 4, view) == 0);
+        memcpy(encoded,screen,sizeof screen);
+        actors.pc_aim.aim_x = ui.CenterAimX[1];
+        actors.pc_aim.aim_y = ui.CenterAimY[1];
+        actors.pc_aim.w_max_leftaimx = actors.pc_aim.w_max_botaimy = -1024;
+        actors.pc_aim.w_max_rightaimx = actors.pc_aim.w_max_topaimy = 1024;
+        actors.pc_aim.weapon_aim_step = 4;
+        actors.pc.glow_set = ui.GlowSet[0];
+        events.spell = 0;
+        background_view(background,NULL,view);
+        assert(ui_draw_live_hand(&ui,&w,screen,5,&events,&actors,view) == 0);
+        assert(memcmp(encoded,screen,sizeof screen) == 0);
+        actors.pc_aim.weapon_aim_step = 18;
+        assert(ui_draw_live_hand(&ui,&w,screen,5,&events,&actors,view) == -1);
+        actors.pc_aim.weapon_aim_step = 4;
         hud.hp = cm_u16(original.data+UI_SAVE_PREFIX+0x38);
         hud.max_hp = cm_u16(original.data+UI_SAVE_PREFIX+0x3A);
         hud.energy = save.unk_130D50[864];

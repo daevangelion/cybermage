@@ -4,7 +4,6 @@
 #include <string.h>
 
 #define UI_SCREEN_BYTES (CM_WIDTH * CM_HEIGHT)
-#define UI_CONSOLE_HEADER 84u
 
 static int screen_entry(rsc *r, unsigned index, const uint8_t **p)
 {
@@ -15,20 +14,23 @@ static int screen_entry(rsc *r, unsigned index, const uint8_t **p)
     return 0;
 }
 
-int ui_bitmap_bank(rsc *hipak, unsigned entry, ui_bitmap bitmaps[20],
-                    unsigned *count)
+int ui_bitmap_bank(rsc *hipak, unsigned entry, ui_bitmap *bitmaps,
+                    unsigned capacity, unsigned *count)
 {
     const uint8_t *p;
-    uint32_t size, at = UI_CONSOLE_HEADER;
+    uint32_t size, at;
     unsigned i, n;
+    if (!capacity || capacity > UI_BITMAPS_MAX)
+        return cm_fail(hipak->path,entry,"invalid UI bitmap bank capacity");
+    at = 4+capacity*4;
     if (rsc_entry(hipak, entry, &p, &size)) return -1;
-    if (size < UI_CONSOLE_HEADER || (n = cm_u16(p)) > 20 ||
-        cm_u16(p+2) != 20)
+    if (size < at || (n = cm_u16(p)) > capacity ||
+        cm_u16(p+2) != capacity)
         return cm_fail(hipak->path, entry, "invalid UI bitmap bank header");
     for (i = 0; i < n; ++i) {
         ui_bitmap *b = &bitmaps[i];
         uint32_t bytes;
-        b->width = cm_u16(p+4+i*2); b->height = cm_u16(p+44+i*2);
+        b->width = cm_u16(p+4+i*2); b->height = cm_u16(p+4+capacity*2+i*2);
         bytes = (uint32_t)b->width*b->height;
         if (!b->width || !b->height || b->width > CM_WIDTH ||
             b->height > CM_HEIGHT || bytes > size-at)
@@ -72,18 +74,21 @@ int ui_init(cm_ui *ui, rsc *hipak, const cm_file *strings)
     if (size != 10u * 256u)
         return cm_fail(hipak->path, 33, "invalid bright tables");
     /* LoadConsoleGFX0x1FC9C: HIPAK20, 20 dimensions, then packed bitmaps. */
-    if (ui_bitmap_bank(hipak, 20, bank, &count)) return -1;
+    if (ui_bitmap_bank(hipak, 20, bank, 20, &count)) return -1;
     if (count != UI_CONSOLE_BITMAPS)
         return cm_fail(hipak->path, 20, "wrong console bitmap count");
     memcpy(ui->console, bank, sizeof ui->console);
     for (i = 0; i < 4; ++i) {
         static const unsigned backgrounds[4] = {4,5,6,50};
-        static const unsigned widgets[4] = {19,21,22,23};
+        static const unsigned widgets[4] = {19,21,24,51};
+        static const unsigned counts[4] = {6,13,12,24};
         if (rsc_entry(hipak, backgrounds[i], &ui->shop_background[i], &size) ||
             ui_bitmap_bank(hipak, widgets[i], ui->shop_gfx[i],
-                           &ui->shop_gfx_count[i])) return -1;
+                           i == 3 ? 24 : 20, &ui->shop_gfx_count[i])) return -1;
         if (size != 320u*240u)
             return cm_fail(hipak->path, backgrounds[i], "invalid shop backdrop");
+        if (ui->shop_gfx_count[i] != counts[i])
+            return cm_fail(hipak->path,widgets[i],"wrong shop widget count");
     }
     /* LoadSCONGFX0x21250: HIPAK35, 33 fixed 56x38 bitmaps. */
     if (rsc_entry(hipak, 35, &p, &size)) return -1;

@@ -107,6 +107,40 @@ static int inside(const cm_input *in, int x, int y, int width, int height)
         in->mouse_y >= y*2 && in->mouse_y <= (y+height)*2;
 }
 
+static int coder_step(cm_ui *ui, events_state *e, const cm_input *in)
+{
+    static const unsigned scans[8] = {30,48,46,32,2,3,4,5};
+    unsigned i, button = 0;
+    size_t length = strlen(ui->shop_code);
+    for (i=0;i<8;++i) if (in->pressed[scans[i]]) button = i+1;
+    if (in->pressed[28]) button = 9;
+    if (in->pressed[14] || in->pressed[83]) button = 10;
+    if (in->mouse_pressed & 1u) for (i=1;i<=11;++i) {
+        const ui_bitmap *b = &ui->shop_gfx[2][i-1];
+        if (inside(in,ui->coder_x[i],ui->coder_y[i],b->width,b->height)) button = i;
+    }
+    if (!button) return 1;
+    ui->shop_button = button; ui->shop_button_until = ui->ticks+10;
+    /* LoadCoderScreen4DDDB..4DE18 encodes A..D,1..4 into four bytes. */
+    if (button <= 8 && length < 4)
+        ui->shop_code[length] = (char)(button+(button <= 4 ? 64 : 44));
+    else if (button == 9) {
+        unsigned event = (unsigned)ui->shop_arg;
+        if (event > e->event_count)
+            return cm_fail("coder",event,"coder target exceeds scene events");
+        ui->shop_success = memcmp(ui->shop_code,e->coderStr+ui->shop_screen*8,5) == 0;
+        if (ui->shop_success) {
+            events_event *v = &e->events[event];
+            v->state = 0;
+            v->value[1] ^= 1;
+            v->value[11] = -1; /* CM_HI.EXE4DEB6..4DEEE. */
+        }
+    } else if (button == 10) {
+        memset(ui->shop_code,0,sizeof ui->shop_code); ui->shop_success = 0;
+    } else if (button == 11) ui->shop_kind = 0;
+    return 1;
+}
+
 int ui_shop_step(cm_ui *ui, events_state *e, world *w,
                    const cm_input *in, uint32_t ticks)
 {
@@ -117,13 +151,24 @@ int ui_shop_step(cm_ui *ui, events_state *e, world *w,
     if (e->shop_requested.kind) {
         if (ui->shop_kind)
             return cm_fail("shop", 0, "overlapping shop requests");
-        if (e->shop_requested.kind != 1 && e->shop_requested.kind != 5 &&
-            e->shop_requested.kind != 6)
+        if (e->shop_requested.kind != 1 && e->shop_requested.kind != 3 &&
+            e->shop_requested.kind != 5 && e->shop_requested.kind != 6)
             return cm_fail("shop", (uint32_t)e->shop_requested.kind, "unsupported shop kind");
         ui->shop_kind = e->shop_requested.kind;
         ui->shop_switch = e->shop_requested.switch_index;
         ui->shop_screen = e->shop_requested.screen;
         ui->shop_arg = e->shop_requested.arg;
+        if (ui->shop_kind == 3) {
+            if (ui->shop_screen < 0 || ui->shop_screen >= 3 ||
+                ui->shop_arg < 0 || (unsigned)ui->shop_arg > e->event_count)
+                return cm_fail("coder",(uint32_t)ui->shop_screen,"invalid coder slot/event");
+            e->coderSlot = ui->shop_screen;
+            e->coderEvent[ui->shop_screen] = ui->shop_arg;
+            memset(ui->shop_code,0,sizeof ui->shop_code);
+            ui->shop_button = 0; ui->shop_success = 0;
+            e->shop_requested.kind = 0;
+            return 1;
+        }
         ui->shop_selected = 1; ui->shop_first = 0; ui->shop_selling = 0;
         if (shop_items(ui,e)) return -1;
         e->shop_requested.kind = 0;
@@ -131,6 +176,7 @@ int ui_shop_step(cm_ui *ui, events_state *e, world *w,
     }
     if (!ui->shop_kind) return 0;
     if (in->pressed[1]) { ui->shop_kind = 0; return 1; }
+    if (ui->shop_kind == 3) return coder_step(ui,e,in);
     if (ui->shop_count) {
         if (in->pressed[75]) ui->shop_selected =
             (ui->shop_selected+ui->shop_count-1)%ui->shop_count;
@@ -207,7 +253,20 @@ int ui_shop_draw(cm_ui *ui, const events_state *e, world *w, uint8_t *dst)
     int width;
     if (!ui->shop_kind) return 0;
     for (y=0;y<CM_HEIGHT;++y) for (x=0;x<CM_WIDTH;++x)
-        gfx_store(dst+y*CM_WIDTH+x,ui->shop_background[0][y/2*320+x/2]);
+        gfx_store(dst+y*CM_WIDTH+x,ui->shop_background[ui->shop_kind == 3 ? 2 : 0][y/2*320+x/2]);
+    if (ui->shop_kind == 3) {
+        char symbols[5] = {0};
+        unsigned length = (unsigned)strlen(ui->shop_code);
+        if (ui->shop_success) shop_bitmap(dst,92,192,&ui->shop_gfx[2][11]);
+        if (ui->shop_button && ui->ticks <= ui->shop_button_until)
+            shop_bitmap(dst,ui->coder_x[ui->shop_button],ui->coder_y[ui->shop_button],
+                        &ui->shop_gfx[2][ui->shop_button-1]);
+        for (i=0;i<length;++i)
+            symbols[i] = (char)(ui->shop_code[i]-(ui->shop_code[i]>='A'?64:44));
+        /* LoadCoderScreen4D989: font5 symbol cells are40 pixels. */
+        return ui_text_mode(dst,&ui->fonts[5],404-(int)length*40,72,
+                            symbols,117,1,0,1);
+    }
     for (i=0;i<3 && i<ui->shop_count;++i) {
         unsigned at=(ui->shop_first+i)%ui->shop_count;
         const events_definition *d=&e->definitions[ui->shop_items[at]];

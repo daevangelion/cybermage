@@ -1,10 +1,13 @@
 #include "ui.h"
+#include "ai.h"
+#include "events.h"
 
 #define HAND_SCALE_ONE 65536u
 #define HAND_MAX_DIMENSION 1024
 
-int ui_draw_player_hand(const cm_ui *ui, world *w, uint8_t *dst,
-                        int mode, int weapon, unsigned frame, ui_view view)
+static int player_hand(const cm_ui *ui, world *w, uint8_t *dst,
+                        int mode, int weapon, unsigned frame, ui_view view,
+                        const ai_state *a, int muzzle)
 {
     static const unsigned weapon_prop[10] = {13,56,55,132,133,134,135,139,140,141};
     static const unsigned sword_prop[4] = {14,136,137,138};
@@ -22,6 +25,16 @@ int ui_draw_player_hand(const cm_ui *ui, world *w, uint8_t *dst,
     } else return cm_fail("hand graphics", (uint32_t)mode, "unsupported player hand mode");
     image = (uint32_t)(mode == 2 ? ui->Swd_xFrame[glove][frame] :
         ui->Glv_xFrame[glove][frame]);
+    if (muzzle) {
+        int slot;
+        if (a->pc.muzzle_frame < 0 || a->pc.muzzle_frame >= 22 ||
+            a->pc.muzzle_count < 0 || a->pc.muzzle_count >= 3 || frame >= 9 ||
+            a->pc.muzzle_frame > 21-a->pc.muzzle_count)
+            return cm_fail("muzzle", (uint32_t)a->pc.muzzle_frame, "invalid flash frame");
+        slot = a->pc.muzzle_frame+a->pc.muzzle_count;
+        image = (uint32_t)ui->Glv_xFrame[glove][slot];
+        hand.muzzle = 1;
+    }
     if (rsc_entry(&w->props, resource, &data, &size)) return -1;
     if (size < 1442 || data[0] > 120 || image >= data[0])
         return cm_fail(w->props.path, resource, "hand frame exceeds prop package");
@@ -40,18 +53,58 @@ int ui_draw_player_hand(const cm_ui *ui, world *w, uint8_t *dst,
     hand.view_width = view.width; hand.view_height = view.height;
     hand.aim_x = ui->CenterAimX[glove];
     hand.aim_y = ui->CenterAimY[glove];
+    if (a) {
+        int64_t x = (int64_t)a->pc_aim.aim_x+a->pc_aim.render_x;
+        int64_t y = (int64_t)a->pc_aim.aim_y+a->pc_aim.render_y;
+        if (x < -HAND_MAX_DIMENSION || x > HAND_MAX_DIMENSION ||
+            y < -HAND_MAX_DIMENSION || y > HAND_MAX_DIMENSION)
+            return cm_fail("hand graphics",frame,"render offset exceeds hand limits");
+        hand.aim_x = (int)x;
+        hand.aim_y = (int)y;
+        if (hand.aim_x < a->pc_aim.w_max_leftaimx) hand.aim_x = a->pc_aim.w_max_leftaimx;
+        if (hand.aim_x > a->pc_aim.w_max_rightaimx) hand.aim_x = a->pc_aim.w_max_rightaimx;
+        if (hand.aim_y < a->pc_aim.w_max_botaimy) hand.aim_y = a->pc_aim.w_max_botaimy;
+        if (hand.aim_y > a->pc_aim.w_max_topaimy) hand.aim_y = a->pc_aim.w_max_topaimy;
+    }
+    if (muzzle) {
+        hand.x_off += ui->MuzzleX[glove][frame][a->pc.muzzle_count];
+        hand.y_off -= ui->MuzzleY[glove][frame][a->pc.muzzle_count];
+    }
     if (mode == 2) {
         hand.sword = 1;
         hand.x_off = ui->SwordX[glove][frame];
         hand.y_off = hand.x_pos_off = hand.aim_x = hand.aim_y = 0;
     }
-    if (mode == 5) {
-        int glow;
-        if (weapon < 0 || weapon >= 16 || (glow = ui->GlowSet[weapon]) < 0 || glow >= 4)
+    if (mode == 5 && !muzzle) {
+        int glow, glow_frame = a ? a->pc.glow_frame : 0;
+        if (weapon < 0 || weapon >= 16 ||
+            (glow = a ? a->pc.glow_set : ui->GlowSet[weapon]) < 0 ||
+            glow >= 6 || glow_frame < 0 || glow_frame >= 4)
             return cm_fail("hand graphics", (uint32_t)weapon, "invalid spell glow selector");
-        return ui_draw_xscale_aim(dst, &hand, ui->SpellGlow+glow*3);
+        return ui_draw_xscale_aim(dst, &hand, ui->SpellGlow+glow*12+glow_frame*3);
     }
     return ui_draw_xscale_aim(dst, &hand, NULL);
+}
+
+int ui_draw_player_hand(const cm_ui *ui, world *w, uint8_t *dst,
+                        int mode, int weapon, unsigned frame, ui_view view)
+{
+    return player_hand(ui,w,dst,mode,weapon,frame,view,NULL,0);
+}
+
+int ui_draw_live_hand(const cm_ui *ui, world *w, uint8_t *dst,
+                       int mode, const events_state *e,
+                       const ai_state *a, ui_view view)
+{
+    int frame = mode == 2 ? a->pc.sword_frame : a->pc_aim.weapon_aim_step;
+    int weapon = mode == 2 ? e->hh_weapon : mode == 5 ? e->spell : e->weapon;
+    if (mode != 1 && mode != 2 && mode != 5)
+        return cm_fail("hand graphics",(uint32_t)mode,"unsupported live hand mode");
+    if (frame < 0 || frame >= UI_HAND_FRAMES)
+        return cm_fail("hand graphics",(uint32_t)frame,"live pose exceeds table");
+    if (mode != 2 && a->pc.muzzle_mode > 0 &&
+        player_hand(ui,w,dst,mode,weapon,(unsigned)frame%9,view,a,1)) return -1;
+    return player_hand(ui,w,dst,mode,weapon,(unsigned)frame,view,a,0);
 }
 
 unsigned ui_cursor_pose(int aim_x, int aim_y, int pressed)
@@ -122,16 +175,20 @@ int ui_draw_xscale_aim(uint8_t *dst, const ui_hand *h, const uint8_t *glow)
         return cm_fail("hand graphics", 0, "truncated hand row table");
     ustep = source_width * HAND_SCALE_ONE / (unsigned)width;
     vstep = source_rows * HAND_SCALE_ONE / (unsigned)rows;
-    if (!h->tank && rows > h->view_height) {
+    if (!h->tank && !h->muzzle && rows > h->view_height) {
         v = vstep * (unsigned)(rows-h->view_height);
         rows = h->view_height;
     }
     top = (h->y_off * 2 + CM_HEIGHT - h->aim_y * 2) * h->view_width / CM_WIDTH;
-    if (top < (h->tank ? 0 : h->view_height-rows))
+    if (h->muzzle) {
+        if (top >= h->view_height) return 0;
+        if (top < 0) top = 0;
+    } else if (top < (h->tank ? 0 : h->view_height-rows))
         top = h->tank ? 0 : h->view_height-rows;
     else if (top > h->view_height-4) top = h->view_height-4;
     left = (h->x_off * 2 + h->aim_x * 2 + CM_WIDTH/2 - h->x_pos_off * 2) *
         h->view_width / CM_WIDTH;
+    if (h->muzzle && left < 0) left = 0;
     if (h->sword) {
         left = (h->x_off * h->view_width / CM_WIDTH + h->aim_x) * 2;
         top = h->view_height - rows - h->aim_y;
@@ -139,6 +196,7 @@ int ui_draw_xscale_aim(uint8_t *dst, const ui_hand *h, const uint8_t *glow)
     for (y = top; y < h->view_height; ++y) {
         uint32_t at, logical = 0, u = 0, row = v / HAND_SCALE_ONE;
         int x = 0;
+        if (h->muzzle && y-top >= rows) break;
         if (row >= source_rows)
             return cm_fail("hand graphics", row * 4, "scaled row exceeds hand table");
         at = cm_u32(h->pixels.data + row * 4);
@@ -187,18 +245,19 @@ int ui_pc_death(uint8_t *dst, const uint8_t *background,
                 unsigned columns[CM_WIDTH], world_rng *rng)
 {
     unsigned sample;
+    int finished = 0;
     for (sample = 0; sample < CM_WIDTH; ++sample)
         if ((columns[sample] & 7u) != 7u || columns[sample] > CM_HEIGHT + 7u)
             return cm_fail("PCDeath", sample, "invalid melt column state");
     for (sample = 0; sample < CM_HEIGHT; ++sample) {
         unsigned x = (unsigned)world_rnd(rng, CM_WIDTH), at = columns[x];
         int y;
-        if (at >= CM_HEIGHT) continue;
+        if (at >= CM_HEIGHT) { finished = 1; continue; }
         for (y = CM_HEIGHT-1; y > (int)at; --y)
             gfx_store(dst+y * CM_WIDTH + x,dst[(y-8) * CM_WIDTH + x]);
         for (y = (int)at; y >= 0 && y > (int)at-8; --y)
             gfx_store(dst+y * CM_WIDTH + x,background[y * CM_WIDTH + x]);
         columns[x] += 8;
     }
-    return 0;
+    return finished;
 }

@@ -22,13 +22,13 @@ def main():
         path = args.data/'HIPAK.RSC'
         data = path.read_bytes()
         entries = parse(data, str(path))
-        for bank in (19, 21, 22, 23, 24):
+        for bank in (19, 21, 22, 23, 24, 51):
             at, size = entries[bank]
             count, capacity = struct.unpack_from('<HH', data, at)
             print('bank', bank, 'bytes', size, 'count', count, 'capacity', capacity)
             for i in range(count):
                 print(i, struct.unpack_from('<H', data, at+4+i*2)[0],
-                      struct.unpack_from('<H', data, at+44+i*2)[0])
+                      struct.unpack_from('<H', data, at+4+capacity*2+i*2)[0])
     if args.trace:
         with args.trace.open(newline='') as source:
             header = source.readline().strip().split(',')

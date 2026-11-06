@@ -30,8 +30,7 @@ int ui_draw_scon_bitmap(const cm_ui *ui, uint8_t *dst, int x, int y,
                 gfx_map_pixel(line+col*2+1,ui->shades+shade*256);
             }
         }
-        memcpy(line+CM_WIDTH,line,SCON_WIDTH*SCON_SCALE);
-        gfx_cover(line+CM_WIDTH,SCON_WIDTH*SCON_SCALE);
+        gfx_copy(line+CM_WIDTH,line,SCON_WIDTH*SCON_SCALE);
     }
     return 0;
 }

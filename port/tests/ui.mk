@@ -4,9 +4,7 @@ CPPFLAGS += -Iinclude $(shell pkg-config --cflags sdl2)
 CFLAGS ?= -O2 -g
 CFLAGS += -std=c99 -pedantic -Wall -Wextra -Werror
 LDLIBS += $(shell pkg-config --libs sdl2) -lm
-UI_SOURCES := src/gfx.c src/rsc.c src/exe.c src/platform_sdl.c \
-	src/events/load.c src/events/buy.c \
-	$(wildcard src/ui/*.c src/world/*.c src/audio/*.c)
+UI_SOURCES := $(filter-out src/main.c,$(wildcard src/*.c src/*/*.c))
 
 .PHONY: check
 $(B)/test_ui: tests/test_ui.c $(UI_SOURCES) $(wildcard include/*.h)
