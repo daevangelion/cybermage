@@ -61,6 +61,8 @@ public final class DataActivity extends Activity {
             Intent game = new Intent(this, GameActivity.class);
             String controls = getIntent().getStringExtra("controls");
             if (controls != null) game.putExtra("controls", controls);
+            String renderer = getIntent().getStringExtra("renderer");
+            if (renderer != null) game.putExtra("renderer", renderer);
             startActivity(game);
             finish();
             return;

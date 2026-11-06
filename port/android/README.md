@@ -61,10 +61,22 @@ and STRINGS.MSG; the native loaders validate resource contents and report missin
 files. Copy the entire retail directory, not only those three witnesses.
 `GameActivity` passes this path as `--data`; all native I/O uses platform SDL_RWops.
 
-The screen is centered at4:3, with black bars rather than stretching640×480.
+The default software renderer is centered at4:3, with black bars rather than stretching640×480.
 Tapping inside the game maps to a left mouse click in menu coordinates; the input
 struct also carries bounded per-frame touch events with IDs, phases, coordinates,
 pressure and an inside-viewport flag. Touches in the black bars do not click.
+Opt into the GL renderer (OpenGL ES3 on Android) with:
+
+```
+adb shell am start -S -n com.jshield.cybermage/.DataActivity --es renderer gl
+```
+
+`DataActivity` forwards the named extra to `GameActivity`, which passes
+`--renderer gl` to the native game. Omit the extra or use `--es renderer sw`
+to select software. GL widens the gameplay view to the display; menus and HUD
+retain their original layout. This changes presentation, not game rules, and
+GL is not claimed DOS-pixel-exact. Renderer selection is independent of controls.
+
 On Android the modern action layer (touch overlay) is the default, because DOS
 keyboard controls are unusable on a touch-only phone. Classic controls (exact DOS
 key semantics) remain available with:

@@ -26,11 +26,13 @@ public final class GameActivity extends SDLActivity {
     @Override
     protected String[] getArguments() {
         String controls = getIntent().getStringExtra("controls");
+        String renderer = getIntent().getStringExtra("renderer");
         /* Touch-only phones cannot play with DOS keyboard controls; classic stays
            available with --es controls classic. Game rules are unaffected. */
         return new String[] {
             "--data", new java.io.File(getExternalFilesDir(null), "data").getAbsolutePath(),
-            "--controls", controls == null ? "modern" : controls
+            "--controls", controls == null ? "modern" : controls,
+            "--renderer", renderer == null ? "sw" : renderer
         };
     }
 }
