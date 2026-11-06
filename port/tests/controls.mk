@@ -5,7 +5,7 @@ controls-check: $(B)/test_controls $(B)/test_controls_platform $(B)/test_control
 	$(B)/test_controls
 	$(B)/test_controls_platform
 	$(B)/test_controls_touch
-	$(B)/test_controls_sim
+	$(B)/test_controls_sim ../orig/retail
 	$(B)/test_controls_map
 	$(B)/test_controls_game $(B)/controls-user
 

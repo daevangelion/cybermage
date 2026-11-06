@@ -1,5 +1,6 @@
 #include "controls.h"
 #include "events.h"
+#include "ai.h"
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -7,12 +8,18 @@
 static world w;
 static sim_state s;
 static events_state e;
+static ai_state a;
+static const char *data_dir;
 
 static void arena(void)
 {
     unsigned i;
     memset(&w, 0, sizeof w);
+    memset(&a, 0, sizeof a);
+    assert(!ai_load_tables(&a, data_dir));
     sim_init(&s, 0);
+    s.ai = &a;
+    a.events = &e;
     s.pc_mode = 5;
     w.top_level = 3;
     w.object_count = 2;
@@ -47,9 +54,11 @@ static int32_t speed(int magnitude, int run)
     return w.objects[1].x - before;
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
     cm_input in = {0};
+    assert(argc == 2);
+    data_dir = argv[1];
     w.object_count = w.person_count = 1;
     w.player_object = w.player_person = 0;
     s.pc_mode = 5;

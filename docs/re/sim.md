@@ -194,7 +194,7 @@ passed afterward. The original1299-row combat replay then first diverged at
 frame885 (Y expected1061517, native1061226), rather than795. Target comparison
 still reports21 mismatches across1298 completed frames (13 original nonempty),
 first native917/original918, empty versus[1069]. This is not a target MATCH.
-With the explicit PERSON+24 input and measured actor clocks, the latest combat
+With the explicit PERSON+24 input and measured actor clocks, an intermediate combat
 consumer matches player HP/RNG through original pre-frame922, including the
 first hit (HP39). First movement divergence is923, Y1063616/1064298;
 RNG also first differs there. Target comparison now reports19 mismatches over
@@ -202,8 +202,8 @@ RNG also first differs there. Target comparison now reports19 mismatches over
 The missing producer is original035EF3..035F0B: a nonzero melee hit on the
 player raises Xox+1444E8 to at least3 before035F26 DamagePerson. The native
 melee path omitted that write, gating off the next frame's three-RND hit
-response and sideways push. AI/Audio own that correction; this measured
-checkpoint is not yet a verified target MATCH.
+response and sideways push. That producer was corrected in the final cohort
+reported below; this intermediate checkpoint was not a target MATCH.
 
 ## Integrated verification (Integrator)
 
@@ -360,3 +360,35 @@ The lifecycle fixture uses the current explicit-view death API: it derives the
 view with `ui_game_view`, installs it with `render_set_view`, and passes it to
 all three death steps. The independently executed fixture passes death/menu/save
 checks and its second Training boot, including the invalid-CLI negatives.
+
+## Final simulation replay cohort
+
+The source-grounded melee distance/flash fixes and the complete RenderBells
+low-HP respiration producer resolve the remaining combat divergence. The latter
+was first observed as a missing RND11 at original frame1173 (`01928B..019340`),
+before NPC132 changed state; it was not corrected by adding dummy RNG calls.
+
+The freshly built `port/build/Sim2/cybermage` completed:
+
+- `captures/Sim2-combat-collision`: all1299 player entry records MATCH;
+ 1298 completed target checkpoints,13 original nonempty,zero mismatches.
+- `captures/scene1-water`: all2033 player entry records MATCH;2032 completed
+ water checkpoints,127 wet,zero position/swim/stance/deadline/HP/RNG mismatches.
+- Both the original movement trace and `captures/bios-modifiers-movement`:
+ all106 player entry records MATCH.
+
+The complete measured BDA byte also survives all106 corrected movement inputs,
+including Ctrl=4 exactly on frames71..75. This is replay input integrity, not
+a claim that live native input models all BDA modifier bits.
+The only snapshot import is the explicitly logged PERSON+24 input; actor phase
+clocks are measured external inputs. No computed coordinates, HP, swim state,
+deadlines or RNG words are replaced. Native evidence directories are the
+corresponding `Sim2-final/` children.
+
+The complete `tools/run_capped.sh make -C port B=build/Sim2 check` gate exited
+zero, including the original-code weapon/respiration/swim/fire comparisons,
+swim/fire UBSan checks, lifecycle and controls tests, media and all11 scene
+loads. Negative-fixture ERROR lines are expected. The controls physics arena
+now supplies an inactive actor state and loads the real EXE tables through an
+explicit asset-directory argument; no existing motion/jump/selection assertions
+or production hooks were disabled to accommodate swim handling.
