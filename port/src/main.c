@@ -120,6 +120,82 @@ static int new_game(const char *data, unsigned scene, uint32_t ticks)
     return load_scene(data, scene);
 }
 
+static int save_game(const char *user, unsigned slot)
+{
+    char name[24];
+    uint32_t size;
+    if (slot > 99) return cm_fail("SaveGame", slot, "invalid save slot");
+    snprintf(name, sizeof name, "SAVE%03u.DAT", slot);
+    if (make_path(save_path, sizeof save_path, user, name)) return -1;
+    sim_save_export(&simulation, save.unk_6D4);
+    save.FireCheck = (uint32_t)simulation.fire_check;
+    save.FireDamage = (uint32_t)simulation.fire_damage;
+    save.FireTilePanel = (uint32_t)simulation.fire_tile_panel;
+    save.FireTileArt = (uint32_t)simulation.fire_tile_art;
+    ai_save_export(&actors, &save);
+    if (events_save_export(&events, &save) ||
+        ui_save_game(&save, &game, save_data, sizeof save_data, &size) ||
+        platform_file_write(save_path, save_data, size)) return -1;
+    return 0;
+}
+
+static int load_game(const char *data, const char *user, unsigned slot, uint32_t ticks)
+{
+    char name[24];
+    cm_file file = {0};
+    int result;
+    if (slot > 99) return cm_fail("LoadGame", slot, "invalid save slot");
+    snprintf(name, sizeof name, "SAVE%03u.DAT", slot);
+    if (make_path(save_path, sizeof save_path, user, name) ||
+        platform_file_read(&file, save_path)) return -1;
+    render_unload();
+    result = ui_load_game(&save, &game, file.data, file.size, data);
+    platform_file_release(&file);
+    if (result) return -1;
+    sim_init(&simulation, ticks);
+    simulation.ai = &actors;
+    simulation.events = &events;
+    if (sim_save_import(&simulation, save.unk_6D4)) return -1;
+    simulation.fire_check = (int32_t)save.FireCheck;
+    simulation.fire_damage = (int32_t)save.FireDamage;
+    simulation.fire_tile_panel = (int32_t)save.FireTilePanel;
+    simulation.fire_tile_art = (int32_t)save.FireTileArt;
+    memset(&actors, 0, sizeof actors);
+    actors.pc_sound = actors.pc_learn_spell = -1;
+    actors.difficulty = 1;
+    if (ai_load_scene_definitions(&actors, &game) || ai_load_tables(&actors, data) ||
+        ai_save_import(&actors, &game, &save) ||
+        events_init(&events, &game) || events_load_tables(&events, data) ||
+        events_save_import(&events, &save) || render_load(&game, &hipak) ||
+        snd_scene(&game)) return -1;
+    actors.events = &events;
+    events.actors = &actors;
+    ai_save_pc_info(&events, &game);
+    ui.shop_kind = 0;
+    camera_follow();
+    return 0;
+}
+
+static int next_scene(const char *data)
+{
+    events_scene_request request = events.scene_requested;
+    world_object *player;
+    events.scene_requested.pending = 0;
+    if (request.scene < 0 || request.scene >= 12)
+        return cm_fail("MoveWorld/scene", 0, "invalid destination scene");
+    ai_save_pc_info(&events, &game);
+    if (load_scene(data, (unsigned)request.scene)) return -1;
+    player = &game.objects[game.player_object];
+    world_omap_delete(&game, game.player_object);
+    player->x = request.x;
+    player->y = request.y;
+    player->floor_z = request.z;
+    player->heading = request.heading;
+    if (world_make_omap(&game)) return -1;
+    camera_follow();
+    return 0;
+}
+
 static int state_dump(const char *directory, unsigned frame)
 {
     char text[STATE_TEXT_BYTES];
@@ -211,6 +287,16 @@ int main(int argc, char **argv)
         ui_action action;
         int shop_modal = 0;
         if (platform_poll(&input, frame)) goto out;
+        if (snd_movie_active()) {
+            int result = snd_movie_step(ticks, input.pressed[1] || input.pressed[0x1c],
+                                       pixels, palette);
+            if (result < 0) goto out;
+            if (!result) {
+                if (gfx_palette(palette, pal_data, pal_size, resource_path)) goto out;
+                ui_open(&ui, UI_TITLE);
+            }
+            goto audio_output;
+        }
         if (trace) {
             int next = replay_next(&replay, &recorded);
             if (next < 0) goto out;
@@ -257,53 +343,14 @@ int main(int argc, char **argv)
             playing = 1;
         }
         if (action == UI_SAVE_GAME || action == UI_LOAD_GAME) {
-            char name[24];
-            snprintf(name, sizeof name, "SAVE%03u.DAT", ui.slot);
-            if (make_path(save_path, sizeof save_path, user, name)) goto out;
             if (action == UI_SAVE_GAME) {
-                uint32_t size;
-                sim_save_export(&simulation, save.unk_6D4);
-                save.FireCheck = (uint32_t)simulation.fire_check;
-                save.FireDamage = (uint32_t)simulation.fire_damage;
-                save.FireTilePanel = (uint32_t)simulation.fire_tile_panel;
-                save.FireTileArt = (uint32_t)simulation.fire_tile_art;
-                ai_save_export(&actors, &save);
-                if (events_save_export(&events, &save) ||
-                    ui_save_game(&save, &game, save_data, sizeof save_data, &size) ||
-                    platform_file_write(save_path, save_data, size)) goto out;
+                if (save_game(user, ui.slot)) goto out;
                 ui.restart_game = (int32_t)ui.slot;
                 memcpy(ui.auto_ptr, events.auto_ptr, sizeof ui.auto_ptr);
                 memcpy(ui.auto_slot, events.auto_slot, sizeof ui.auto_slot);
                 if (game_names_write()) goto out;
             } else {
-                cm_file file = {0};
-                if (platform_file_read(&file, save_path)) goto out;
-                if (ui_load_game(&save, &game, file.data, file.size, data)) {
-                    platform_file_release(&file);
-                    goto out;
-                }
-                platform_file_release(&file);
-                sim_init(&simulation, ticks);
-                simulation.ai = &actors;
-                simulation.events = &events;
-                if (sim_save_import(&simulation, save.unk_6D4)) goto out;
-                simulation.fire_check = (int32_t)save.FireCheck;
-                simulation.fire_damage = (int32_t)save.FireDamage;
-                simulation.fire_tile_panel = (int32_t)save.FireTilePanel;
-                simulation.fire_tile_art = (int32_t)save.FireTileArt;
-                memset(&actors, 0, sizeof actors);
-                actors.pc_sound = actors.pc_learn_spell = -1;
-                actors.difficulty = 1;
-                if (ai_load_scene_definitions(&actors, &game) || ai_load_tables(&actors, data) ||
-                    ai_save_import(&actors, &game, &save) ||
-                    events_init(&events, &game) || events_load_tables(&events, data) ||
-                    events_save_import(&events, &save) ||
-                    render_load(&game, &hipak)) goto out;
-                actors.events = &events;
-                events.actors = &actors;
-                ai_save_pc_info(&events, &game);
-                if (snd_scene(&game)) goto out;
-                ui.shop_kind = 0;
+                if (load_game(data, user, ui.slot, ticks)) goto out;
                 playing = 1;
             }
             ui_open(&ui, UI_GAME);
@@ -315,8 +362,15 @@ int main(int argc, char **argv)
                     events_step(&events, &simulation, &actors, &game) ||
                     ai_update_objects(&actors, &simulation, &game, ticks) ||
                     ai_pc_hand2hand(&actors, &simulation, &game)) goto out;
+                if (events.scene_requested.pending && next_scene(data)) goto out;
                 camera_follow();
                 if (snd_tick(&game)) goto out;
+                if (events.ending_requested) {
+                    events.ending_requested = 0;
+                    if (snd_movie_begin(data, SND_MOVIE_ENDING, 0, ticks)) goto out;
+                    playing = 0;
+                    goto audio_output;
+                }
                 if (events.recorder_requested) {
                     events.recorder_requested = 0;
                     ui_speech_recorder(&ui, events.speechLog);
@@ -350,14 +404,15 @@ int main(int argc, char **argv)
             }
             if (ui_shop_draw(&ui, &events, &game, pixels)) goto out;
         }
+audio_output:
         if (headless && !trace) {
             while (audio_ticks != ticks) {
                 audio_mix(headless_pcm, 48000 / CM_TICK_HZ);
                 ++audio_ticks;
             }
         } else audio_ticks = ticks;
-        if (ui_draw(&ui, pixels)) goto out;
-        if (playing && ui.screen != UI_GAME) {
+        if (!snd_movie_active() && ui_draw(&ui, pixels)) goto out;
+        if (!snd_movie_active() && playing && ui.screen != UI_GAME) {
             int aim_x = (input.mouse_x - 320) / 2;
             int aim_y = 201 - input.mouse_y / 2;
             if (ui_draw_menu_cursor(&ui, &game, pixels, aim_x, aim_y,
