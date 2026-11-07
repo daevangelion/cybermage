@@ -825,6 +825,7 @@ int main(int argc, char **argv)
     const char *data = "orig/retail", *dump = NULL, *keys = NULL, *trace = NULL;
     const char *state_directory = NULL, *user = NULL, *undefined_path = NULL;
     const char *control_mode = "classic";
+    const char *display = "fit";
     const char *renderer = "sw";
     const uint8_t *pal_data;
     uint32_t pal_size;
@@ -849,6 +850,7 @@ int main(int argc, char **argv)
                   !strcmp(argv[i], "--ticks-per-frame") ||
                   !strcmp(argv[i], "--user") || !strcmp(argv[i], "--bios-seed") ||
                   !strcmp(argv[i], "--controls") ||
+                  !strcmp(argv[i], "--display") ||
                   !strcmp(argv[i], "--renderer") || !strcmp(argv[i], "--width") ||
                   !strcmp(argv[i], "--height") ||
                   !strcmp(argv[i], "--replay-load-slot") || !strcmp(argv[i], "--import-undefined") ||
@@ -860,6 +862,7 @@ int main(int argc, char **argv)
             else if (!strcmp(arg, "--state-dump")) state_directory = argv[i];
             else if (!strcmp(arg, "--user")) user = argv[i];
             else if (!strcmp(arg, "--controls")) control_mode = argv[i];
+            else if (!strcmp(arg, "--display")) display = argv[i];
             else if (!strcmp(arg, "--renderer")) renderer = argv[i];
             else if (!strcmp(arg, "--ticks-per-frame")) {
                 if (number(argv[i], &ticks_per_frame) || !ticks_per_frame || ticks_per_frame > 8) {
@@ -895,7 +898,7 @@ int main(int argc, char **argv)
                 return 2;
             }
         } else {
-            platform_report("usage: cybermage [--data DIR] [--user DIR] [--bios-seed N] [--controls classic|modern] [--renderer sw|gl] [--width N --height N] [--headless] [--ticks-per-frame N] [--frames N] [--dump DIR] [--state-dump DIR] [--keys FILE | --replay TRACE [--replay-load-slot N | --import-undefined PERSONS]]");
+            platform_report("usage: cybermage [--data DIR] [--user DIR] [--bios-seed N] [--controls classic|modern] [--renderer sw|gl] [--display fit|fill] [--width N --height N] [--headless] [--ticks-per-frame N] [--frames N] [--dump DIR] [--state-dump DIR] [--keys FILE | --replay TRACE [--replay-load-slot N | --import-undefined PERSONS]]");
             return 2;
         }
     }
@@ -904,6 +907,15 @@ int main(int argc, char **argv)
         return 2;
     }
     gl_enabled = !strcmp(renderer, "gl");
+    if (strcmp(display, "fit") && strcmp(display, "fill")) {
+        cm_fail("arguments", 0, "--display must be fit or fill");
+        return 2;
+    }
+    if (gl_enabled && !strcmp(display, "fill")) {
+        cm_fail("arguments", 0, "--display fill is software-only; GL already widens the view");
+        return 2;
+    }
+    platform_display_fill(!strcmp(display, "fill"));
     if (!gl_enabled && (gl_width || gl_height)) {
         cm_fail("arguments", 0, "--width and --height require --renderer gl");
         return 2;

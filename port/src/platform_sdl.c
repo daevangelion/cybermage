@@ -284,9 +284,17 @@ const char *platform_user_dir(void)
     return user_dir;
 }
 
+static int display_fill;
+
+void platform_display_fill(int fill)
+{
+    display_fill = fill;
+}
+
 static SDL_Rect viewport(int w, int h)
 {
     SDL_Rect rect = {0, 0, w, h};
+    if (display_fill) return rect;
     if ((int64_t)w * CM_HEIGHT <= (int64_t)h * CM_WIDTH)
         rect.h = w * CM_HEIGHT / CM_WIDTH;
     else

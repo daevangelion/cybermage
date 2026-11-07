@@ -100,7 +100,9 @@ Sources: `key:0..127` (DOS set-1 scans), `mouse:0..7` (left=0, middle=1,
 right=2), `pad:0..20` (SDL GameController button enumeration), `trigger:0..1`
 (LT/RT), `wheel:0..1` (up/down). Common pad numbers: A=0, B=1, X=2, Y=3,
 Back=4, Start=6, L3=7, R3=8, LB=9, RB=10, D-pad up/down/left/right=11/12/13/14.
-`mouse_yaw` and `mouse_pitch` accept finite values in [-100,100].
+`mouse_yaw`, `mouse_pitch`, `touch_yaw` and `touch_pitch` accept finite
+values in [-1000,1000]. Touch look defaults: a full-width swipe turns 360°
+(`touch_yaw = 102.4`), a full-height swipe spans the pitch range.
 
 Automap is a modern live-topology overlay, not a reproduction of DOS AutoMap
 artwork or its exploration-reveal rules. It draws the current height level's
@@ -111,9 +113,10 @@ pause menu rather than a separate pause screen.
 
 ## Android touch
 
-Launch the exported `DataActivity` with the optional intent string extra
-`controls=classic` to select Original keyboard semantics; it forwards the choice
-to the private `GameActivity`. Without it Android uses modern controls.
+The launcher asks for the display mode each start (remembered): GPU
+widescreen (default), software stretched to fill, or software 4:3. The intent
+extras `renderer=sw|gl` (skips the dialog) and `controls=classic` are forwarded
+to the private `GameActivity`. Without `controls` Android uses modern controls.
 The virtual left stick and six outlined
 buttons use the black bars outside the 4:3 game area where space permits.
 Otherwise they occupy lower corners. **F/J/U/W/M/A** mean fire, jump, use,

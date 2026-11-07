@@ -25,6 +25,10 @@ void controls_init(cm_controls *c)
     memset(c, 0, sizeof *c);
     c->mouse_yaw = 10;
     c->mouse_pitch = 0.5;
+    /* Touch look arrives in 640x480 units: a full-width swipe turns 360
+       degrees and a full-height swipe spans the whole pitch range. */
+    c->touch_yaw = 65536.0 / 640;
+    c->touch_pitch = 448.0 / 480;
     c->stick_yaw = 1024;
     c->stick_pitch = 8;
     c->pointer_x = 320;
@@ -127,9 +131,11 @@ int controls_parse(cm_controls *c, const uint8_t *data, uint32_t size)
             double value;
             char *end;
             value = strtod(eq, &end);
-            if (end == eq || *end || !isfinite(value) || value < -100 || value > 100) goto bad;
+            if (end == eq || *end || !isfinite(value) || value < -1000 || value > 1000) goto bad;
             if (!strcmp(s, "mouse_yaw")) next.mouse_yaw = value;
             else if (!strcmp(s, "mouse_pitch")) next.mouse_pitch = value;
+            else if (!strcmp(s, "touch_yaw")) next.touch_yaw = value;
+            else if (!strcmp(s, "touch_pitch")) next.touch_pitch = value;
             else goto bad;
             continue;
         }
@@ -149,7 +155,7 @@ int controls_parse(cm_controls *c, const uint8_t *data, uint32_t size)
         if (!slot) goto bad;
         continue;
 bad:
-        return cm_fail("controls.cfg", offset, "expected context.action = source:decimal[,source:decimal] or mouse_yaw/mouse_pitch = number");
+        return cm_fail("controls.cfg", offset, "expected context.action = source:decimal[,source:decimal] or mouse_yaw/mouse_pitch/touch_yaw/touch_pitch = number");
     }
     *c = next;
     return 0;

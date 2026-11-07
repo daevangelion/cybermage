@@ -72,6 +72,8 @@ int platform_keys(const char *path);
 int platform_poll(cm_input *input, unsigned frame);
 void platform_mouse_warp(int x, int y); /* 640x480 game coordinates. */
 int platform_controls(int modern, int gameplay);
+/* Software output: 0 keeps a centred 4:3 canvas, 1 stretches it to the window. */
+void platform_display_fill(int fill);
 /* RGB 160,220,220; window/output coordinates, top-left origin. */
 unsigned platform_touch_rects(int width, int height,
                                cm_rect rectangles[CM_TOUCH_RECTS_MAX]);

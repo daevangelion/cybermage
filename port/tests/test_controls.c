@@ -41,6 +41,12 @@ int main(void)
     frame(&c, CONTROLS_FOOT, &in, &out);
     assert(!out.look_yaw && !out.look_pitch);
     controls_init(&c);
+    /* A quarter-width touch swipe turns 90 degrees, not a few degrees. */
+    in.touch_look_dx = 160;
+    frame(&c, CONTROLS_FOOT, &in, &out);
+    assert(out.look_yaw == -16384);
+    in.touch_look_dx = 0;
+    controls_init(&c);
     in.mouse_buttons = 1;
     in.held[0x11] = 1;
     frame(&c, CONTROLS_FOOT, &in, &out);

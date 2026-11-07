@@ -38,6 +38,7 @@ typedef struct {
     unsigned output_mouse;
     uint64_t previous_actions;
     double yaw_fraction, pitch_fraction, mouse_yaw, mouse_pitch;
+    double touch_yaw, touch_pitch;
     double stick_yaw, stick_pitch;
     int pointer_x, pointer_y;
     unsigned selection_kind;

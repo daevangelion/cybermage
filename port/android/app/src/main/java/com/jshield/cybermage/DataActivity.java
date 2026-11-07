@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.ContentResolver;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Bundle;
@@ -20,6 +21,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public final class DataActivity extends Activity {
     private static final int PICK_FOLDER = 1;
     private static final String[] WITNESSES = {"CM_HI.EXE", "HIPAK.RSC", "STRINGS.MSG"};
+    private static final String[] DISPLAY_NAMES = {
+        "GPU: widescreen, fills the screen",
+        "Software: original pixels, stretched to fill",
+        "Software: original pixels, 4:3"
+    };
+    private static final String[][] DISPLAY_ARGS = {{"gl", "fit"}, {"sw", "fill"}, {"sw", "fit"}};
     private static final AtomicBoolean IMPORTING = new AtomicBoolean();
 
     private File data;
@@ -35,6 +42,16 @@ public final class DataActivity extends Activity {
     protected void onCreate(Bundle state) {
         super.onCreate(state);
         openData();
+    }
+
+    private void launch(String renderer, String display) {
+        Intent game = new Intent(this, GameActivity.class);
+        String controls = getIntent().getStringExtra("controls");
+        if (controls != null) game.putExtra("controls", controls);
+        game.putExtra("renderer", renderer);
+        game.putExtra("display", display);
+        startActivity(game);
+        finish();
     }
 
     private void fail(String title, String message) {
@@ -74,13 +91,23 @@ public final class DataActivity extends Activity {
             return;
         }
         if (ready()) {
-            Intent game = new Intent(this, GameActivity.class);
-            String controls = getIntent().getStringExtra("controls");
-            if (controls != null) game.putExtra("controls", controls);
             String renderer = getIntent().getStringExtra("renderer");
-            if (renderer != null) game.putExtra("renderer", renderer);
-            startActivity(game);
-            finish();
+            if (renderer != null) {
+                launch(renderer, "gl".equals(renderer) ? "fit" : "fill");
+                return;
+            }
+            SharedPreferences prefs = getSharedPreferences("launch", MODE_PRIVATE);
+            int[] choice = {prefs.getInt("display", 0)};
+            if (choice[0] < 0 || choice[0] >= DISPLAY_ARGS.length) choice[0] = 0;
+            new AlertDialog.Builder(this)
+                .setTitle("CyberMage")
+                .setSingleChoiceItems(DISPLAY_NAMES, choice[0], (dialog, which) -> choice[0] = which)
+                .setPositiveButton("Play", (dialog, which) -> {
+                    prefs.edit().putInt("display", choice[0]).apply();
+                    launch(DISPLAY_ARGS[choice[0]][0], DISPLAY_ARGS[choice[0]][1]);
+                })
+                .setNegativeButton("Close", (dialog, which) -> finish())
+                .setCancelable(false).show();
             return;
         }
         new AlertDialog.Builder(this)

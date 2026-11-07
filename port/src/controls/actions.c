@@ -135,8 +135,10 @@ void controls_frame(cm_controls *c, controls_context context,
             output->move_angle = (uint16_t)(int32_t)(atan2(-mx, my) * (32768.0 / PI));
         }
         if (!in->focus_lost) {
-            c->yaw_fraction -= (in->mouse_dx + (double)in->touch_look_dx) * c->mouse_yaw + rx * c->stick_yaw;
-            c->pitch_fraction += (in->mouse_dy + (double)in->touch_look_dy) * c->mouse_pitch + ry * c->stick_pitch;
+            c->yaw_fraction -= in->mouse_dx * c->mouse_yaw +
+                in->touch_look_dx * c->touch_yaw + rx * c->stick_yaw;
+            c->pitch_fraction += in->mouse_dy * c->mouse_pitch +
+                in->touch_look_dy * c->touch_pitch + ry * c->stick_pitch;
         }
         /* Bound conversion even for synthetic/platform extreme deltas. */
         if (c->yaw_fraction > 32767) c->yaw_fraction = 32767;
