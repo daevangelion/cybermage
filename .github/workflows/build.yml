@@ -29,7 +29,9 @@ jobs:
           mkdir "$d" && cp port/build/cybermage "$d/" && cp README.md port/src/audio/COPYING.Nuked-OPL3 "$d/"
           tar -czf "$d.tar.gz" "$d"
       - uses: actions/upload-artifact@v4
-        with: { name: cybermage-linux-${{ matrix.arch }}, path: cybermage-linux-${{ matrix.arch }}.tar.gz }
+        with:
+          name: cybermage-linux-${{ matrix.arch }}
+          path: cybermage-linux-${{ matrix.arch }}.tar.gz
 
   macos:
     strategy:
@@ -56,7 +58,9 @@ jobs:
           cp README.md port/src/audio/COPYING.Nuked-OPL3 "$d/"
           tar -czf "$d.tar.gz" "$d"
       - uses: actions/upload-artifact@v4
-        with: { name: cybermage-macos-${{ matrix.arch }}, path: cybermage-macos-${{ matrix.arch }}.tar.gz }
+        with:
+          name: cybermage-macos-${{ matrix.arch }}
+          path: cybermage-macos-${{ matrix.arch }}.tar.gz
 
   windows:
     strategy:
@@ -85,17 +89,23 @@ jobs:
           test -f "$d/SDL2.dll"
           cp README.md port/src/audio/COPYING.Nuked-OPL3 "$d/"
       - uses: actions/upload-artifact@v4
-        with: { name: cybermage-windows-${{ matrix.arch }}, path: cybermage-windows-${{ matrix.arch }} }
+        with:
+          name: cybermage-windows-${{ matrix.arch }}
+          path: cybermage-windows-${{ matrix.arch }}
 
   android:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
-        with: { distribution: temurin, java-version: '21' }
+        with:
+          distribution: temurin
+          java-version: '21'
       - run: ABIS=arm64-v8a,armeabi-v7a,x86_64,x86 port/android/build.sh
       - uses: actions/upload-artifact@v4
-        with: { name: cybermage-android, path: port/android/out/cybermage-debug.apk }
+        with:
+          name: cybermage-android
+          path: port/android/out/cybermage-debug.apk
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
@@ -103,9 +113,11 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/download-artifact@v4
-        with: { path: dist }
+        with:
+          path: dist
       - name: publish
-        env: { GH_TOKEN: '${{ github.token }}' }
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           cd dist
           for d in cybermage-windows-*; do (cd "$d" && zip -qr "../$d.zip" .); done
