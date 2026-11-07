@@ -143,6 +143,8 @@ Details: [port/android/README.md](port/android/README.md).
 | `REVERSE.md`, `labels.csv` | reverse-engineering index and symbol labels for `CM_HI.EXE` |
 | `tools/` | analysis and comparison tools used against the original executable |
 
-Third-party code: [Nuked-OPL3](https://github.com/nukeykt/Nuked-OPL3) (LGPL 2.1,
-`port/src/audio/COPYING.Nuked-OPL3`) and SDL2 (zlib). CyberMage is © Origin
-Systems / Electronic Arts; this project contains none of its data.
+## Licence
+
+MIT ([LICENSE](LICENSE)). Third-party components and prior art are listed with
+their licences in [ATTRIBUTIONS.md](ATTRIBUTIONS.md); notably Nuked-OPL3 is LGPL-2.1.
+CyberMage is © Origin Systems / Electronic Arts; this project contains none of its data.

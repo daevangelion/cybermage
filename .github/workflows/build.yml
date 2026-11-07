@@ -26,7 +26,7 @@ jobs:
       - name: package
         run: |
           d=cybermage-linux-${{ matrix.arch }}
-          mkdir "$d" && cp port/build/cybermage "$d/" && cp README.md port/src/audio/COPYING.Nuked-OPL3 "$d/"
+          mkdir "$d" && cp port/build/cybermage "$d/" && cp README.md LICENSE ATTRIBUTIONS.md port/src/audio/COPYING.Nuked-OPL3 "$d/"
           tar -czf "$d.tar.gz" "$d"
       - uses: actions/upload-artifact@v4
         with:
@@ -55,7 +55,7 @@ jobs:
           install_name_tool -change "$lib" "@executable_path/$(basename "$lib")" "$d/cybermage"
           install_name_tool -id "@executable_path/$(basename "$lib")" "$d/$(basename "$lib")"
           codesign --force -s - "$d/$(basename "$lib")" "$d/cybermage"
-          cp README.md port/src/audio/COPYING.Nuked-OPL3 "$d/"
+          cp README.md LICENSE ATTRIBUTIONS.md port/src/audio/COPYING.Nuked-OPL3 "$d/"
           tar -czf "$d.tar.gz" "$d"
       - uses: actions/upload-artifact@v4
         with:
@@ -87,7 +87,7 @@ jobs:
           mkdir "$d" && cp port/build/cybermage.exe "$d/"
           ldd "$d/cybermage.exe" | awk -v p="$MINGW_PREFIX/" 'index($3, p) == 1 {print $3}' | xargs -r -I{} cp {} "$d/"
           test -f "$d/SDL2.dll"
-          cp README.md port/src/audio/COPYING.Nuked-OPL3 "$d/"
+          cp README.md LICENSE ATTRIBUTIONS.md port/src/audio/COPYING.Nuked-OPL3 "$d/"
       - uses: actions/upload-artifact@v4
         with:
           name: cybermage-windows-${{ matrix.arch }}

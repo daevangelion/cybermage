@@ -10,6 +10,10 @@ val portSource = project.findProperty("portSourceDir") as String?
 val notices = layout.buildDirectory.dir("generated/notices")
 val stageNotices by tasks.registering(Sync::class) {
     from(rootProject.file("../src/audio/COPYING.Nuked-OPL3"))
+    from(rootProject.file("../../LICENSE")) {
+        rename { "CyberMage-LICENSE.txt" } /* AGP drops resources named LICENSE. */
+    }
+    from(rootProject.file("../../ATTRIBUTIONS.md"))
     from(sdlSource.resolve("LICENSE.txt")) {
         rename { "SDL2-LICENSE.txt" }
     }

@@ -26,7 +26,7 @@ Output: `port/android/out/cybermage-debug.apk` (debug signing).
 | `KEEP_BUILD=1` | off | keep `port/android/build/` for incremental builds |
 | `PORT_SOURCE_DIR` | `port/` | build C sources from another checkout |
 
-The APK carries `COPYING.Nuked-OPL3` (LGPL 2.1) and `SDL2-LICENSE.txt` (zlib).
+The APK carries `CyberMage-LICENSE.txt`, `ATTRIBUTIONS.md`, `COPYING.Nuked-OPL3` (LGPL 2.1) and `SDL2-LICENSE.txt` (zlib).
 
 ## Install and add the game data
 
