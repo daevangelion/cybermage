@@ -5,6 +5,9 @@ B ?= build
 CPPFLAGS += -Iinclude $(shell pkg-config --cflags sdl2)
 CFLAGS ?= -O2 -g
 CFLAGS += -std=c99 -pedantic -Wall -Wextra -Werror
+# New glibc string.h implements strchr/memchr as _Generic macros; clang then
+# reports C11 use inside our C99 code (GCC ignores this unknown -Wno- option).
+CFLAGS += -Wno-c11-extensions
 LDLIBS += $(shell pkg-config --libs sdl2) -lm
 SOURCES := $(wildcard src/*.c src/*/*.c)
 OBJECTS := $(patsubst src/%.c,$(B)/%.o,$(SOURCES))
@@ -21,6 +24,10 @@ $(B)/cybermage: $(OBJECTS)
 $(B)/%.o: src/%.c
 	@mkdir -p $(@D)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -MMD -MP -c -o $@ $<
+
+# Unmodified third-party Nuked-OPL3: clang flags its static-in-inline use
+# (GCC ignores the unknown -Wno- option), as in the Android build.
+$(B)/audio/opl3.o: CFLAGS += -Wno-static-in-inline
 
 check: $(B)/test_core $(B)/test_platform $(B)/test_platform_lifecycle $(B)/test_touch $(B)/test_sim $(B)/test_replay $(B)/test_exe $(B)/test_sim_loop $(B)/test_sim_collision $(B)/test_sim_swim $(B)/test_sim_swim_ubsan $(B)/test_sim_swim_original $(B)/test_sim_fire $(B)/test_sim_fire_ubsan $(B)/test_attack_ignore
 	$(B)/test_core
