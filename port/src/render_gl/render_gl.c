@@ -512,7 +512,11 @@ int render_gl_draw_view(const world *w,const world_camera *camera,const cm_gl_vi
         if (bind_image(i)) return -1;
         s.gl.DrawElements(GL_TRIANGLES,(GLsizei)(s.batches[i].count*6),GL_UNSIGNED_INT,(const void *)(uintptr_t)(s.batches[i].first*6*sizeof(GLuint)));
     }
+    /* Wall objects (switches, panels) and flats (shadows, floor decals) sit on
+       tile planes; the software renderer draws them by order, so bias them
+       toward the camera instead of depth-fighting the coplanar tile. */
     s.gl.BindVertexArray(s.vao[1]);s.gl.Disable(GL_CULL_FACE);
+    s.gl.Enable(GL_POLYGON_OFFSET_FILL);s.gl.PolygonOffset(-1.0f,-2.0f);
     for (i=1;i<w->object_count;++i) {
         if (object_mesh(w,i)) return -1;
         if (!s.objects[i].valid) continue;
@@ -520,6 +524,7 @@ int render_gl_draw_view(const world *w,const world_camera *camera,const cm_gl_vi
             order[n++]=i;
         } else if (draw_object(i)) return -1;
     }
+    s.gl.Disable(GL_POLYGON_OFFSET_FILL);
     sort_props(order,n);
     for (i=0;i<n;++i) if (draw_object(order[i])) return -1;
     s.distance_u=s.camera.u;s.distance_v=s.camera.v;

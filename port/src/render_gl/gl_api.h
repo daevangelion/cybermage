@@ -75,6 +75,7 @@ X(void,ReadPixels,(GLint,GLint,GLsizei,GLsizei,GLenum,GLenum,void *)) \
 X(void,ReadBuffer,(GLenum)) \
 X(void,DepthMask,(GLboolean)) \
 X(void,DepthFunc,(GLenum)) \
+X(void,PolygonOffset,(GLfloat,GLfloat)) \
 X(void,BlitFramebuffer,(GLint,GLint,GLint,GLint,GLint,GLint,GLint,GLint,GLbitfield,GLenum))
 
 typedef struct {
