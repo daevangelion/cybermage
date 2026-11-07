@@ -833,7 +833,7 @@ int main(int argc, char **argv)
     cm_input input = {.mouse_x = 446, .mouse_y = 134};
     cm_input physical = {.mouse_x = 446, .mouse_y = 134};
     cm_replay_frame recorded;
-    unsigned frames = 0, frame = 0, bios_seed = 0, replay_slot = 0;
+    unsigned frames = 0, frame = 0, bios_seed = 0, replay_slot = 0, view_size = 2;
     unsigned ticks_per_frame = 1;
     uint32_t audio_ticks = 0;
     int headless = 0, status = 1, playing = 0, divergence = 0, seed_explicit = 0, i;
@@ -851,6 +851,7 @@ int main(int argc, char **argv)
                   !strcmp(argv[i], "--user") || !strcmp(argv[i], "--bios-seed") ||
                   !strcmp(argv[i], "--controls") ||
                   !strcmp(argv[i], "--display") ||
+                  !strcmp(argv[i], "--view-size") ||
                   !strcmp(argv[i], "--renderer") || !strcmp(argv[i], "--width") ||
                   !strcmp(argv[i], "--height") ||
                   !strcmp(argv[i], "--replay-load-slot") || !strcmp(argv[i], "--import-undefined") ||
@@ -863,6 +864,13 @@ int main(int argc, char **argv)
             else if (!strcmp(arg, "--user")) user = argv[i];
             else if (!strcmp(arg, "--controls")) control_mode = argv[i];
             else if (!strcmp(arg, "--display")) display = argv[i];
+            else if (!strcmp(arg, "--view-size")) {
+                /* Original ConWinInfo index: 0 = 640x480 ... 4 = 240x180; '[' and ']' still change it. */
+                if (number(argv[i], &view_size) || view_size > 4) {
+                    cm_fail("arguments", 0, "--view-size must be 0..4");
+                    return 2;
+                }
+            }
             else if (!strcmp(arg, "--renderer")) renderer = argv[i];
             else if (!strcmp(arg, "--ticks-per-frame")) {
                 if (number(argv[i], &ticks_per_frame) || !ticks_per_frame || ticks_per_frame > 8) {
@@ -898,7 +906,7 @@ int main(int argc, char **argv)
                 return 2;
             }
         } else {
-            platform_report("usage: cybermage [--data DIR] [--user DIR] [--bios-seed N] [--controls classic|modern] [--renderer sw|gl] [--display fit|fill] [--width N --height N] [--headless] [--ticks-per-frame N] [--frames N] [--dump DIR] [--state-dump DIR] [--keys FILE | --replay TRACE [--replay-load-slot N | --import-undefined PERSONS]]");
+            platform_report("usage: cybermage [--data DIR] [--user DIR] [--bios-seed N] [--controls classic|modern] [--renderer sw|gl] [--display fit|fill] [--view-size 0..4] [--width N --height N] [--headless] [--ticks-per-frame N] [--frames N] [--dump DIR] [--state-dump DIR] [--keys FILE | --replay TRACE [--replay-load-slot N | --import-undefined PERSONS]]");
             return 2;
         }
     }
@@ -963,6 +971,7 @@ int main(int argc, char **argv)
         ui_config_load(&ui.config,setup_path) ||
         snd_open(data) || game_names_read(user)) goto out;
     ui_options_from_config(&ui);
+    ui.con_size = (int)view_size;
     memcpy(base_palette, palette, sizeof base_palette);
     if (gl_enabled) {
         if (render_gl_open(headless, gl_width, gl_height) || render_gl_palette(palette)) goto out;

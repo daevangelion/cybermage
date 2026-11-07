@@ -26,7 +26,10 @@ public final class DataActivity extends Activity {
         "Software: original pixels, stretched to fill",
         "Software: original pixels, 4:3"
     };
-    private static final String[][] DISPLAY_ARGS = {{"gl", "fit"}, {"sw", "fill"}, {"sw", "fit"}};
+    /* renderer, display, original view size (0 = full 640x480, 2 = DOS default). */
+    private static final String[][] DISPLAY_ARGS = {
+        {"gl", "fit", "0"}, {"sw", "fill", "0"}, {"sw", "fit", "2"}
+    };
     private static final AtomicBoolean IMPORTING = new AtomicBoolean();
 
     private File data;
@@ -44,12 +47,13 @@ public final class DataActivity extends Activity {
         openData();
     }
 
-    private void launch(String renderer, String display) {
+    private void launch(String renderer, String display, String view) {
         Intent game = new Intent(this, GameActivity.class);
         String controls = getIntent().getStringExtra("controls");
         if (controls != null) game.putExtra("controls", controls);
         game.putExtra("renderer", renderer);
         game.putExtra("display", display);
+        game.putExtra("view", view);
         startActivity(game);
         finish();
     }
@@ -93,7 +97,7 @@ public final class DataActivity extends Activity {
         if (ready()) {
             String renderer = getIntent().getStringExtra("renderer");
             if (renderer != null) {
-                launch(renderer, "gl".equals(renderer) ? "fit" : "fill");
+                launch(renderer, "gl".equals(renderer) ? "fit" : "fill", "0");
                 return;
             }
             SharedPreferences prefs = getSharedPreferences("launch", MODE_PRIVATE);
@@ -104,7 +108,8 @@ public final class DataActivity extends Activity {
                 .setSingleChoiceItems(DISPLAY_NAMES, choice[0], (dialog, which) -> choice[0] = which)
                 .setPositiveButton("Play", (dialog, which) -> {
                     prefs.edit().putInt("display", choice[0]).apply();
-                    launch(DISPLAY_ARGS[choice[0]][0], DISPLAY_ARGS[choice[0]][1]);
+                    String[] args = DISPLAY_ARGS[choice[0]];
+                    launch(args[0], args[1], args[2]);
                 })
                 .setNegativeButton("Close", (dialog, which) -> finish())
                 .setCancelable(false).show();

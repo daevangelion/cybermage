@@ -114,7 +114,9 @@ pause menu rather than a separate pause screen.
 ## Android touch
 
 The launcher asks for the display mode each start (remembered): GPU
-widescreen (default), software stretched to fill, or software 4:3. The intent
+widescreen (default), software stretched to fill, or software 4:3. The two
+fill modes start at the original's full 640×480 view (`--view-size 0`); 4:3
+keeps the DOS default 400×300 (`--view-size 2`). The intent
 extras `renderer=sw|gl` (skips the dialog) and `controls=classic` are forwarded
 to the private `GameActivity`. Without `controls` Android uses modern controls.
 The virtual left stick and six outlined
