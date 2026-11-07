@@ -107,91 +107,11 @@ known gaps are deliberate; implementation is not full-game parity.
 | audio/speech/movies | Integrated native PCM/OPL/HMI/TGV | `make -C port -f tests/audio.mk check`:38 songs validate; first30 frames of three movies match FFmpeg | Not exact SOS driver/mixer/voice-allocation parity ([audio](docs/re/audio.md)) |
 | platform/Android | Full-engine APK and opt-in Android GL runtime verified | Frozen20117a3 x86_64 APK:API36/GLES3 `--es renderer gl` and SW title→NEW→scene1→modern touch walking, no crash; earlier dual-ABI gate atc699ea4 | Physical-device/long-play acceptance; no measured FPS logging ([APK/screenshots/logs](port/android/README.md)) |
 
-Named integrated gate: commit `56b6303c39c7ba806ac7f614b6243eca0a0341d2`,
-isolated `git archive` snapshot, strict build and complete `make -C port check`
-and separate collision/five-group phase/six-target controls gates exit0. Receipt
-[gate-56b6303.json](docs/re/gate-56b6303.json) pins binary SHA256
-`0d1b86c534e9f479d36b0f566ec1abe652c59a868402986c4a9ed0ec3217d73f`
-and the full167-scenario gate plus one68-record raw9 recovery witness:
-168/168 full actor/RNG MATCH,168/168 player MATCH,44,295 original state
-records and6,695,976 actor checkpoints. The included save-before-death69 and
-failed-hop17 regressions add no continuous-survival or decoder-acquisition
-claim. The archive includes Review2 through87e5f55, Events2's deferred
-ordinary-pickup correction, and the headless rehearsal cadence option.
-Actual-clock replay ignores that planning option; cadence3 forecasts are
-not original-survival or parity evidence. All four originally
-reported divergences, type59 spawn heading, and weapon-room RNG71 are now
-fixed and re-gated. Original CollItem435AA..435C9 queues pickups;
-CollObject4404C..44086 removes them after all four tiles, preserving pickup903
-and its DoDice12650/RND1. Kind17 bundles intentionally remain immediate.
-No RNG-padding or saved-start PERSON+24 workaround is used. Actual draw-clock,
-UI-action and death-controller inputs are used; missing reads fail closed.
-Fresh per-scenario users load the actual original Normal or Easy configuration;
-earlier mismatched-config native survival forecasts are not parity evidence.
-The external CollectionChamber Scene2 slot1 turret mismatch is now closed.
-Audio's original state14 correction preserves nonzero-cooldown/no-target jumps
-to Move36EF1, per-launch signed burst handling and reload animation1, eliminating
-the spurious native RND6/animation5 tail. All109/113/105-record load/doorway
-traces and the758-record groundstreet now fully match. The exact original BP
-value and original RND call sequence were not measured; source proof covers
-either BP outcome without inference. Numeric Scene9's public-start first bend
-and aperture28 descent also match; historical Temple filenames do not establish
-level identity. Neither external fixture establishes our sequential campaign
-ancestry; actual package configuration and slot numbers are preserved without
-SAVE renaming or undefined-state adapters. Raw Scene9 control2's actual
-original and native saved switch2 byte both change0→1; this is not an
-all-save-byte parity claim or scene-exit claim.
-Three additional Scene2 slot2 branches match311/114/231 records. The first
-returns outdoors after failed stairs, the second faces a door jamb after
-switch28, and only the third genuinely crosses the westdoor atHP77; none
-establishes a cashfloor/basement objective or scene exit.
-The later339-record Scene2 upstairs segment genuinely reaches floor2 atHP63,
-but forecast-only cash pickup is not original progress. Raw Scene9's586-record
-upper-gate attempt stays atZ0 throughout; its save nameUPPER and native forecast
-do not prove a climb. Actual-input replay matches that failed alignment fully.
-The178-record Scene2 upper hall genuinely uses F3/F4 Regen and reachesHP103
-(minimum observed72), with cash still1966 at that checkpoint. The subsequent
-290-record cash pickup genuinely reaches2287 atHP52; actual original and native
-saved cash both change1966→2287. Raw Scene9's385-record ladder-top segment
-genuinely climbs0→65536 atHP111 from the unchanged pre-failure control2 save;
-neither uppergate crossing nor Mission4/5 departure is claimed.
-The earlier original Scene1 mid-climb Save divergence at checkpoint52 is now
-closed. ClearObject0459AB..0459D1 exempts item-bearing props only; the correction
-keeps sceneryPROP890/item0 solid, restoring the original southeast clearance
-and forced-crouch RND16384 rather than accepting the obstructed centre.
-All29 saved motion words and the first five post-save RND calls match, so
-clock, partial-HUD and save-serialization hypotheses are falsified. A named
-isolated regression fails before the correction (0e2fdcb, exit134) and passes
-on56b6303 with all80 actual continuation records/12008 actor checkpoints.
-Separately loading the
-actual original mid-climb save reaches true floor1, then ranger19 is killed;
-those94/290-record continuations match and are genuine upper-route evidence.
-No campaign exit or full-game completion is claimed, and future concurrent
-HEAD changes are not certified. The earlier
-[167-route](docs/re/gate-ae2792a.json),
-[147-route](docs/re/gate-8df96e0.json),
-[140-route](docs/re/gate-c2a3a0c.json),
-[126-route](docs/re/gate-5e32231.json),
-[112-route](docs/re/gate-cda7722.json),
-[92-route](docs/re/gate-f0186a3.json) and
-[76-route](docs/re/gate-5bc4fde.json) baselines remain historical evidence.
-Boot comparisons import only the explicitly approved original undefined PERSON+24
-word; saved-start comparisons use the real SAVE without that adapter.
-Measured input/actor/draw clocks are external inputs; no coordinates, HP,
-RNG, deadlines or target outputs are installed. Corrected movement inputs retain
-all106 measured BDA bytes, including Ctrl=4 on frames71..75. This named receipt
-does not silently certify later concurrent HEAD changes.
-
-Later incremental route gates:
-[gate-4461e87.json](docs/re/gate-4461e87.json) retains the earlier8/10 full
-actor/RNG and9/10 player matches. After the definition-difficulty migration,
-[gate-c1018ed.json](docs/re/gate-c1018ed.json) fully matches all10 upper-hall,
-door, decoder and lift segments:1544 state records and233168 actor checkpoints.
-The prior door5 NPC120/RNG130 and lift13 NPC123/RNG236 divergences are closed
-in that named cohort. Actual saved switches5/38 reach1 after their real uses;
-the F5/F6 decoder-case246045-byte save outputs are byte-identical to the
-originals. This is not an all-save-byte parity claim for the other segments.
-These earlier incremental results do not replace the consolidated counts above.
+Integrated gate (commit `56b6303`): strict build, complete `make -C port check` and
+168 original-recorded scenarios matching player, actors and RNG (44,295 original state
+records, 6,695,976 actor checkpoints). Inputs are recorded original key/mouse input,
+original-written saves and configs; no coordinates, HP, RNG or targets are installed.
+Full-game completion is not claimed.
 
 ## Verification Checklist
 

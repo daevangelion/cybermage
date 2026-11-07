@@ -1,0 +1,113 @@
+name: build
+
+on:
+  push:
+    branches: [master]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: x86_64, runner: ubuntu-24.04 }
+          - { arch: arm64, runner: ubuntu-24.04-arm }
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libsdl2-dev pkg-config
+      - run: make -C port -j"$(nproc)"
+      - name: package
+        run: |
+          d=cybermage-linux-${{ matrix.arch }}
+          mkdir "$d" && cp port/build/cybermage "$d/" && cp README.md port/src/audio/COPYING.Nuked-OPL3 "$d/"
+          tar -czf "$d.tar.gz" "$d"
+      - uses: actions/upload-artifact@v4
+        with: { name: cybermage-linux-${{ matrix.arch }}, path: cybermage-linux-${{ matrix.arch }}.tar.gz }
+
+  macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: arm64, runner: macos-15 }
+          - { arch: x86_64, runner: macos-15-intel }
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: brew install sdl2 pkg-config
+      - run: make -C port -j"$(sysctl -n hw.ncpu)"
+      - name: package (bundle SDL2 next to the binary)
+        run: |
+          d=cybermage-macos-${{ matrix.arch }}
+          mkdir "$d" && cp port/build/cybermage "$d/"
+          lib=$(otool -L "$d/cybermage" | awk '/libSDL2/ {print $1}')
+          cp "$(brew --prefix sdl2)/lib/$(basename "$lib")" "$d/"
+          chmod u+w "$d/$(basename "$lib")"
+          install_name_tool -change "$lib" "@executable_path/$(basename "$lib")" "$d/cybermage"
+          install_name_tool -id "@executable_path/$(basename "$lib")" "$d/$(basename "$lib")"
+          codesign --force -s - "$d/$(basename "$lib")" "$d/cybermage"
+          cp README.md port/src/audio/COPYING.Nuked-OPL3 "$d/"
+          tar -czf "$d.tar.gz" "$d"
+      - uses: actions/upload-artifact@v4
+        with: { name: cybermage-macos-${{ matrix.arch }}, path: cybermage-macos-${{ matrix.arch }}.tar.gz }
+
+  windows:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: x86_64, runner: windows-2025, msystem: UCRT64, env: ucrt-x86_64 }
+          - { arch: arm64, runner: windows-11-arm, msystem: CLANGARM64, env: clang-aarch64 }
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: ${{ matrix.msystem }}
+          install: make
+          pacboy: cc:p SDL2:p pkgconf:p
+      - run: make -C port -j"$(nproc)"
+      - name: package
+        run: |
+          d=cybermage-windows-${{ matrix.arch }}
+          mkdir "$d" && cp port/build/cybermage.exe "$d/"
+          ldd "$d/cybermage.exe" | awk -v p="$MINGW_PREFIX/" 'index($3, p) == 1 {print $3}' | xargs -r -I{} cp {} "$d/"
+          test -f "$d/SDL2.dll"
+          cp README.md port/src/audio/COPYING.Nuked-OPL3 "$d/"
+      - uses: actions/upload-artifact@v4
+        with: { name: cybermage-windows-${{ matrix.arch }}, path: cybermage-windows-${{ matrix.arch }} }
+
+  android:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '21' }
+      - run: ABIS=arm64-v8a,armeabi-v7a,x86_64,x86 port/android/build.sh
+      - uses: actions/upload-artifact@v4
+        with: { name: cybermage-android, path: port/android/out/cybermage-debug.apk }
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [linux, macos, windows, android]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { path: dist }
+      - name: publish
+        env: { GH_TOKEN: '${{ github.token }}' }
+        run: |
+          cd dist
+          for d in cybermage-windows-*; do (cd "$d" && zip -qr "../$d.zip" .); done
+          gh release create "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" --generate-notes \
+            */*.tar.gz *.zip cybermage-android/cybermage-debug.apk

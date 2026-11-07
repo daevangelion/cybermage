@@ -592,7 +592,7 @@ the139-record weapon-room route and20976 actor checkpoints that previously
 diverged at RNG71. Strict build, all five phase groups, six controls targets,
 and complete `make -C port check` exit0. Later earned segments replay on the
 same immutable source/binary; commands, input hashes and incremental counts
-are retained in [gate-c2a3a0c.json](gate-c2a3a0c.json). Fresh per-scenario user
+are retained in gate-c2a3a0c.json. Fresh per-scenario user
 directories copy the actual original configuration: Normal mousea40f,
 campaign Easy4277, or newly original-written Easy mouseab22. Earlier reused-user
 Normal/Easy forecast comparisons were invalid, not gameplay divergences.
@@ -602,7 +602,7 @@ planning-clock change, then matches the new87-record catwalk sweep:
 141/141 player and actor/RNG matches. All five phase groups, six controls
 targets and complete `make check` again exit0. The rehearsal cadence changes
 frame-indexed key planning only; actual-clock replay ignores it. See
-[gate-8df96e0.json](gate-8df96e0.json); this is not a claim that cadence3
+gate-8df96e0.json; this is not a claim that cadence3
 forecasts reproduce original survival or wall-time input sampling.
 
 Later external-save probes expand the same named cohort to147 scenarios:
@@ -625,7 +625,7 @@ exclusive cooldown/death/zero-entry branches, per-launch signed burst decrement
 and animation1 reload; no BP inference, saved-byte adaptation or RNG padding.
 The numeric Scene9 aperture28 descent is also matched; historical Temple
 capture names are not evidence of that scene's level identity. See
-[gate-ae2792a.json](gate-ae2792a.json) for commands and40,065 original records /
+gate-ae2792a.json for commands and40,065 original records /
 6,058,542 actor checkpoints. No exit or complete campaign is claimed.
 
 ## ClearObject scenery and pickup distinction
@@ -653,6 +653,6 @@ errors, and all80 genuine continuation records /12008 actor checkpoints.
 Its full167-scenario gate plus the68-record raw9 recovery witness matches
 168/168 player and actor/RNG comparisons; strict build, collision, five phase
 groups, six controls targets and complete `make check` exit0. Evidence:
-[gate-56b6303.json](gate-56b6303.json),44,295 original state records and
+gate-56b6303.json,44,295 original state records and
 6,695,976 actor checkpoints. The recovery save nameGROUND does not prove
 descent: all its original Z values remain65536 and actor25 is still alive.

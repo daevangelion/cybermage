@@ -5,7 +5,7 @@ plugins {
 val portAbis = (project.findProperty("portAbis") as String? ?: "arm64-v8a")
     .split(",").map { it.trim() }.filter { it.isNotEmpty() }
 val sdlSource = file(project.findProperty("sdl2SourceDir") as String?
-    ?: "~/qg-android/src/n64/port/android/third_party/SDL")
+    ?: rootProject.file("third_party/SDL").path)
 val portSource = project.findProperty("portSourceDir") as String?
 val notices = layout.buildDirectory.dir("generated/notices")
 val stageNotices by tasks.registering(Sync::class) {

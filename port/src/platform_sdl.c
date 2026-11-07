@@ -9,7 +9,18 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#ifdef _WIN32
+#include <direct.h>
+#include <io.h>
+#include <windows.h>
+#define make_directory(path) _mkdir(path)
+#define replace_file(from, to) \
+    (!MoveFileExA(from, to, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
+#else
 #include <unistd.h>
+#define make_directory(path) mkdir(path, 0755)
+#define replace_file(from, to) rename(from, to)
+#endif
 
 #define KEY_EVENTS_MAX 4096
 #define PATH_MAX_BYTES 1024
@@ -1063,11 +1074,25 @@ int platform_directory(const char *path)
     for (i = 1; i <= n; ++i) {
         if (buf[i] != '/' && buf[i]) continue;
         buf[i] = 0;
-        if (mkdir(buf, 0755) && errno != EEXIST)
+        if (make_directory(buf) && errno != EEXIST)
             return cm_fail(path, 0, "cannot create dump directory");
         buf[i] = path[i];
     }
     return 0;
+}
+
+/* Flush to stable storage before the rename makes the new file visible. */
+static int sync_rw(SDL_RWops *rw)
+{
+#ifdef _WIN32
+    if (rw->type == SDL_RWOPS_WINFILE)
+        return !FlushFileBuffers((HANDLE)rw->hidden.windowsio.h);
+    return rw->type != SDL_RWOPS_STDFILE || fflush(rw->hidden.stdio.fp) ||
+        _commit(_fileno(rw->hidden.stdio.fp));
+#else
+    return rw->type != SDL_RWOPS_STDFILE || fflush(rw->hidden.stdio.fp) ||
+        fsync(fileno(rw->hidden.stdio.fp));
+#endif
 }
 
 int platform_file_write(const char *path, const uint8_t *data, uint32_t size)
@@ -1084,8 +1109,7 @@ int platform_file_write(const char *path, const uint8_t *data, uint32_t size)
         remove(temporary);
         return cm_fail(path, 0, "short file write");
     }
-    if (rw->type != SDL_RWOPS_STDFILE || fflush(rw->hidden.stdio.fp) ||
-        fsync(fileno(rw->hidden.stdio.fp))) {
+    if (sync_rw(rw)) {
         SDL_RWclose(rw);
         remove(temporary);
         return cm_fail(path, 0, "file sync failed");
@@ -1094,7 +1118,7 @@ int platform_file_write(const char *path, const uint8_t *data, uint32_t size)
         remove(temporary);
         return cm_fail(path, 0, "file close failed");
     }
-    if (rename(temporary, path)) {
+    if (replace_file(temporary, path)) {
         remove(temporary);
         return cm_fail(path, 0, "file replacement failed");
     }

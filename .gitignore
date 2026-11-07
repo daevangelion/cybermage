@@ -10,3 +10,4 @@ __pycache__/
 unpacked/
 out/
 labels.csv.lock
+port/android/third_party/

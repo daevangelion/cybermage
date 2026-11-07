@@ -836,7 +836,7 @@ int main(int argc, char **argv)
     unsigned frames = 0, frame = 0, bios_seed = 0, replay_slot = 0, view_size = 2;
     unsigned ticks_per_frame = 1;
     uint32_t audio_ticks = 0;
-    int headless = 0, remote = 0, status = 1, playing = 0, divergence = 0, seed_explicit = 0, i;
+    int headless = 0, remote = 0, data_given = 0, status = 1, playing = 0, divergence = 0, seed_explicit = 0, i;
     int modern = 0;
     int replay_load = 0;
     int applied_settings[5], settings_applied = 0;
@@ -858,7 +858,7 @@ int main(int argc, char **argv)
                   !strcmp(argv[i], "--replay-load-slot") || !strcmp(argv[i], "--import-undefined") ||
                   !strcmp(argv[i], "--replay")) && i + 1 < argc) {
             const char *arg = argv[i++];
-            if (!strcmp(arg, "--data")) data = argv[i];
+            if (!strcmp(arg, "--data")) { data = argv[i]; data_given = 1; }
             else if (!strcmp(arg, "--dump")) dump = argv[i];
             else if (!strcmp(arg, "--keys")) keys = argv[i];
             else if (!strcmp(arg, "--state-dump")) state_directory = argv[i];
@@ -936,6 +936,10 @@ int main(int argc, char **argv)
         return 2;
     }
     modern = !strcmp(control_mode, "modern");
+    /* Without --data, a binary copied into the game folder just works. */
+    if (!data_given && platform_file_exists("orig/retail/CM_HI.EXE") != 1 &&
+        platform_file_exists("CM_HI.EXE") == 1)
+        data = ".";
     if (remote && !modern) {
         cm_fail("arguments", 0, "--remote requires --controls modern");
         return 2;

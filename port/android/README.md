@@ -1,226 +1,71 @@
 # CyberMage Android
 
-## Review2 lifecycle acceptance
-
-Frozen source `18be842` built offline for x86_64 with the canonical wrapper,
-`KEEP_BUILD=1`, JDK21, NDK27.2.12479018, cached SDL2 release-2.30.10 and the
-shared Gradle9.4.1/AGP8.13.2 cache. Build succeeded (22 tasks executed,
-17 from cache). APK:1,966,637 bytes, SHA256
-`22d100d33426e8a30d28612bbfc460604b3103b60174604e106befcd42a886a4`.
-
-On the already-running `box-api36` / `emulator-5554`, launch through
-`DataActivity --es renderer gl` entered scene1 using Android's modern default.
-`KEYCODE_HOME`, ten seconds in the launcher, then bringing the existing task
-forward preserved PID23392. Inspected before/after screenshots show intact
-world textures and HUD. A subsequent one-second virtual-stick swipe visibly
-walked forward, proving resumed input/rendering rather than a frozen image.
-The PID-scoped log contained no fatal exception, fatal signal or engine ERROR.
-Evidence: `captures/Fix2-android/{run.json,before-home.png,after-resume.png,
-resume-walk.png,logcat.txt}`.
-
-This did not force Android to lose EGL. Separate Core GL and OpenGL ES runtime
-tests destroyed/recreated the real platform context, reset every renderer cache
-and checked the same scene pixel; both passed. The platform lifecycle unit test
-also advances a synthetic clock ten minutes across background/foreground events
-and checks no simulation-clock jump or pacing catch-up.
-SDL2's event contract is documented at
-<https://wiki.libsdl.org/SDL2/README-android#pause-resume-behaviour>.
-
-The APK contains the C port and SDL2, **no game data**. Supply your own installed
-retail CyberMage directory. DOS filenames must retain their uppercase spelling.
+The APK contains the C port and SDL2, **no game data**. Supply your own retail
+CyberMage directory; DOS file names must keep their upper-case spelling.
 
 ## Build
 
-From the repository root:
+Requirements: JDK 17+ and the Android SDK (`ANDROID_HOME`). The Gradle wrapper
+downloads Gradle 9.4.1; the Android Gradle plugin installs NDK 27.2.12479018 and
+CMake 3.22.1; `build.sh` clones SDL2 `release-2.30.10` into `third_party/SDL`.
 
 ```
-ABIS=arm64-v8a,x86_64 ASP_MEM=4000M tools/run_capped.sh port/android/build.sh
+port/android/build.sh                          # default ABIs: arm64-v8a,armeabi-v7a,x86_64
+ABIS=arm64-v8a,armeabi-v7a,x86_64,x86 port/android/build.sh
 ```
 
-Output: `port/android/out/cybermage-debug.apk` (development signing).
-Default ABI is `arm64-v8a`; `x86_64` enables the API36 emulator.
+Output: `port/android/out/cybermage-debug.apk` (debug signing).
 
-This follows `../hexx/port/android`: SDL2 `release-2.30.10` is compiled directly
-from `~/qg-android/src/n64/port/android/third_party/SDL`,
-never copied into this project. Cached Gradle9.4.1/AGP8.13.2 are reused through
-`GRADLE_USER_HOME=~/qg-android/gradle`; the build is strictly
-offline. SDK defaults to `~/.local/share/android-sdk`, NDK27.2.12479018,
-CMake3.22.1, JDK21. Override `SDL2_SOURCE_DIR`, `GRADLE_USER_HOME`, `GRADLE_BIN`,
-`ANDROID_HOME`, or `JAVA_HOME` to equivalent existing installations.
+| Variable | Default | Purpose |
+|---|---|---|
+| `ABIS` | `arm64-v8a,armeabi-v7a,x86_64` | comma-separated ABIs |
+| `ANDROID_HOME` | `$ANDROID_SDK_ROOT` or `~/Android/Sdk` | SDK location |
+| `SDL2_SOURCE_DIR` | `port/android/third_party/SDL` | existing SDL2 checkout |
+| `GRADLE_BIN` | `port/android/gradlew` | another Gradle 9 binary |
+| `OFFLINE=1` | off | build only from the Gradle cache |
+| `KEEP_BUILD=1` | off | keep `port/android/build/` for incremental builds |
+| `PORT_SOURCE_DIR` | `port/` | build C sources from another checkout |
 
-All Gradle/CMake/temp output is under `port/android/build/`. Successful builds
-copy the APK to `out/` and delete that build directory. `KEEP_BUILD=1` retains
-only this job's outputs for incremental development; failures retain diagnostics.
-The unmodified third-party Nuked-OPL3 has the same isolated Clang
-`-Wno-static-in-inline` exception as Hexx; port sources retain strict C99 warnings.
-The APK carries `COPYING.Nuked-OPL3` (LGPL2.1) and `SDL2-LICENSE.txt` (zlib);
-the notice text is read from the existing source trees, not game data.
+The APK carries `COPYING.Nuked-OPL3` (LGPL 2.1) and `SDL2-LICENSE.txt` (zlib).
 
-For an isolated source checkout, `PORT_SOURCE_DIR=/path/to/checkout/port` selects
-its C files while keeping Gradle/SDK/SDL inputs and build outputs in this project.
-No asset directory is copied or bundled by that option.
-
-## Install and choose the data folder
+## Install and add the game data
 
 ```
 adb install -r port/android/out/cybermage-debug.apk
-adb shell am start -n com.jshield.cybermage/.DataActivity
 ```
 
-On first launch a dialog displays the app-specific external folder and asks you
-to put the installed game there. No broad storage permission or bundled data is
-needed. Two ways:
+On first launch the app asks for the game files. Either:
 
-- **Import folder** (no adb): copy the retail directory's files anywhere in shared
-  storage (e.g. `Download/CyberMage`, via Termux `ssh -p 8022`), choose it in the
-  system folder picker; its top-level files are copied into the app folder
-  (names keep their case, `.part` then rename). Verified on `box-api36`: 46 files
-  imported SHA-256-identical, game launched to the title and scene 1.
-  Imports now stage an entire folder separately: each temporary file is synced
-  and renamed, and the installed folder is replaced only after the three witness
-  files exist. A read/write failure removes the staged files and preserves the
-  old import. A prior-folder backup recovers interruption between directory
-  renames. Activity recreation cannot operate the old dialog; only one worker
-  runs at a time. `TestDataImport` covers failed reads, missing witnesses,
-  complete replacement and interrupted-promotion recovery without Android APIs.
-  Old adb installations may contain SB16/SC55 subdirectories: backup cleanup is
-  recursive without following directory symlinks. Once promotion succeeds,
-  leftover-backup cleanup is best effort and cannot block a valid installation.
-- **adb** for the standard emulator/device user0:
+- **Import folder**: copy the game directory anywhere in shared storage
+  (e.g. `Download/CyberMage`) and pick it in the system folder picker. The
+  files are copied into the app's own storage; a failed import keeps the old data.
+- **adb** (needed on TVs without a folder picker): start the app once so it
+  creates its folder, then
 
 ```
-adb push orig/retail/. /sdcard/Android/data/com.jshield.cybermage/files/data/
+adb shell am force-stop com.jshield.cybermage
+adb push /path/to/CYBERMAG/. /sdcard/Android/data/com.jshield.cybermage/files/data/
 ```
 
-Select **Retry**, or reopen the app. The launcher checks for CM_HI.EXE, HIPAK.RSC
-and STRINGS.MSG; the native loaders validate resource contents and report missing
-files. Copy the entire retail directory, not only those three witnesses.
-`GameActivity` passes this path as `--data`; all native I/O uses platform SDL_RWops.
+The launcher checks for `CM_HI.EXE`, `HIPAK.RSC` and `STRINGS.MSG`; copy the
+whole directory, not only those.
 
-The default software renderer is centered at4:3, with black bars rather than stretching640×480.
-Tapping inside the game maps to a left mouse click in menu coordinates; the input
-struct also carries bounded per-frame touch events with IDs, phases, coordinates,
-pressure and an inside-viewport flag. Touches in the black bars do not click.
-Opt into the GL renderer (OpenGL ES3 on Android) with:
+## Display and controls
+
+Each launch offers GPU widescreen (default), software stretched to fill, or
+software 4:3; the choice is remembered. Intent extras skip the dialog:
 
 ```
-adb shell am start -S -n com.jshield.cybermage/.DataActivity --es renderer gl
-```
-
-`DataActivity` forwards the named extra to `GameActivity`, which passes
-`--renderer gl` to the native game. Omit the extra or use `--es renderer sw`
-to select software. GL widens the gameplay view to the display; menus and HUD
-retain their original layout. This changes presentation, not game rules, and
-GL is not claimed DOS-pixel-exact. Renderer selection is independent of controls.
-
-On Android the modern action layer (touch overlay) is the default, because DOS
-keyboard controls are unusable on a touch-only phone. Classic controls (exact DOS
-key semantics) remain available with:
-
-```
+adb shell am start -S -n com.jshield.cybermage/.DataActivity --es renderer sw
 adb shell am start -S -n com.jshield.cybermage/.DataActivity --es controls classic
 ```
 
-Modern gameplay has a virtual left stick, a right-side look swipe area and six
-outlined buttons: **F** fire, **J** jump, **U** use, **W** weapon cycle, **M** menu,
-**A** hold hand aim. The overlay uses the black side bars where they are wide
-enough and overlays the lower game corners otherwise. Fingers keep their
-original role until lifted, including across menu transitions. Menus retain
-tap-to-click. Focus loss releases all inputs. Android Back maps to Escape.
-Hardware keyboard/mouse and SDL GameController share the modern action layer.
-See `../../docs/re/controls.md` for bindings and configuration.
-
-## Emulator
-
-Reuse `box-api36` from `~/.android/avd` (x86_64). Example:
-
-```
-ASP_MEM=4000M tools/run_capped.sh "$ANDROID_HOME/emulator/emulator" \
-  -avd box-api36 -port 5580 -no-window -no-snapshot -no-boot-anim \
-  -gpu swiftshader_indirect -no-audio
-```
-
-The AVD enforces2GiB guest RAM even if a smaller value is requested; the default
-2.5GiB process cap is insufficient, so use the4GiB cap. Do not start a second
-writer against the same AVD. Save screenshots with `adb exec-out screencap -p`;
-retail-derived screenshots stay in ignored `captures/` or `out/`, never Git.
-
-Historical title-only verification on `box-api36` x86_64: first-run data prompt, external folder loading,
-2400×1080 landscape title with centered4:3 game area, and a real touchscreen tap
-opening Options. Local evidence: `captures/android/first-run.png`,
-`title-landscape.png`, `options-touch.png`, `head-logcat.txt`.
-That earlier title-only dual-ABI APK was4,373,775 bytes, SHA256
-`1e12057cf818ea8d48f28686f931494304a8a12e6057377a8c6517615a8ddb0c`.
-Its archive contains no retail asset entries. Source-only title worktree,
-emulator process and115MiB Android build outputs were removed after verification;
-the shared SDK/SDL/Gradle inputs and resulting APK remain.
-
-## Full-game consolidated smoke
-
-Frozen source commit `c699ea4d97f735458793ae7794506c658b70ab4a` was built with
-the canonical script, `ABIS=arm64-v8a,x86_64 KEEP_BUILD=1`, and
-`PORT_SOURCE_DIR` pointing to an ignored `git archive HEAD port` snapshot.
-SDK/NDK/SDL/Gradle caches above were reused offline. Both ABIs compiled and
-linked; APK size3,696,689 bytes, SHA256
-`64053b74fcd0f288eb00489423c7863c2696ee2da1afff333776c4463ca53b0f`.
-It contains SDL/main libraries for both ABIs and no retail asset entries.
-
-Installed on the existing API36 `box-api36` x86_64 emulator
-(emulator36.3.10.0, SwiftShader,2400×1080 landscape), launched through
-`DataActivity --es controls modern`. A touchscreen tap on NEW entered the
-real scene1. The committed virtual stick and F/J/U/W/M/A overlay appeared in
-the side bars. A2200ms upward left-stick swipe visibly moved the player from
-the start toward the door. The same app PID remained alive; its142-line log
-contained no fatal exception/signal, abort or engine ERROR.
-
-Evidence: `captures/Integrator-android/{title,scene-start,scene-walk}.png`,
-`logcat.txt` and `run.json`. All screenshots were opened and inspected.
-The emulator was stopped and the job-owned Android build tree plus three
-frozen source views were removed (144,219,432 bytes); the3.7MB APK, evidence
-and shared SDK/SDL/Gradle caches remain.
-
-## Android GL runtime smoke
-
-Commit `20117a3889b498f1281ee7584849d7c9cbe67b07` was frozen with
-`git archive ... port`. The canonical build script inside that snapshot built
-both the frozen Java activities and C sources with `ABIS=x86_64 KEEP_BUILD=1`;
-there was no live-worktree source mixing. Existing JDK21, NDK27.2.12479018,
-SDL2 release-2.30.10 and offline Gradle9.4.1/AGP8.13.2 caches were reused.
-Build succeeded in47 seconds (22 tasks executed,17 from cache).
-
-Retained APK: `port/android/out/cybermage-x86_64-gl-20117a3-debug.apk`,
-1,941,493 bytes, SHA256
-`467ab98272a436ea3fd7975f624a597d0273355d2eda8b0564698080f2df6e51`.
-Its only native libraries are x86_64 SDL2/main; no retail assets are packaged.
-
-On `box-api36`, emulator36.3.10.0/API36,2400×1080, SwiftShader:
-
-```
-adb -s emulator-5580 shell am start -S -n com.jshield.cybermage/.DataActivity --es renderer gl
-adb -s emulator-5580 shell input tap 755 860
-adb -s emulator-5580 shell input touchscreen swipe 240 910 240 800 2200
-```
-
-The actual GLES3 renderer reported
-`Android Emulator OpenGL ES Translator (Google SwiftShader) / OpenGL ES 3.0`.
-Touch NEW entered scene1, the default modern overlay appeared, and the stick
-gesture visibly moved toward the door. PID3560 remained alive. The same APK
-also passed title→NEW→scene1→walking with `--es renderer sw` (PID3695).
-All six title/start/walk screenshots were opened and inspected.
-
-Neither application log contained an engine ERROR, fatal exception/signal,
-shader/link failure or EGL/GL failure; the all-process graphics-error scan was
-also empty. Nonfatal platform diagnostics remain: HWUI10-bit-format fallback
-with EGL_SUCCESS, SDL hidapi's caught API36 receiver-export exception, OpenSLES
-buffer-queue timeout110 and ashmem pinning deprecation. These are not a claim
-of a completely warning-free Android log.
-
-**Measured rendering FPS is unavailable for both SW and GL:** the port does not
-log it. No profiler was added, and the40Hz simulation target is not reported as
-measured rendering FPS.
-
-Evidence: `captures/Integrator-android-gl/{gl,sw}-{title,scene-start,scene-walk}.png`,
-per-process/full logcats and `run.json`. The owned emulator exited cleanly.
-The frozen source/build tree was removed (782 files,45,566,938 logical bytes);
-the named APK, evidence and shared caches remain. Every adb command targeted
-`emulator-5580`; nothing was pushed to a phone.
+- **Touch** (default): left virtual stick, right-half swipe to look (a full-width
+  swipe turns 360°), buttons **F** fire, **J** jump, **U** use, **W** weapon,
+  **M** menu, **A** hold aim. Menus are tap-to-click.
+- **TV remote** (selected automatically on Android TV): D-pad up/down walk,
+  left/right turn, centre tap use, centre hold fire, centre double-tap jump,
+  Back menu, hold Back next weapon.
+- **Gamepad / keyboard / mouse** work everywhere through the modern bindings in
+  [`docs/re/controls.md`](../../docs/re/controls.md).
+- `--es controls classic` restores the exact DOS keyboard semantics.
