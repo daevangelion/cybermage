@@ -1,6 +1,7 @@
 # CyberMage: Darklight Awakening (DOS, 1995) — Reverse Engineering Notes
 
-**Platform:** `skill://re/platforms/dos-mz.md`; conventions in `AGENTS.md`.
+**Platform:** DOS, Watcom C/C++32 LE executable under DOS/4GW. The native port
+lives in `port/`; see [README.md](README.md) for building and running it.
 
 ## Modules
 
