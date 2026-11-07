@@ -3,6 +3,7 @@ package com.jshield.cybermage;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.WindowManager;
+import android.content.pm.PackageManager;
 import org.libsdl.app.SDLActivity;
 
 public final class GameActivity extends SDLActivity {
@@ -29,14 +30,19 @@ public final class GameActivity extends SDLActivity {
         String renderer = getIntent().getStringExtra("renderer");
         String display = getIntent().getStringExtra("display");
         String view = getIntent().getStringExtra("view");
+        boolean tv = getPackageManager().hasSystemFeature(PackageManager.FEATURE_LEANBACK);
+        String mode = controls == null ? "modern" : controls;
         /* Touch-only phones cannot play with DOS keyboard controls; classic stays
-           available with --es controls classic. Game rules are unaffected. */
-        return new String[] {
+           available with --es controls classic. TV remotes get the remote
+           profile on top of modern controls. Game rules are unaffected. */
+        String[] args = {
             "--data", new java.io.File(getExternalFilesDir(null), "data").getAbsolutePath(),
-            "--controls", controls == null ? "modern" : controls,
+            "--controls", mode,
             "--renderer", renderer == null ? "gl" : renderer,
             "--display", display == null ? "fit" : display,
-            "--view-size", view == null ? "0" : view
+            "--view-size", view == null ? "0" : view,
+            "--remote"
         };
+        return tv && mode.equals("modern") ? args : java.util.Arrays.copyOf(args, args.length - 1);
     }
 }

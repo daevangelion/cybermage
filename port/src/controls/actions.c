@@ -103,6 +103,10 @@ void controls_frame(cm_controls *c, controls_context context,
     }
     if (!owned(&c->stick_owner[0], lx != 0 || ly != 0, context)) lx = ly = 0;
     if (!owned(&c->stick_owner[1], rx != 0 || ry != 0, context)) rx = ry = 0;
+    if (gameplay && in->remote_turn) {
+        rx += in->remote_turn / 32768.0;
+        if (rx > 1) rx = 1; else if (rx < -1) rx = -1;
+    }
     touch_move = owned(&c->stick_owner[2], in->touch_move_x || in->touch_move_y, context);
     edges = actions & ~c->previous_actions;
     if (in->mouse_wheel) for (i = 0; i < CM_CONTROL_COUNT; ++i)

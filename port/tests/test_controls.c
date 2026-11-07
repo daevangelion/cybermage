@@ -46,6 +46,13 @@ int main(void)
     frame(&c, CONTROLS_FOOT, &in, &out);
     assert(out.look_yaw == -16384);
     in.touch_look_dx = 0;
+    /* TV remote right turns like a fully deflected right stick, foot only. */
+    in.remote_turn = 32767;
+    frame(&c, CONTROLS_FOOT, &in, &out);
+    assert(out.look_yaw == -1023 && out.move_speed == 0);
+    frame(&c, CONTROLS_MENU, &in, &out);
+    assert(out.look_yaw == 0);
+    in.remote_turn = 0;
     controls_init(&c);
     in.mouse_buttons = 1;
     in.held[0x11] = 1;

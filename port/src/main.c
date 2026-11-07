@@ -836,7 +836,7 @@ int main(int argc, char **argv)
     unsigned frames = 0, frame = 0, bios_seed = 0, replay_slot = 0, view_size = 2;
     unsigned ticks_per_frame = 1;
     uint32_t audio_ticks = 0;
-    int headless = 0, status = 1, playing = 0, divergence = 0, seed_explicit = 0, i;
+    int headless = 0, remote = 0, status = 1, playing = 0, divergence = 0, seed_explicit = 0, i;
     int modern = 0;
     int replay_load = 0;
     int applied_settings[5], settings_applied = 0;
@@ -844,6 +844,7 @@ int main(int argc, char **argv)
     gl_width = gl_height = 0;
     for (i = 1; i < argc; ++i) {
         if (!strcmp(argv[i], "--headless")) headless = 1;
+        else if (!strcmp(argv[i], "--remote")) remote = 1;
         else if ((!strcmp(argv[i], "--data") || !strcmp(argv[i], "--dump") ||
                   !strcmp(argv[i], "--keys") || !strcmp(argv[i], "--frames") ||
                   !strcmp(argv[i], "--state-dump") ||
@@ -906,7 +907,7 @@ int main(int argc, char **argv)
                 return 2;
             }
         } else {
-            platform_report("usage: cybermage [--data DIR] [--user DIR] [--bios-seed N] [--controls classic|modern] [--renderer sw|gl] [--display fit|fill] [--view-size 0..4] [--width N --height N] [--headless] [--ticks-per-frame N] [--frames N] [--dump DIR] [--state-dump DIR] [--keys FILE | --replay TRACE [--replay-load-slot N | --import-undefined PERSONS]]");
+            platform_report("usage: cybermage [--data DIR] [--user DIR] [--bios-seed N] [--controls classic|modern] [--renderer sw|gl] [--display fit|fill] [--view-size 0..4] [--remote] [--width N --height N] [--headless] [--ticks-per-frame N] [--frames N] [--dump DIR] [--state-dump DIR] [--keys FILE | --replay TRACE [--replay-load-slot N | --import-undefined PERSONS]]");
             return 2;
         }
     }
@@ -935,6 +936,11 @@ int main(int argc, char **argv)
         return 2;
     }
     modern = !strcmp(control_mode, "modern");
+    if (remote && !modern) {
+        cm_fail("arguments", 0, "--remote requires --controls modern");
+        return 2;
+    }
+    platform_remote(remote);
     if (trace && modern) {
         cm_fail("arguments", 0, "original replays require classic controls");
         return 2;

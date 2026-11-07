@@ -45,6 +45,22 @@ static SDL_GameController *controller;
 static SDL_JoystickID controller_id = -1;
 static int modern_controls, gameplay_controls, input_focus = 1;
 static int touch_visible;
+
+#define REMOTE_HOLD_MS 250u
+#define REMOTE_DOUBLE_MS 300u
+#define REMOTE_BACK_HOLD_MS 450u
+#define REMOTE_RAMP_MS 400u
+static struct {
+    int on;
+    int center, center_jump, center_enter, back, back_long, left, right;
+    uint64_t center_at, tap_at, back_at, turn_at;
+} remote;
+
+void platform_remote(int on)
+{
+    memset(&remote, 0, sizeof remote);
+    remote.on = on;
+}
 static double touch_look_fraction_x, touch_look_fraction_y;
 static uint8_t focus_keys[CM_KEY_COUNT], focus_axes[6];
 static uint32_t focus_mouse, focus_pad;
@@ -644,6 +660,7 @@ static unsigned dos_scan(SDL_Scancode sc)
     };
     unsigned i;
     if (sc == SDL_SCANCODE_AC_BACK) return 1;
+    if (sc == SDL_SCANCODE_SELECT) return 28; /* D-pad centre acts as Enter. */
     if (sc == SDL_SCANCODE_RCTRL) return 29;
     if (sc == SDL_SCANCODE_RALT) return 56;
     if (sc == SDL_SCANCODE_KP_ENTER) return 28;
@@ -698,6 +715,79 @@ static int extended_key(SDL_Scancode key)
     }
 }
 
+/* Returns 1 when the remote profile consumed the key. A key captured on press
+   stays captured until release, whatever the context is by then. */
+static int remote_key(cm_input *input, const SDL_KeyboardEvent *k, int *failed)
+{
+    uint64_t now = SDL_GetTicks64();
+    int down = k->type == SDL_KEYDOWN;
+    int active = remote.on && modern_controls && gameplay_controls && input_focus;
+    *failed = 0;
+    switch (k->keysym.scancode) {
+    case SDL_SCANCODE_SELECT:
+        if (down) {
+            if (k->repeat || remote.center || !active) return remote.center;
+            remote.center = 1;
+            remote.center_at = now;
+            remote.center_jump = remote.tap_at && now - remote.tap_at < REMOTE_DOUBLE_MS;
+            remote.center_enter = !remote.center_jump;
+            if (remote.center_enter && emit_key(input, 28, 1)) *failed = 1;
+            return 1;
+        }
+        if (!remote.center) return 0;
+        remote.tap_at = !remote.center_jump && now - remote.center_at < REMOTE_HOLD_MS ? now : 0;
+        if (remote.center_enter && emit_key(input, 28, 0)) *failed = 1;
+        remote.center = remote.center_jump = remote.center_enter = 0;
+        return 1;
+    case SDL_SCANCODE_AC_BACK:
+        if (down) {
+            if (k->repeat || remote.back || !active) return remote.back;
+            remote.back = 1;
+            remote.back_long = 0;
+            remote.back_at = now;
+            return 1;
+        }
+        if (!remote.back) return 0;
+        if (!remote.back_long && (emit_key(input, 1, 1) || emit_key(input, 1, 0))) *failed = 1;
+        remote.back = 0;
+        return 1;
+    case SDL_SCANCODE_LEFT: case SDL_SCANCODE_RIGHT: {
+        int *held = k->keysym.scancode == SDL_SCANCODE_LEFT ? &remote.left : &remote.right;
+        if (down) {
+            if (!*held && !active) return 0;
+            if (!*held && !remote.left && !remote.right) remote.turn_at = now;
+            *held = 1;
+            return 1;
+        }
+        if (!*held) return 0;
+        *held = 0;
+        return 1;
+    }
+    default: return 0;
+    }
+}
+
+static void remote_sample(cm_input *input)
+{
+    uint64_t now = SDL_GetTicks64();
+    int dir = remote.right - remote.left;
+    input->remote_turn = 0;
+    if (!remote.on) return;
+    if (remote.center && remote.center_jump) input->touch_buttons |= 1u << CM_CONTROL_JUMP;
+    else if (remote.center && now - remote.center_at >= REMOTE_HOLD_MS)
+        input->touch_buttons |= 1u << CM_CONTROL_FIRE;
+    if (remote.back && !remote.back_long && now - remote.back_at >= REMOTE_BACK_HOLD_MS) {
+        remote.back_long = 1;
+        input->touch_pressed |= 1u << CM_CONTROL_NEXT;
+    }
+    if (dir) {
+        uint64_t held = now - remote.turn_at;
+        /* Start slow for fine aiming, reach full stick speed after 400 ms. */
+        int64_t speed = 11000 + (held >= REMOTE_RAMP_MS ? 21767 : (int64_t)held * 21767 / REMOTE_RAMP_MS);
+        input->remote_turn = (int16_t)(dir * speed);
+    }
+}
+
 int platform_poll(cm_input *input, unsigned frame)
 {
     SDL_Event e;
@@ -724,7 +814,13 @@ int platform_poll(cm_input *input, unsigned frame)
             break;
         case SDL_QUIT: input->quit = 1; break;
         case SDL_KEYDOWN: case SDL_KEYUP: {
-            unsigned code = dos_scan(e.key.keysym.scancode);
+            unsigned code;
+            int failed;
+            if (remote_key(input, &e.key, &failed)) {
+                if (failed) return -1;
+                break;
+            }
+            code = dos_scan(e.key.keysym.scancode);
             if (modern_controls && code) {
                 if (e.type == SDL_KEYUP) focus_keys[code] = 0;
                 else if (!input_focus || focus_keys[code]) break;
@@ -840,6 +936,7 @@ int platform_poll(cm_input *input, unsigned frame)
                     memset(input->pad_axes, 0, sizeof input->pad_axes);
                     memset(fingers, 0, sizeof fingers);
                     touch_look_fraction_x = touch_look_fraction_y = 0;
+                    platform_remote(remote.on); /* Held Enter was released above. */
                     if (platform_controls(1, gameplay_controls)) return -1;
                 }
             } else if (e.window.event == SDL_WINDOWEVENT_FOCUS_GAINED && modern_controls) {
@@ -851,6 +948,7 @@ int platform_poll(cm_input *input, unsigned frame)
         }
     }
     if (modern_controls) touch_sample(input);
+    remote_sample(input);
     while (event_next < event_count && events[event_next].frame <= frame) {
         key_event *k = &events[event_next++];
         if (k->down < 0) {

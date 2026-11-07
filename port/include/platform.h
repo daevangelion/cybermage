@@ -44,6 +44,7 @@ typedef struct {
     int touch_look_dx, touch_look_dy;
     uint32_t touch_buttons; /* CM_CONTROL_* bit positions. */
     uint32_t touch_pressed;
+    int16_t remote_turn; /* TV remote left/right as a signed turn axis. */
     int modern;
     int32_t move_speed, look_yaw, look_pitch;
     uint16_t move_angle;
@@ -72,6 +73,9 @@ int platform_keys(const char *path);
 int platform_poll(cm_input *input, unsigned frame);
 void platform_mouse_warp(int x, int y); /* 640x480 game coordinates. */
 int platform_controls(int modern, int gameplay);
+/* TV remote profile (modern gameplay only): left/right turn, centre tap uses,
+   centre hold fires, centre double-tap jumps, Back tap menu, Back hold next. */
+void platform_remote(int on);
 /* Software output: 0 keeps a centred 4:3 canvas, 1 stretches it to the window. */
 void platform_display_fill(int fill);
 /* RGB 160,220,220; window/output coordinates, top-left origin. */
