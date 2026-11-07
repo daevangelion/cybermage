@@ -1236,6 +1236,11 @@ int platform_gl_open(int headless,unsigned width,unsigned height,int *gles)
         SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE,8) ||
         SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE,24))
         return cm_fail("SDL GL attributes",0,SDL_GetError());
+#ifdef __APPLE__
+    /* macOS only offers 3.2+ core contexts with the forward-compatible flag. */
+    if (!es && SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS,SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG))
+        return cm_fail("SDL GL attributes",0,SDL_GetError());
+#endif
     window=SDL_CreateWindow("CyberMage Enhanced",SDL_WINDOWPOS_CENTERED,SDL_WINDOWPOS_CENTERED,
                             (int)width,(int)height,flags);
     if (!window) return cm_fail("SDL GL window",0,SDL_GetError());

@@ -3,6 +3,10 @@
 #ifdef __ANDROID__
 #include <GLES3/gl3.h>
 #define CM_GL_CALL GL_APIENTRY
+#elif defined __APPLE__
+#define GL_SILENCE_DEPRECATION 1
+#include <OpenGL/gl3.h>
+#define CM_GL_CALL
 #else
 #include <GL/glcorearb.h>
 #define CM_GL_CALL APIENTRY
